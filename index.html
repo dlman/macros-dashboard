@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Macros/Sleep Dashboard</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Macros/Sleep Dashboard · Build 2026.03.21.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -65,6 +68,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .header-left p { font-size: 13px; color: var(--text-faint); margin-top: 4px; }
 .header-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hdr-btn { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+.build-stamp { margin-top: 6px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.2px; }
 .hdr-btn:hover { border-color: var(--border-card-hover); color: var(--text-secondary); }
 .hdr-btn.active { background: var(--bg-toggle-active); color: var(--text-primary); }
 
@@ -597,6 +601,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .main { padding: 14px 14px 28px; }
   header { padding: 14px 14px 10px; }
   .header-left h1 { font-size: 18px; }
+  .build-stamp { font-size: 10px; }
   .header-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .hdr-btn { font-size: 11px; padding: 10px 10px; min-height: 42px; }
   #exportAllBtn { display: none; }
@@ -652,6 +657,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <div class="header-left">
     <h1>Macros/Sleep Dashboard</h1>
     <p id="headerSubtitle">Jan · Feb · March (through Mar 18) &nbsp;|&nbsp; Click any data point for details &nbsp;|&nbsp; ← → to navigate days</p>
+    <div class="build-stamp" id="buildStamp">Build 2026.03.21.2</div>
   </div>
   <div class="header-controls">
     <button class="hdr-btn" id="themeToggle" title="Toggle light/dark theme">🌙 Theme</button>
@@ -1295,6 +1301,7 @@ let goals = { calories: 2100, protein: null, carbs: 150, fat: 80, sleep: 7, slee
 const STORAGE_KEY = 'macros_dashboard_v4_state';
 
 // Units
+const BUILD_VERSION = '2026.03.21.2';
 let useMetric = false; // false = lbs/kcal, true = kg/kJ
 let themePreference = 'system';
 function convWeight(lbs) { return useMetric ? (lbs * 0.453592).toFixed(1) : lbs; }
@@ -5217,6 +5224,8 @@ function refreshDashboard() {
 // =====================================================================
 // INIT
 // =====================================================================
+document.title = `Macros/Sleep Dashboard · Build ${BUILD_VERSION}`;
+document.getElementById('buildStamp').textContent = `Build ${BUILD_VERSION}`;
 renderAnnotations();
 syncSettingsForm();
 applyTheme(themePreference);
