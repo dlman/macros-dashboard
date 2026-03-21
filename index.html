@@ -170,6 +170,24 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .tab-btn { border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-muted); border-radius: 999px; padding: 8px 14px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
 .tab-btn:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
 .tab-btn.active { background: linear-gradient(135deg, rgba(56,189,248,0.14), rgba(245,158,11,0.12)); color: var(--text-primary); border-color: var(--border-card-hover); }
+.tab-chrome { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: -4px 0 18px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 14px; }
+.tab-chrome-copy { min-width: 0; }
+.tab-chrome-title { font-size: 13px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px; }
+.tab-chrome-sub { margin-top: 4px; font-size: 12px; color: var(--text-muted); line-height: 1.5; max-width: 720px; }
+.jump-chip-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.jump-chip { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 999px; padding: 7px 11px; font-size: 11px; font-weight: 700; color: var(--text-muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.jump-chip:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
+.trust-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.trust-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; }
+.trust-pill.measured { background: rgba(52,211,153,0.14); color: var(--col-green); }
+.trust-pill.estimated { background: rgba(56,189,248,0.14); color: var(--col-sky); }
+.trust-pill.projected { background: rgba(245,158,11,0.14); color: var(--col-amber); }
+.trust-pill.logged { background: rgba(148,163,184,0.14); color: var(--text-muted); }
+.trust-inline { margin-top: 8px; }
+.card-header.with-meta { align-items: flex-start; }
+.card-heading { display: flex; flex-direction: column; gap: 8px; }
+.back-to-top { position: fixed; right: 18px; bottom: 18px; z-index: 90; border: 1px solid var(--border-card-hover); background: linear-gradient(135deg, rgba(15,23,42,0.92), rgba(30,41,59,0.92)); color: var(--text-primary); border-radius: 999px; padding: 10px 14px; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 14px 36px rgba(15,23,42,0.28); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity 0.18s, transform 0.18s; }
+.back-to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .tab-section-hidden { display: none !important; }
 .control-strip { display: grid; grid-template-columns: repeat(2, minmax(220px, 260px)) 1fr; gap: 12px; margin: -8px 0 20px; align-items: end; }
 .control-group { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
@@ -439,7 +457,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .mobile-control-shell[open] > summary { border-bottom: 1px solid var(--border-card); }
   .mobile-control-shell[open] > summary::after { content: 'Close'; }
   .tab-bar { margin: -4px 0 16px; gap: 6px; }
+  .tab-chrome { flex-direction: column; align-items: stretch; gap: 10px; }
+  .jump-chip-row { justify-content: flex-start; }
   .tab-btn { padding: 8px 12px; font-size: 11px; }
+  .back-to-top { right: 12px; bottom: 12px; padding: 9px 12px; font-size: 11px; }
   .control-strip { grid-template-columns: 1fr; gap: 10px; margin: 0; padding: 12px; }
   .control-group, .control-note { padding: 10px 12px; }
   .control-note { min-height: 0; font-size: 11px; }
@@ -503,17 +524,17 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .forecast-card { padding: 11px 12px; }
   .forecast-card .value { font-size: 18px; }
   .sticky-summary {
-    position: sticky;
-    top: 0;
+    position: static;
+    top: auto;
     z-index: 30;
     grid-template-columns: 1fr;
     gap: 0;
     margin-bottom: 14px;
-    background: color-mix(in srgb, var(--bg-body) 92%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius: 0 0 14px 14px;
-    padding: 4px;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    padding: 0;
   }
   .sticky-summary .summary-chip { display: none; }
   .summary-hero {
@@ -546,8 +567,17 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   header { padding: 14px 14px 10px; }
   .header-left h1 { font-size: 18px; }
   .header-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-  .hdr-btn { font-size: 11px; padding: 8px 10px; }
+  .hdr-btn { font-size: 11px; padding: 10px 10px; min-height: 42px; }
   #exportAllBtn { display: none; }
+  .range-bar { padding: 10px 12px; gap: 8px; margin-bottom: 14px; }
+  .mobile-control-shell { margin-bottom: 12px; }
+  .mobile-control-shell > summary,
+  .mobile-detail-shell > summary { padding: 13px 14px; min-height: 46px; }
+  .tab-bar { margin-bottom: 12px; }
+  .tab-btn { padding: 10px 14px; min-height: 42px; }
+  .tab-chrome { margin-bottom: 12px; padding: 12px 14px; }
+  .tab-chrome-sub,
+  .jump-chip-row { display: none; }
   .summary-hero .hero-sub,
   .summary-chip .sub {
     display: -webkit-box;
@@ -558,11 +588,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-copy { align-items: flex-start; }
   .hero-copy h2 { font-size: 22px; }
   .hero-chart { height: 210px; }
+  .hero-side .hero-mini:not(:last-child) { display: none; }
   .hero-side { grid-template-columns: 1fr; }
   .hero-side .hero-mini:last-child { grid-column: auto; }
   .hero-pulse { grid-template-columns: 1fr; }
   .hero-pulse .pulse-item .t { font-size: 9px; }
   .mini-metric-grid { grid-template-columns: 1fr; }
+  .forecast-strip { margin-bottom: 12px; }
+  .forecast-strip .forecast-card.mobile-secondary { display: none; }
+  .sticky-summary { display: none; }
   .stat-grid, .score-grid, .compare-grid { grid-template-columns: 1fr; }
   .heatmap-row .row-label { width: 26px; }
   .heatmap-cell { width: 24px; height: 24px; border-radius: 5px; }
@@ -571,6 +605,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .chart-wrapper.tall { height: 220px; }
   .chart-wrapper.medium { height: 190px; }
   .chart-wrapper.short { height: 140px; }
+  .scenario-btn,
+  .jump-chip { padding: 10px 12px; min-height: 42px; }
 }
 </style>
 </head>
@@ -639,6 +675,14 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     <button class="tab-btn" data-tab="explore">Explore</button>
   </div>
 
+  <div class="tab-chrome" id="tabChrome">
+    <div class="tab-chrome-copy">
+      <div class="tab-chrome-title" id="tabChromeTitle">Overview</div>
+      <div class="tab-chrome-sub" id="tabChromeSub">Start here for the fastest read on trend, forecast, and the current range.</div>
+    </div>
+    <div class="jump-chip-row" id="tabJumpRow"></div>
+  </div>
+
   <div class="hero-stage" data-tab-section="overview">
     <div class="hero-main">
       <div class="hero-copy">
@@ -676,7 +720,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 
   <div class="sticky-summary" id="stickySummary" data-tab-section="overview"></div>
 
-  <div class="section-shell" data-tab-section="overview">
+  <div class="section-shell" id="overviewSummarySection" data-tab-section="overview">
     <div class="shell-header">
       <h2>Executive Summary</h2>
       <p>Use this section first. It summarizes the selected range, compares it with the previous period, and highlights the highest-leverage actions.</p>
@@ -727,14 +771,14 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </details>
 
-  <div class="section-shell" data-tab-section="progress">
+  <div class="section-shell" id="progressShell" data-tab-section="progress">
     <div class="shell-header">
       <h2>Progress</h2>
       <p>Outcome-first view of the range: overall highlights, body weight, and a DXA-anchored body-composition estimate.</p>
     </div>
 
   <!-- HEATMAP CALENDAR -->
-  <div class="heatmap-container">
+  <div class="heatmap-container" id="progressHeatmapSection">
     <div class="heatmap-header">
       <h3>📅 Daily Heatmap</h3>
       <div class="metric-tabs" id="heatmapTabs">
@@ -770,14 +814,22 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="bodyCompChart">📸</button>
-      <div class="card-header"><h3>DXA-Anchored Body Composition Estimate (Fat vs Lean Mass)</h3></div>
+      <div class="card-header with-meta">
+        <div class="card-heading">
+          <h3>DXA-Anchored Body Composition Estimate (Fat vs Lean Mass)</h3>
+          <div class="trust-row trust-inline">
+            <span class="trust-pill measured">Measured DXA anchor</span>
+            <span class="trust-pill estimated">Estimated between weigh-ins</span>
+          </div>
+        </div>
+      </div>
       <div class="chart-wrapper medium"><canvas id="bodyCompChart"></canvas></div>
     </div>
   </div>
 
   </div>
 
-  <div class="section-shell" data-tab-section="nutrition">
+  <div class="section-shell" id="nutritionShell" data-tab-section="nutrition">
     <div class="shell-header">
       <h2>Nutrition & Behavior</h2>
       <p>Primary behavior levers: calories, protein adherence, macro composition, training, alcohol, and food patterns.</p>
@@ -804,7 +856,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="waterfallChart">📸</button>
-      <div class="card-header"><h3 id="waterfallTitle">Cumulative Calorie Deficit (vs estimated TDEE from weight loss)</h3></div>
+      <div class="card-header with-meta">
+        <div class="card-heading">
+          <h3 id="waterfallTitle">Cumulative Calorie Deficit (vs estimated TDEE from weight loss)</h3>
+          <div class="trust-row trust-inline">
+            <span class="trust-pill estimated">Estimated maintenance</span>
+            <span class="trust-pill logged">Logged intake</span>
+          </div>
+        </div>
+      </div>
       <div class="chart-wrapper tall"><canvas id="waterfallChart"></canvas></div>
     </div>
   </div>
@@ -870,7 +930,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- FOOD FREQUENCY -->
-  <div class="section-title">🍽️ Food Frequency Analysis</div>
+  <div class="section-title" id="nutritionFoodSection">🍽️ Food Frequency Analysis</div>
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="foodFreqChart">📸</button>
@@ -884,12 +944,12 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- ===== SLEEP SECTION ===== -->
-  <div class="section-shell" data-tab-section="sleep">
+  <div class="section-shell" id="sleepShell" data-tab-section="sleep">
   <div class="shell-header">
     <h2>Sleep & Recovery</h2>
     <p>Lag framing matters here: bedtime and alcohol are previous-night drivers, while calorie response is usually next-day behavior.</p>
   </div>
-  <div class="section-title" style="margin-top:0; padding-top:0; border-top:none;">😴 Sleep Data (2026)</div>
+  <div class="section-title" id="sleepCoreSection" style="margin-top:0; padding-top:0; border-top:none;">😴 Sleep Data (2026)</div>
 
   <!-- Sleep summary cards -->
   <div class="stat-grid" id="sleepStatGrid"></div>
@@ -928,7 +988,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- Cross insights -->
-  <div class="section-title" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
+  <div class="section-title" id="sleepInsightSection" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
   <div class="badge-row" id="sleepInsightBadges"></div>
 
   <div class="chart-row two">
@@ -957,10 +1017,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- CORRELATION MATRIX -->
-  <details class="advanced-shell" open>
+  <details class="advanced-shell" id="exploreShell" open>
     <summary>Explore More</summary>
     <div class="advanced-inner">
-  <div class="section-title" style="margin-top:0;">📊 Full Correlation Matrix</div>
+  <div class="section-title" id="exploreCorrSection" style="margin-top:0;">📊 Full Correlation Matrix</div>
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="corrMatrix">📸</button>
@@ -969,11 +1029,19 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </div>
 
-  <div class="section-title" style="margin-top:36px;">🧭 Trend Decomposition</div>
+  <div class="section-title" id="exploreTrendSection" style="margin-top:36px;">🧭 Trend Decomposition</div>
   <p class="explore-note" id="exploreScopeNote">Explore diagnostics use the selected date range before event filters so the math stays stable.</p>
   <div class="chart-row two">
     <div class="chart-card">
-      <div class="card-header"><h3>Observed vs Modeled Weight Drivers</h3></div>
+      <div class="card-header with-meta">
+        <div class="card-heading">
+          <h3>Observed vs Modeled Weight Drivers</h3>
+          <div class="trust-row trust-inline">
+            <span class="trust-pill logged">Observed scale</span>
+            <span class="trust-pill estimated">Estimated body-comp split</span>
+          </div>
+        </div>
+      </div>
       <div class="chart-wrapper medium"><canvas id="trendDecompChart"></canvas></div>
     </div>
     <div class="mini-panel">
@@ -985,16 +1053,20 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </div>
 
-  <div class="section-title" style="margin-top:28px;">🩺 Data Quality & Gap Detector</div>
+  <div class="section-title" id="exploreAuditSection" style="margin-top:28px;">🩺 Data Quality & Gap Detector</div>
   <div class="mini-panel">
     <div class="audit-grid" id="qualityAuditGrid"></div>
     <div class="audit-list" id="qualityAuditList"></div>
   </div>
 
   <!-- WHAT-IF CALCULATOR -->
-  <div class="section-title" style="margin-top:36px;">🔮 Scenario Planner</div>
+  <div class="section-title" id="exploreScenarioSection" style="margin-top:36px;">🔮 Scenario Planner</div>
   <div class="whatif-card">
     <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
+    <div class="trust-row trust-inline" style="margin-bottom:12px;">
+      <span class="trust-pill projected">Projected</span>
+      <span class="trust-pill estimated">Estimated maintenance and penalties</span>
+    </div>
     <div class="scenario-presets" id="scenarioPresetRow">
       <button class="scenario-btn" data-preset="current">Current Setup</button>
       <button class="scenario-btn" data-preset="maintain">Maintain</button>
@@ -1018,6 +1090,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </details>
 
 </div>
+
+<button class="back-to-top" id="backToTopBtn" aria-label="Back to top">↑ Top</button>
 
 <!-- DAY DETAIL PANEL -->
 <div id="overlay"></div>
@@ -1671,6 +1745,55 @@ let activeTab = persistedState.activeTab || 'overview';
 let scenarioPreset = 'current';
 let scenarioFormInitialized = false;
 let suppressEventFilter = false;
+
+const TAB_CHROME = {
+  overview: {
+    title: 'Overview',
+    summary: 'Start here for the fastest read on trend, forecast, and the current range.',
+    jumps: [
+      { label: 'Hero', selector: '.hero-stage[data-tab-section="overview"]' },
+      { label: 'Summary', selector: '#overviewSummarySection' },
+      { label: 'Latest Week', selector: '#weeklyReportShell' }
+    ]
+  },
+  progress: {
+    title: 'Progress',
+    summary: 'Outcome-first view: scale trend, body composition, and monthly progress signals.',
+    jumps: [
+      { label: 'Heatmap', selector: '#progressHeatmapSection' },
+      { label: 'Weight', selector: '#weightChart' },
+      { label: 'Body Comp', selector: '#bodyCompChart' }
+    ]
+  },
+  nutrition: {
+    title: 'Nutrition & Behavior',
+    summary: 'Use this tab to see whether intake, training, and food patterns are supporting the cut.',
+    jumps: [
+      { label: 'Calories', selector: '#caloriesChart' },
+      { label: 'Deficit', selector: '#waterfallChart' },
+      { label: 'Food', selector: '#nutritionFoodSection' }
+    ]
+  },
+  sleep: {
+    title: 'Sleep & Recovery',
+    summary: 'This tab isolates the previous-night behaviors and next-day effects driving recovery.',
+    jumps: [
+      { label: 'Core Sleep', selector: '#sleepCoreSection' },
+      { label: 'Insights', selector: '#sleepInsightSection' },
+      { label: 'Overlay', selector: '#sleepAnnotatedChart' }
+    ]
+  },
+  explore: {
+    title: 'Explore',
+    summary: 'Diagnostic tools live here: correlations, decomposition, data quality, and scenario planning.',
+    jumps: [
+      { label: 'Correlations', selector: '#exploreCorrSection' },
+      { label: 'Trend', selector: '#exploreTrendSection' },
+      { label: 'Audit', selector: '#exploreAuditSection' },
+      { label: 'Scenario', selector: '#exploreScenarioSection' }
+    ]
+  }
+};
 
 function getRangeState() {
   const startEl = document.getElementById('rangeStart');
@@ -2540,67 +2663,74 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
       ? `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-primary">
           <div class="eyebrow">30-Day Weight Pace</div>
           <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
           <div class="sub">If the observed scale slope holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Observed weigh-ins</span></div>
           <div class="confidence-pill ${weightProjection.confidence.cls}">${weightProjection.confidence.label}</div>
           <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days</div>
         </div>
       `
       : `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-primary">
           <div class="eyebrow">30-Day Weight Pace</div>
           <div class="value">—</div>
           <div class="sub">Need at least two weigh-ins in the active view to project the current weight slope forward.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Observed weigh-ins</span></div>
           <div class="confidence-pill low">Low confidence</div>
           <div class="tiny">Observed trend projection</div>
         </div>
       `,
     deficitPace
       ? `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-secondary">
           <div class="eyebrow">30-Day Deficit Pace</div>
           <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
           <div class="sub">If intake stays near ${energyLabel(avgOrNull(filteredDays, 'calories'))}, the logged deficit pace implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
           <div class="tiny">${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE</div>
         </div>
       `
       : `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-secondary">
           <div class="eyebrow">30-Day Deficit Pace</div>
           <div class="value">—</div>
           <div class="sub">Need enough intake data in the active view to project the current deficit pace.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill low">Low confidence</div>
           <div class="tiny">Deficit-based estimate</div>
         </div>
       `,
     sleepProjection
       ? `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-secondary">
           <div class="eyebrow">Next 14 Nights</div>
           <div class="value">${sleepProjection.expectedHits}/${sleepProjection.horizonNights}</div>
           <div class="sub">Projected sleep-target hits if the current ${Math.round(sleepProjection.hitRate)}% pace holds across the next two weeks.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Logged sleep</span></div>
           <div class="confidence-pill ${sleepProjection.confidence.cls}">${sleepProjection.confidence.label}</div>
           <div class="tiny">${sleepProjection.avgPerf != null ? `${Math.round(sleepProjection.avgPerf)}% average sleep performance` : 'Sleep pace only'}</div>
         </div>
       `
       : `
-        <div class="forecast-card">
+        <div class="forecast-card mobile-secondary">
           <div class="eyebrow">Next 14 Nights</div>
           <div class="value">—</div>
           <div class="sub">Need sleep entries in the active view to project target-hit pace over the next two weeks.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Logged sleep</span></div>
           <div class="confidence-pill low">Low confidence</div>
           <div class="tiny">Sleep-target projection</div>
         </div>
       `,
     `
-      <div class="forecast-card">
+      <div class="forecast-card mobile-primary">
         <div class="eyebrow">Latest Snapshot</div>
         <div class="value">${latestDay ? formatShortDate(latestDay.date) : '—'}</div>
         <div class="sub">${latestDay ? `${energyLabel(latestDay.calories)} (${latestCalDelta > 0 ? '+' : ''}${energyLabel(latestCalDelta || 0)} vs goal) · ${Math.round(latestDay.protein)}g protein` : 'No entries in the active view.'}</div>
         <div class="sub">${latestSleep ? `${Math.round(latestSleep.perf)}% sleep · ${latestSleep.hours.toFixed(1)}h` : 'No sleep entry for the latest logged day.'}</div>
+        <div class="trust-row trust-inline"><span class="trust-pill logged">Latest logged entries</span></div>
         <div class="mini-metric-grid">
           <div class="mini-metric"><div class="k">${calorieCurrent}</div><div class="t">Cal Goal</div></div>
           <div class="mini-metric"><div class="k">${proteinCurrent}</div><div class="t">Protein</div></div>
@@ -3847,15 +3977,23 @@ function renderHeatmap() {
     weight: { min: -2, max: 2, good: 'low' }
   };
   const r = ranges[heatmapMetric];
+  const heatmapStops = [
+    'rgba(213,94,0,0.78)',
+    'rgba(230,159,0,0.74)',
+    'rgba(148,163,184,0.64)',
+    'rgba(86,180,233,0.74)',
+    'rgba(0,114,178,0.82)'
+  ];
 
   function cellColor(val) {
     if (val == null) return null;
     const norm = Math.max(0, Math.min(1, (val - r.min) / (r.max - r.min)));
     const goodNorm = r.good === 'high' ? norm : 1 - norm;
-    // Green = good, red = bad
-    if (goodNorm > 0.6) return `rgba(52,211,153,${0.3 + goodNorm * 0.5})`;
-    if (goodNorm > 0.35) return `rgba(251,191,36,${0.3 + goodNorm * 0.4})`;
-    return `rgba(248,113,113,${0.3 + (1-goodNorm) * 0.4})`;
+    if (goodNorm >= 0.85) return heatmapStops[4];
+    if (goodNorm >= 0.65) return heatmapStops[3];
+    if (goodNorm >= 0.4) return heatmapStops[2];
+    if (goodNorm >= 0.2) return heatmapStops[1];
+    return heatmapStops[0];
   }
 
   months.forEach(mo => {
@@ -3913,15 +4051,14 @@ function renderHeatmap() {
   });
 
   // Legend
-  legend.innerHTML = `<span>Worse</span>`;
-  for (let i = 0; i <= 5; i++) {
-    const v = r.min + (r.max - r.min) * (i / 5);
+  legend.innerHTML = `<span>Less favorable</span>`;
+  for (let i = 0; i < heatmapStops.length; i++) {
     const el = document.createElement('div');
     el.className = 'heatmap-legend-cell';
-    el.style.background = cellColor(v) || '#333';
+    el.style.background = heatmapStops[i];
     legend.appendChild(el);
   }
-  legend.innerHTML += `<span>Better</span>`;
+  legend.innerHTML += `<span>More favorable</span>`;
 }
 
 document.querySelectorAll('#heatmapTabs .mtab').forEach(btn => {
@@ -4217,9 +4354,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     activeTab = btn.dataset.tab;
     applyActiveTab();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     refreshDashboard();
     persistUiState();
   });
+});
+document.getElementById('tabJumpRow').addEventListener('click', (e) => {
+  const btn = e.target.closest('.jump-chip');
+  if (!btn) return;
+  scrollToTabTarget(btn.dataset.jumpTarget);
+});
+document.getElementById('backToTopBtn').addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 // =====================================================================
@@ -4299,11 +4445,32 @@ function syncControlsFromState() {
   document.querySelectorAll('.mtoggle[data-chart="macro"]').forEach((btn, idx) => btn.classList.toggle('off', !macroVisibility[idx]));
 }
 
+function renderTabChrome() {
+  const config = TAB_CHROME[activeTab] || TAB_CHROME.overview;
+  const titleEl = document.getElementById('tabChromeTitle');
+  const subEl = document.getElementById('tabChromeSub');
+  const jumpRow = document.getElementById('tabJumpRow');
+  if (titleEl) titleEl.textContent = config.title;
+  if (subEl) subEl.textContent = config.summary;
+  if (jumpRow) {
+    jumpRow.innerHTML = config.jumps.map(jump => `<button class="jump-chip" data-jump-target="${jump.selector}">${jump.label}</button>`).join('');
+  }
+}
+
+function scrollToTabTarget(selector) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  const detailsParent = target.closest('details');
+  if (detailsParent) detailsParent.open = true;
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function applyActiveTab() {
   document.querySelectorAll('[data-tab-section]').forEach(section => {
     section.classList.toggle('tab-section-hidden', section.dataset.tabSection !== activeTab);
   });
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
+  renderTabChrome();
 }
 
 const MOBILE_BREAKPOINT = 900;
@@ -4894,6 +5061,9 @@ document.querySelectorAll('.mobile-detail-shell').forEach(shell => {
   });
 });
 window.addEventListener('resize', () => syncResponsiveLayout());
+window.addEventListener('scroll', () => {
+  document.getElementById('backToTopBtn').classList.toggle('show', window.scrollY > 640);
+});
 
 // =====================================================================
 // DATA ENTRY
