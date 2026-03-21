@@ -6,6 +6,7 @@
 <title>Macros/Sleep Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* ===== THEME VARIABLES ===== */
 :root {
@@ -23,7 +24,7 @@
   --bg-overlay: rgba(0,0,0,0.4);
   --bg-toggle: #1e2535;
   --bg-toggle-active: #1e2d4a;
-  --col-jan: #818cf8;
+  --col-jan: #f59e0b;
   --col-feb: #38bdf8;
   --col-mar: #34d399;
   --col-green: #34d399;
@@ -31,7 +32,7 @@
   --col-rose: #fb7185;
   --col-orange: #f97316;
   --col-red: #f87171;
-  --col-blue: #818cf8;
+  --col-blue: #f59e0b;
   --col-sky: #38bdf8;
   --grid-color: rgba(255,255,255,0.05);
   --tick-color: #64748b;
@@ -97,7 +98,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 /* ===== V4 SUMMARY ===== */
 .sticky-summary { position: sticky; top: 10px; z-index: 30; display: grid; grid-template-columns: 1.6fr repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
 .summary-chip, .summary-hero { background: color-mix(in srgb, var(--bg-card) 90%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
-.summary-hero { background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(129,140,248,0.08) 42%, rgba(52,211,153,0.06)); }
+.summary-hero { background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(245,158,11,0.08) 42%, rgba(52,211,153,0.06)); }
 .summary-hero .eyebrow, .summary-chip .eyebrow, .kpi-card .eyebrow, .mini-panel .eyebrow, .compare-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
 .summary-hero .hero-value { font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .summary-hero .hero-sub { font-size: 12px; color: var(--text-muted); margin-top: 5px; line-height: 1.5; }
@@ -110,8 +111,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .delta-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .delta-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; }
 .delta-pill.good { background: rgba(52,211,153,0.15); color: var(--col-green); }
+.delta-pill.good::before { content: '✓ '; font-size: 10px; }
 .delta-pill.bad { background: rgba(248,113,113,0.15); color: var(--col-red); }
+.delta-pill.bad::before { content: '⚠ '; font-size: 10px; }
 .delta-pill.neutral { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+.delta-pill.neutral::before { content: '— '; font-size: 10px; }
 .decision-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 20px; }
 .mini-panel { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 14px; padding: 20px 22px; }
 .insight-list, .driver-list { display: flex; flex-direction: column; gap: 10px; }
@@ -141,6 +145,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .range-bar label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-faint); font-weight: 600; }
 .range-bar input[type=range] { flex: 1; min-width: 120px; accent-color: var(--col-jan); }
 .range-bar .range-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); min-width: 80px; }
+.range-date-input { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 8px; padding: 7px 12px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.range-date-input::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+[data-theme="light"] .range-date-input::-webkit-calendar-picker-indicator { filter: none; }
 .mobile-control-shell { margin: -8px 0 20px; }
 .mobile-control-shell > summary { display: none; }
 .mobile-control-shell .control-strip { margin: 0; }
@@ -149,7 +156,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .control-group { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
 .control-group label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-faint); margin-bottom: 8px; }
 .control-group select { width: 100%; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 8px; padding: 9px 10px; color: var(--text-secondary); font-size: 13px; }
-.control-note { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(129,140,248,0.06)); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.5; min-height: 74px; display: flex; align-items: center; }
+.control-note { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.06)); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.5; min-height: 74px; display: flex; align-items: center; }
 
 /* ===== WEEKLY REPORT CARD ===== */
 .report-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
@@ -158,8 +165,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .report-card .metric-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .report-card .rpill { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .rpill.good { background: rgba(52,211,153,0.15); color: var(--col-green); }
+.rpill.good::before { content: '✓ '; }
 .rpill.warn { background: rgba(251,191,36,0.15); color: var(--col-amber); }
+.rpill.warn::before { content: '● '; }
 .rpill.bad { background: rgba(248,113,113,0.15); color: var(--col-red); }
+.rpill.bad::before { content: '⚠ '; }
 
 /* ===== HEATMAP ===== */
 .heatmap-container { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 20px 22px; margin-bottom: 24px; }
@@ -295,19 +305,52 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 #dayPanel .section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-faint); margin-bottom: 6px; }
 #dayPanel .section p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 #dayPanel .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-right: 4px; margin-bottom: 4px; }
-#dayPanel .pill.lift { background: rgba(129,140,248,0.15); color: var(--col-jan); }
+#dayPanel .pill.lift { background: rgba(245,158,11,0.15); color: var(--col-jan); }
 #dayPanel .pill.drink { background: rgba(249,115,22,0.15); color: var(--col-orange); }
 #dayPanel .pill.weight { background: rgba(52,211,153,0.15); color: var(--col-green); }
 #dayPanel .pill.sleep { background: rgba(56,189,248,0.15); color: var(--col-sky); }
 .food-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .food-pill { padding: 3px 8px; border-radius: 12px; font-size: 11px; background: var(--bg-input); color: var(--text-muted); border: 1px solid var(--border-card); }
-.food-pill.protein { border-color: rgba(129,140,248,0.3); color: var(--col-jan); }
+.food-pill.protein { border-color: rgba(245,158,11,0.3); color: var(--col-jan); }
 
 /* ===== OVERLAY ===== */
 #overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 99; display: none; }
 #overlay.show { display: block; }
 #settingsOverlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 199; display: none; }
 #settingsOverlay.show { display: block; }
+
+/* ===== DATA ENTRY MODAL ===== */
+#dataEntryOverlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 299; display: none; }
+#dataEntryOverlay.show { display: block; }
+#dataEntryModal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+  background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 16px;
+  padding: 28px 28px 20px; z-index: 300; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+#dataEntryModal h2 { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
+#dataEntryModal .de-tabs { display: flex; gap: 4px; background: var(--bg-input); border-radius: 8px; padding: 3px; margin-bottom: 16px; }
+#dataEntryModal .de-tab { padding: 6px 14px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; color: var(--text-faint); border: none; background: transparent; }
+#dataEntryModal .de-tab.active { background: var(--bg-toggle-active); color: var(--text-secondary); }
+#dataEntryModal .de-section { display: none; }
+#dataEntryModal .de-section.active { display: block; }
+.de-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.de-field { display: flex; flex-direction: column; gap: 4px; }
+.de-field label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-faint); }
+.de-field input, .de-field select { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 7px 10px; color: var(--text-secondary); font-size: 13px; }
+.de-field.full { grid-column: 1 / -1; }
+.de-field textarea { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 8px 10px; color: var(--text-secondary); font-size: 12px; font-family: monospace; min-height: 120px; resize: vertical; }
+.de-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.de-actions button { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border-card); }
+.de-actions .de-save { background: var(--col-green); color: #0f1117; border-color: var(--col-green); }
+.de-actions .de-cancel { background: var(--bg-input); color: var(--text-muted); }
+.de-preview { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 8px; padding: 10px; margin-top: 10px; font-size: 11px; color: var(--text-muted); max-height: 160px; overflow-y: auto; }
+.de-preview table { width: 100%; border-collapse: collapse; }
+.de-preview th, .de-preview td { padding: 4px 6px; border-bottom: 1px solid var(--border-card); text-align: left; font-size: 11px; }
+.de-preview th { color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
+.de-msg { padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 10px; display: none; }
+.de-msg.success { display: block; background: rgba(52,211,153,0.15); color: var(--col-green); }
+.de-msg.error { display: block; background: rgba(248,113,113,0.15); color: var(--col-red); }
 
 /* ===== TOOLTIP ===== */
 .custom-tooltip { position: fixed; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--text-secondary); pointer-events: none; z-index: 300; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
@@ -420,12 +463,17 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-pulse .pulse-item { padding: 10px 8px; }
   .hero-pulse .pulse-item .k { font-size: 16px; }
   .sticky-summary {
-    position: static;
-    top: auto;
-    z-index: auto;
+    position: sticky;
+    top: 0;
+    z-index: 30;
     grid-template-columns: 1fr;
     gap: 0;
     margin-bottom: 14px;
+    background: color-mix(in srgb, var(--bg-body) 92%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 0 0 14px 14px;
+    padding: 4px;
   }
   .sticky-summary .summary-chip { display: none; }
   .summary-hero {
@@ -446,7 +494,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .chart-wrapper.tall { height: 260px; }
   .chart-wrapper.medium { height: 220px; }
   .chart-wrapper.short { height: 150px; }
-  .heatmap-cell { width: 26px; height: 26px; }
+  .heatmap-cell { width: 28px; height: 28px; border-radius: 6px; }
   .month-toggles, .metric-tabs { width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 2px; }
   #dayPanel, #settingsPanel { width: 100%; max-width: 100%; padding: 22px 18px 28px; }
   .export-btn { display: none !important; }
@@ -475,7 +523,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-pulse .pulse-item .t { font-size: 9px; }
   .stat-grid, .score-grid, .compare-grid { grid-template-columns: 1fr; }
   .heatmap-row .row-label { width: 26px; }
-  .heatmap-cell { width: 22px; height: 22px; }
+  .heatmap-cell { width: 24px; height: 24px; border-radius: 5px; }
   .card-header { margin-bottom: 10px; }
   .card-header h3 { font-size: 12px; }
   .chart-wrapper.tall { height: 220px; }
@@ -496,19 +544,23 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     <button class="hdr-btn" id="themeToggle" title="Toggle light/dark theme">🌙 Theme</button>
     <button class="hdr-btn" id="unitToggle" title="Toggle lbs/kg, kcal/kJ">lbs / kcal</button>
     <button class="hdr-btn" id="exportAllBtn" title="Export full dashboard as PNG">📸 Export</button>
+    <button class="hdr-btn" id="dataEntryBtn" title="Add or import data">➕ Add Data</button>
     <button class="hdr-btn" id="settingsBtn" title="Goals & Annotations">⚙️ Settings</button>
   </div>
 </header>
 
 <div class="main" id="mainContent">
 
-  <!-- DATE RANGE SLIDER -->
+  <!-- DATE RANGE PICKER -->
   <div class="range-bar">
     <label>Date Range</label>
-    <span class="range-label" id="rangeStartLabel">Jan 1</span>
-    <input type="range" id="rangeStart" min="0" max="76" value="0">
-    <input type="range" id="rangeEnd" min="0" max="76" value="76">
-    <span class="range-label" id="rangeEndLabel">Mar 18</span>
+    <input type="date" id="rangeStartDate" class="range-date-input" value="2026-01-01">
+    <span style="color:var(--text-faint);font-size:12px;">to</span>
+    <input type="date" id="rangeEndDate" class="range-date-input">
+    <span class="range-label" id="rangeStartLabel" style="display:none;">Jan 1</span>
+    <input type="range" id="rangeStart" min="0" max="76" value="0" style="display:none;">
+    <input type="range" id="rangeEnd" min="0" max="76" value="76" style="display:none;">
+    <span class="range-label" id="rangeEndLabel" style="display:none;">Mar 18</span>
   </div>
 
   <details class="mobile-control-shell" id="mobileControlShell" open>
@@ -700,7 +752,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="waterfallChart">📸</button>
-      <div class="card-header"><h3>Cumulative Calorie Deficit (vs estimated TDEE from weight loss)</h3></div>
+      <div class="card-header"><h3 id="waterfallTitle">Cumulative Calorie Deficit (vs estimated TDEE from weight loss)</h3></div>
       <div class="chart-wrapper tall"><canvas id="waterfallChart"></canvas></div>
     </div>
   </div>
@@ -825,14 +877,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 
   <!-- Cross insights -->
   <div class="section-title" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
-  <div class="badge-row" id="sleepInsightBadges">
-    <div class="badge rose"><strong>34.8% vs 62.3%</strong>Sleep perf: after drink nights vs clean nights (−27.5pp)</div>
-    <div class="badge rose"><strong>r = −0.696</strong>Bedtime is the #1 predictor of sleep quality</div>
-    <div class="badge amber"><strong>68% → 47% → 28%</strong>Sleep perf: before 2am / 2–4am / after 4am</div>
-    <div class="badge blue"><strong>Tue 70.6% · Sat 41.6%</strong>Best vs worst day of week for sleep</div>
-    <div class="badge green"><strong>2,063 vs 1,895 kcal</strong>Calories eaten day after bad vs good sleep</div>
-    <div class="badge sky"><strong>17.1 → 15.3 rpm</strong>Respiratory rate declining (positive trend)</div>
-  </div>
+  <div class="badge-row" id="sleepInsightBadges"></div>
 
   <div class="chart-row two">
     <div class="chart-card"><div class="card-header"><h3>Sleep Performance: Previous Night Drink vs Clean</h3></div><div class="chart-wrapper medium"><canvas id="drinkSleepChart"></canvas></div></div>
@@ -925,6 +970,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     <div class="settings-row"><label>Sleep Perf Target (%)</label><input type="number" id="goalSleepPerf" value="70"></div>
   </div>
   <div class="settings-group">
+    <h4>Recovery Score Weights</h4>
+    <p style="font-size:11px;color:var(--text-faint);margin-bottom:8px;">Must total 100%. Controls how the composite recovery score is computed.</p>
+    <div class="settings-row"><label>Sleep Perf %</label><input type="number" id="recovWtSleep" value="40" min="0" max="100" step="5"></div>
+    <div class="settings-row"><label>Efficiency %</label><input type="number" id="recovWtEff" value="20" min="0" max="100" step="5"></div>
+    <div class="settings-row"><label>Resp Rate %</label><input type="number" id="recovWtResp" value="20" min="0" max="100" step="5"></div>
+    <div class="settings-row"><label>No-Drink Bonus %</label><input type="number" id="recovWtDrink" value="20" min="0" max="100" step="5"></div>
+    <div style="font-size:11px;color:var(--text-faint);margin-top:4px;" id="recovWtTotal">Total: 100%</div>
+  </div>
+  <div class="settings-group">
     <h4>Custom Annotations</h4>
     <div class="annotation-list" id="annotationList"></div>
     <div style="display:flex;gap:6px;margin-top:8px;">
@@ -938,6 +992,70 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 </div>
 
+<!-- DATA ENTRY MODAL -->
+<div id="dataEntryOverlay"></div>
+<div id="dataEntryModal" style="display:none;">
+  <h2>➕ Add Data</h2>
+  <div class="de-msg" id="deMsg"></div>
+  <div class="de-tabs">
+    <button class="de-tab active" data-de="form">Quick Entry</button>
+    <button class="de-tab" data-de="csv">CSV Paste</button>
+    <button class="de-tab" data-de="file">File Import</button>
+  </div>
+  <div class="de-section active" id="deFormSection">
+    <div class="de-form-grid">
+      <div class="de-field"><label>Date</label><input type="date" id="deDate"></div>
+      <div class="de-field"><label>Calories</label><input type="number" id="deCal" placeholder="e.g. 1900"></div>
+      <div class="de-field"><label>Protein (g)</label><input type="number" id="dePro" placeholder="e.g. 180"></div>
+      <div class="de-field"><label>Carbs (g)</label><input type="number" id="deCarbs" placeholder="e.g. 120"></div>
+      <div class="de-field"><label>Fat (g)</label><input type="number" id="deFat" placeholder="e.g. 70"></div>
+      <div class="de-field"><label>Weight</label><input type="number" id="deWeight" step="0.1" placeholder="optional"></div>
+      <div class="de-field"><label>Lifting?</label><select id="deLifting"><option value="">No</option><option value="Y">Yes</option></select></div>
+      <div class="de-field"><label>Drinks</label><input type="text" id="deDrinks" placeholder="optional"></div>
+      <div class="de-field full"><label>Food Notes</label><input type="text" id="deNotes" placeholder="e.g. protein shake 2x, chicken bowl" style="width:100%;"></div>
+    </div>
+    <p style="font-size:11px;color:var(--text-faint);margin-bottom:6px;">Sleep data (optional):</p>
+    <div class="de-form-grid">
+      <div class="de-field"><label>Sleep Perf %</label><input type="number" id="deSleepPerf" placeholder="e.g. 72"></div>
+      <div class="de-field"><label>Sleep Hours</label><input type="number" id="deSleepHours" step="0.1" placeholder="e.g. 6.5"></div>
+      <div class="de-field"><label>Bedtime</label><input type="text" id="deBedtime" placeholder="e.g. 01:30 AM"></div>
+      <div class="de-field"><label>Deep Sleep (hrs)</label><input type="number" id="deDeep" step="0.1" placeholder="e.g. 1.4"></div>
+      <div class="de-field"><label>REM (hrs)</label><input type="number" id="deRem" step="0.1" placeholder="e.g. 1.1"></div>
+      <div class="de-field"><label>Light (hrs)</label><input type="number" id="deLight" step="0.1" placeholder="e.g. 3.5"></div>
+      <div class="de-field"><label>Efficiency %</label><input type="number" id="deEfficiency" placeholder="e.g. 88"></div>
+      <div class="de-field"><label>Resp Rate</label><input type="number" id="deResp" step="0.1" placeholder="e.g. 16.0"></div>
+    </div>
+  </div>
+  <div class="de-section" id="deCsvSection">
+    <div class="de-field full">
+      <label>Paste CSV (columns: date, protein, carbs, fat, calories, weight, lifting, drinks, notes)</label>
+      <textarea id="deCsvInput" placeholder="2026-03-19,180,120,70,1900,162.0,Y,,protein shake 2x&#10;2026-03-20,165,100,60,1750,,,,chicken bowl"></textarea>
+    </div>
+    <div class="de-preview" id="deCsvPreview"></div>
+  </div>
+  <div class="de-section" id="deFileSection">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">Import from your tracking files. Accepts two formats:</p>
+    <div class="de-form-grid">
+      <div class="de-field">
+        <label>Macros (.xlsx)</label>
+        <p style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">Sheets named "[Month] Macros" with columns: date, protein, carbs, fat, calories, notes, lifting?, Drinks?, Weight</p>
+        <input type="file" id="deFileXlsx" accept=".xlsx,.xls" style="font-size:12px;">
+      </div>
+      <div class="de-field">
+        <label>Sleep (.csv)</label>
+        <p style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">Whoop/sleep tracker export with: Cycle start time, Sleep performance %, Respiratory rate, durations, efficiency</p>
+        <input type="file" id="deFileCsv" accept=".csv" style="font-size:12px;">
+      </div>
+    </div>
+    <div class="de-preview" id="deFilePreview" style="margin-top:8px;"></div>
+    <p style="font-size:10px;color:var(--text-faint);margin-top:8px;">Tip: You can import both files at once. Existing entries for the same date will be replaced.</p>
+  </div>
+  <div class="de-actions">
+    <button class="de-cancel" id="deCancelBtn">Cancel</button>
+    <button class="de-save" id="deSaveBtn">Save Entry</button>
+  </div>
+</div>
+
 <!-- HEATMAP TOOLTIP -->
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
@@ -945,8 +1063,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 // =====================================================================
 // DATA LAYER
 // =====================================================================
-const COLORS = { jan: '#818cf8', feb: '#38bdf8', mar: '#34d399' };
-const EVENT_COLORS = { normal: '#818cf8', drink: '#f59e0b', lift: '#06b6d4' };
+const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399' };
+const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4' };
 const GRID = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || 'rgba(255,255,255,0.05)' });
 const TICK = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--tick-color').trim() || '#64748b', font: { size: 11 } });
 
@@ -994,6 +1112,7 @@ function loadPersistedState() {
     if (goals.calories === 2050) goals.calories = 2100;
     if (Array.isArray(saved.annotations)) annotations = saved.annotations;
     if (typeof saved.useMetric === 'boolean') useMetric = saved.useMetric;
+    if (saved.recoveryWeights) recoveryWeights = saved.recoveryWeights;
     return saved;
   } catch {
     return {};
@@ -1008,6 +1127,7 @@ function persistState(extra = {}) {
       goals: savedGoals,
       annotations,
       useMetric,
+      recoveryWeights,
       ...extra
     }));
   } catch {}
@@ -1020,86 +1140,88 @@ const data = {
   Jan: [
     {date:"2026-01-01",protein:179,carbs:207,fat:134,calories:2785,weight:null,lifting:"Y",drinks:null,notes:"Taco bell: 5 tacos, 1 chicken quesadilla slice, 2 bites of quesaritto, protein shake, chicken tikka masala"},
     {date:"2026-01-02",protein:165,carbs:135,fat:105,calories:2300,weight:null,lifting:null,drinks:null,notes:"Beef drunken noodles, small salad, chicken noodle soup, chicken thigh piece, salad/veggies, nut mix"},
-    {date:"2026-01-03",protein:95,carbs:80,fat:54,calories:1300,weight:173.3,lifting:null,drinks:"4 jamesons",notes:"Bodega chicken over rice, beef stick, protein shake, nuts mix, 4 scrambled eggs"},
+    {date:"2026-01-03",protein:95,carbs:80,fat:54,calories:1300,weight:173.3,lifting:null,drinks:"4 jamesons",notes:"Bodega chicken over rice, beef stick, protein shake, nuts mix,  4 scrambled eggs"},
     {date:"2026-01-04",protein:106,carbs:150,fat:75,calories:1720,weight:173.9,lifting:null,drinks:null,notes:"Chicken teriyaki, coconut water, beef stick, protein shake, 3 boiled eggs, pork belly banh mi"},
     {date:"2026-01-05",protein:180,carbs:105,fat:71,calories:1750,weight:null,lifting:"Y",drinks:null,notes:"Chicken teriyaki, watermelon/pineapple salad, mexican steak bowl 2x, protein shake 2x"},
     {date:"2026-01-06",protein:181,carbs:140,fat:100,calories:2332,weight:null,lifting:"Y",drinks:null,notes:"Soondubu, yogurt, protein shake, lobster bisque, bodega quesadilla, protein shake 2x"},
-    {date:"2026-01-07",protein:185,carbs:108,fat:78,calories:2050,weight:172.5,lifting:null,drinks:null,notes:"Rotisserie chicken breasts, protein shake, nut snack mix, huel liquid meal, mixed fruit, cheese, veggie platter"},
-    {date:"2026-01-08",protein:191,carbs:155,fat:81,calories:1970,weight:173.6,lifting:null,drinks:null,notes:"Chinese lunch buffet - 2 white fish, beef chow fun, chicken and broccoli, protein shake, pho, 2x rotisserie chicken drumsticks"},
+    {date:"2026-01-07",protein:185,carbs:108,fat:78,calories:2050,weight:172.5,lifting:null,drinks:null,notes:"Rotiserrie chicken breasts, protein shake, nut snack mix handful, huel liquid meal, mixed fruit, cheese, veggie platter"},
+    {date:"2026-01-08",protein:191,carbs:155,fat:81,calories:1970,weight:173.6,lifting:null,drinks:null,notes:"Chinese lunch buffet - 2 white fish, beef chow fun, chicken and broccoli, protein shake, pho, 2x rotisserie chicken drumsticks no skin"},
     {date:"2026-01-09",protein:170,carbs:151,fat:146,calories:2400,weight:171.8,lifting:"Y",drinks:"Negroni, half soju bottle",notes:"Breaded chicken chunks, protein shake, 2x protein chips, brussel sprouts, duck breasts, tres leches dessert"},
     {date:"2026-01-10",protein:128,carbs:178,fat:70,calories:1950,weight:null,lifting:null,drinks:"1 champagne, 1 wine, 4 jamesons",notes:"Taco bell: 3 tacos, 1 chicken enchilada burrito, mcdouble, half fries, 2 gatorades, 2 protein shakes"},
-    {date:"2026-01-11",protein:214,carbs:130,fat:58,calories:2110,weight:171.8,lifting:"Y",drinks:null,notes:"Rotisserie chicken breasts, 2x protein shake, protein chips, greek yogurt, homemade beef soondubu, 2x cheese stick"},
-    {date:"2026-01-12",protein:186,carbs:73,fat:50,calories:1850,weight:171.5,lifting:null,drinks:null,notes:"Cheese stick, 0 sugar yogurt, rotisserie chicken leftovers, protein chips, protein shake 2x, bodega chicken over rice"},
+    {date:"2026-01-11",protein:214,carbs:130,fat:58,calories:2110,weight:171.8,lifting:"Y",drinks:null,notes:"Rotisserie chicken breasts, 2x protein shake, protein chips, greek yogurt, homemade beef soondubu , 2x cheese stick"},
+    {date:"2026-01-12",protein:186,carbs:73,fat:50,calories:1850,weight:171.5,lifting:null,drinks:null,notes:"Cheese stick, 0 sugar yogurt, rotiserrie chicken leftovers, protein chips, protein shake 2x, bodega chicken over rice"},
     {date:"2026-01-13",protein:175,carbs:79,fat:88,calories:1920,weight:170.6,lifting:"Y",drinks:null,notes:"5 scrambled eggs, breaded chicken chunks, mexican steak bowl, protein shake 2x"},
     {date:"2026-01-14",protein:170,carbs:125,fat:97,calories:2130,weight:171.2,lifting:null,drinks:null,notes:"Chinese buffet: baked white fish, spicy chicken, chow mein, protein shake 2x, mexican steak bowl"},
-    {date:"2026-01-15",protein:186,carbs:114,fat:83,calories:1985,weight:null,lifting:null,drinks:null,notes:"Chinese buffet: baked white fish, chow mei fun, hot and sour soup, northern pho, greek yogurt 2x, 5x boiled eggs"},
+    {date:"2026-01-15",protein:186,carbs:114,fat:83,calories:1985,weight:null,lifting:null,drinks:null,notes:"Chinese buffet: baked white fish, chow mei fun, hot and sour soup. northern pho. greek yogurt 2x, 5x boiled eggs"},
     {date:"2026-01-16",protein:121,carbs:191,fat:66,calories:1900,weight:171.4,lifting:null,drinks:null,notes:"Pineapple chunks, lunch pho, bodega chicken quesadilla, protein shake, protein chips"},
-    {date:"2026-01-17",protein:154,carbs:54,fat:15,calories:1100,weight:169.7,lifting:null,drinks:"2 Beers",notes:"Chicken soup and some beans, protein shake 2x, quarter chicken, fruit salad mix"},
-    {date:"2026-01-18",protein:120,carbs:170,fat:120,calories:1700,weight:null,lifting:null,drinks:"1 beer, 2 sakes, 2 jamesons",notes:"Taco bell: 2 tacos, 1 breakfast bacon burrito, 1 breakfast quesadilla, korean fusion: ricotta toast, lamb skewer, fried chicken"},
+    {date:"2026-01-17",protein:154,carbs:54,fat:15,calories:1100,weight:169.7,lifting:null,drinks:"2 Beers",notes:"Chicken soup and some beans , protein shake 2x, quarter chicken, fruit salad mix"},
+    {date:"2026-01-18",protein:120,carbs:170,fat:120,calories:1700,weight:null,lifting:null,drinks:"1 beer, 2 sake's, 2 jamesons",notes:"Taco bell: 2 tacos, 1 breakfast bacon burrito, 1 breakfast quesadilla, 1 protein shake korean fusion restaurant: ricotta toast, lamb skewer, fried chicken, bite of burger"},
     {date:"2026-01-19",protein:159,carbs:90,fat:35,calories:1440,weight:169.9,lifting:"Y",drinks:null,notes:"Pho, greek yogurt, protein shake 2x, mexican steak bowl, protein chips"},
-    {date:"2026-01-20",protein:176,carbs:60,fat:60,calories:1540,weight:171.4,lifting:null,drinks:"White claw, old fashioned",notes:"Chinese buffet - 2 white fish, broccoli/green beans, small beef chow fun, mexican steak bowl, protein chips, protein shake 2x"},
+    {date:"2026-01-20",protein:176,carbs:60,fat:60,calories:1540,weight:171.4,lifting:null,drinks:"white claw, old fashioned",notes:"Chinese buffet - 2 white fish, broccoli/green beans, small beef chow fun, wing and a few fries, mexican steak bowl, protein chips, protein shake 2x"},
     {date:"2026-01-21",protein:231,carbs:70,fat:60,calories:1955,weight:null,lifting:"Y",drinks:null,notes:"Half rotisserie chicken, greek yogurt, protein popcorn, fruit cup, cheese, protein shake 2x, 146g of chicken breast"},
     {date:"2026-01-22",protein:195,carbs:77,fat:73,calories:1580,weight:169.2,lifting:null,drinks:null,notes:"Protein shake, mediterranean plate, chipotle chicken bowl, gatorade"},
     {date:"2026-01-23",protein:174,carbs:91,fat:59,calories:1610,weight:169.4,lifting:null,drinks:"7 whiskeys",notes:"Protein shake 2x, hibachi steak, greek yogurt, protein chips, pho"},
     {date:"2026-01-24",protein:183,carbs:91,fat:98,calories:2145,weight:168.9,lifting:"Y",drinks:"1 tequila",notes:"Hibachi steak bowl, protein shake 2x, cheese, chicken greek salad, protein chips, 3 taco bell tacos and chips, sour gummy candy"},
     {date:"2026-01-25",protein:133,carbs:89,fat:60,calories:1645,weight:167.1,lifting:null,drinks:null,notes:"Chicken over rice, cheese, yogurt, 4 eggs"},
-    {date:"2026-01-26",protein:211,carbs:192,fat:40,calories:1975,weight:166.8,lifting:"Y",drinks:null,notes:"Protein shake 2x, rotisserie chicken breast, protein popcorn, chicken breast and rice, banana, turkey frozen meal, huel meal, nuts snack mix"},
+    {date:"2026-01-26",protein:211,carbs:192,fat:40,calories:1975,weight:166.8,lifting:"Y",drinks:null,notes:"Protein shake 2x, rotisserie chicken breast, protein popcorn, chicken breast and rice, banana, turkey and mashed potatoes frozen meal, huel meal, nuts snack mix"},
     {date:"2026-01-27",protein:229,carbs:107,fat:88,calories:2221,weight:167.5,lifting:"Y",drinks:null,notes:"Protein shake 2x, bodega chicken over rice, yogurt, .9 lb of salmon, protein popcorn, banana, protein chips"},
     {date:"2026-01-28",protein:186,carbs:140,fat:60,calories:1950,weight:167.0,lifting:null,drinks:null,notes:"Protein shake 2x, market buffet - white fish, mixed veggies, small korean pork, yogurt, soondubu meal"},
-    {date:"2026-01-29",protein:180,carbs:113,fat:47,calories:1710,weight:167.7,lifting:null,drinks:null,notes:"Chinese buffet: white fish, lo mein, string beans, protein shake 2x, yogurt, mexican steak bowl, protein noodles"},
+    {date:"2026-01-29",protein:180,carbs:113,fat:47,calories:1710,weight:167.7,lifting:null,drinks:null,notes:"Chinese buffet: white fish, lo mein, string beans. protein shake 2x, yogurt, mexican steak bowl, protein noodles"},
     {date:"2026-01-30",protein:152,carbs:191,fat:144,calories:3420,weight:168.2,lifting:null,drinks:null,notes:"Protein shake, 5 scrambled eggs, protein chips, mexican steak bowl, large popcorn, gummies, 2 taco bell tacos and beef and potato griller"},
-    {date:"2026-01-31",protein:101,carbs:99,fat:67,calories:1410,weight:null,lifting:null,drinks:"1 soju bottle, 4 whiskeys",notes:"3 taco bell tacos, bodega chicken quesadilla, protein shake"}
+    {date:"2026-01-31",protein:101,carbs:99,fat:67,calories:1410,weight:null,lifting:null,drinks:"1 soju bottle, 4 whiskeys",notes:"3 taco bell tacos, bodega chicken quesadilla, protein shake"},
   ],
   Feb: [
     {date:"2026-02-01",protein:189,carbs:125,fat:93,calories:2440,weight:166.8,lifting:null,drinks:null,notes:"4 scrambled eggs, protein chips 2x, protein shake 2x, pho, clams, squid, viet hot pot, cheese"},
     {date:"2026-02-02",protein:175,carbs:70,fat:58,calories:1780,weight:167.9,lifting:"Y",drinks:null,notes:"Bodega chicken over rice, 2x protein shake, protein chips, cheese 2x, chicken soup, beans and veggies, banana"},
     {date:"2026-02-03",protein:173,carbs:160,fat:69,calories:1780,weight:166.6,lifting:"Y",drinks:null,notes:"Protein shake 2x, potbelly sandwich, chips, chicken vindaloo, atkins protein shake, quarter chicken, banana"},
     {date:"2026-02-04",protein:169,carbs:54,fat:80,calories:1750,weight:167.9,lifting:null,drinks:null,notes:"Protein shake 2x, mediterranean plate, poke bowl, protein chips 2x"},
-    {date:"2026-02-05",protein:120,carbs:145,fat:80,calories:1750,weight:167.4,lifting:null,drinks:"6 tequilas, 1 whiskey",notes:"Protein shake, chinese buffet: salmon, broccoli, green beans, chow mei fun, 2 chicken empanadas, 1 chicken taco, half chocolate donut"},
-    {date:"2026-02-06",protein:170,carbs:150,fat:105,calories:2140,weight:null,lifting:null,drinks:"1 whiskey",notes:"Bodega chicken over rice, lunch pho, protein shake, protein chips, charcuterie board"},
+    {date:"2026-02-05",protein:120,carbs:145,fat:80,calories:1750,weight:167.4,lifting:null,drinks:"6 tequilas, 1 whiskey",notes:"Protein shake, chinese buffet: salmon, brocolli, green beans, chow mei fun, 2 chicken empanadas, 1 chicken taco, half chocolate donut"},
+    {date:"2026-02-06",protein:170,carbs:150,fat:105,calories:2140,weight:null,lifting:null,drinks:"1 whiskey",notes:"Bodega chicken over rice, lunch pho, protein shake, protein chips, charcutrie board"},
     {date:"2026-02-07",protein:202,carbs:134,fat:150,calories:2680,weight:167.2,lifting:null,drinks:null,notes:"3 sausage egg mcmuffins, 3 salamis, 3 proscuittos, mexican steak bowl, protein shake, protein chips"},
     {date:"2026-02-08",protein:225,carbs:97,fat:109,calories:1970,weight:167.4,lifting:"Y",drinks:null,notes:"Mexican steak bowl, protein chips 3x, protein shake, protein noodles, cheese, salami, chicken chunks"},
     {date:"2026-02-09",protein:220,carbs:106,fat:82,calories:2250,weight:165.5,lifting:"Y",drinks:null,notes:"Protein shake 2x, homemade chicken tikka masala, protein chips, chicken and veggies 2x"},
     {date:"2026-02-10",protein:165,carbs:127,fat:75,calories:2020,weight:165.7,lifting:null,drinks:null,notes:"Chicken tikka masala 2x, protein shake 2x, protein chips, greek chicken and veggies"},
-    {date:"2026-02-11",protein:196,carbs:90,fat:64,calories:1870,weight:164.7,lifting:null,drinks:null,notes:"Protein shake 2x, chinese buffet: 3 whiting fish, broccoli, green beans, lo mein, 2 turkey sticks, homemade pasta bolognese, protein chips, edamame snack"},
+    {date:"2026-02-11",protein:196,carbs:90,fat:64,calories:1870,weight:164.7,lifting:null,drinks:null,notes:"Protein shake 2x, chinese buffet: 3 whiting fish, broccoli, green beans, lo mein. 2 turkey sticks, homemade pasta bolognese, protein chips, edamame snack"},
     {date:"2026-02-12",protein:189,carbs:162,fat:97,calories:2440,weight:164.4,lifting:null,drinks:null,notes:"Protein shake, chipotle dbl chicken, atkins protein shake, 2x turkey sticks, bun bo hue, protein chips, pasta bolognese, edamame snack"},
     {date:"2026-02-13",protein:122,carbs:142,fat:131,calories:2280,weight:166.7,lifting:null,drinks:null,notes:"Protein shake, 4 taco bell tacos, spicy pork nachos, protein chips"},
-    {date:"2026-02-14",protein:172,carbs:115,fat:122,calories:2250,weight:166.0,lifting:null,drinks:"Whiskey highball",notes:"Steak burrito, edamame snack, protein shake 2x, protein chips, thai restaurant pork jowl, taro fritters, crab curry"},
+    {date:"2026-02-14",protein:172,carbs:115,fat:122,calories:2250,weight:166.0,lifting:null,drinks:"whiskey highball",notes:"Steak burrito, edamame snack, protein shake 2x, protein chips, thai restaurant pork jowl, taro fritters, crab curry"},
     {date:"2026-02-15",protein:194,carbs:105,fat:85,calories:2180,weight:166.8,lifting:"Y",drinks:null,notes:"Taco bell 3 tacos and quesadilla, protein shake 2x, protein chips, edamame snack, chicken over rice"},
     {date:"2026-02-16",protein:221,carbs:114,fat:64,calories:2180,weight:167.5,lifting:"Y",drinks:null,notes:"Protein shake, chicken breast, protein bar, jerky stick, pho, edamame snack, chicken drumsticks and thigh, banana"},
     {date:"2026-02-17",protein:188,carbs:127,fat:43,calories:1700,weight:166.2,lifting:null,drinks:null,notes:"Chicken breasts, protein shake, pork jerky, viet vermicelli chicken bowl, summer roll"},
     {date:"2026-02-18",protein:178,carbs:130,fat:63,calories:1820,weight:164.9,lifting:"Y",drinks:"5 whiskeys",notes:"Protein shake 2x, chicken breast, banana, pork jerky, protein chips, tonkatsu ramen"},
     {date:"2026-02-19",protein:187,carbs:156,fat:75,calories:2170,weight:163.6,lifting:null,drinks:null,notes:"Protein shake 2x, work chinese lunch platter, greek yogurt, naya chicken salad bowl"},
     {date:"2026-02-20",protein:175,carbs:110,fat:83,calories:1920,weight:163.5,lifting:null,drinks:"4 whiskeys",notes:"Protein shake, pork jerky 2x, pho, puff bar, edamame snack, half bodega chicken quesadilla"},
-    {date:"2026-02-21",protein:188,carbs:102,fat:101,calories:2080,weight:162.5,lifting:null,drinks:null,notes:"Half bodega chicken quesadilla, pork jerky, scrambled eggs, protein shake, tom yum soup, chicken satay, edamame snacks 2x, blueberries"},
-    {date:"2026-02-22",protein:198,carbs:193,fat:36,calories:2140,weight:163.1,lifting:"Y",drinks:null,notes:"Protein shake 2x, mexican chicken bowl 2x, edamame snack, oikos yogurt, pork jerky, blueberries"},
-    {date:"2026-02-23",protein:220,carbs:155,fat:75,calories:2290,weight:164.1,lifting:"Y",drinks:null,notes:"Pork jerky, protein shake 2x, bodega chicken over rice, edamame snack 2x, protein chips, oikos yogurt, protein noodles, pork dumplings"},
+    {date:"2026-02-21",protein:188,carbs:102,fat:101,calories:2080,weight:162.5,lifting:null,drinks:null,notes:"Half bodega chicken quesadilla, pork jerky, scrambled eggs, protein shake, tom yum soup, chicken satay, edamame snacks 2x, puff bar, blueberries"},
+    {date:"2026-02-22",protein:198,carbs:193,fat:36,calories:2140,weight:163.1,lifting:"Y",drinks:null,notes:"Protein shake 2x, mexican chicken bowl 2x, puff bar, edamame snack, oikos yogurt, pork jerky, blueberries"},
+    {date:"2026-02-23",protein:220,carbs:155,fat:75,calories:2290,weight:164.1,lifting:"Y",drinks:null,notes:"Pork jerky, protein shake 2x, bodega chicken over rice, edamame snack 2x, protein chips, oikos yogurt, puff bar, protein noodles, pork dumplings"},
     {date:"2026-02-24",protein:185,carbs:105,fat:77,calories:2040,weight:164.0,lifting:null,drinks:null,notes:"Lunch pho, pork jerky, protein shake 2x, protein chips, bodega chicken quesadilla, air fried salmon fillet"},
-    {date:"2026-02-25",protein:183,carbs:155,fat:68,calories:2016,weight:164.4,lifting:null,drinks:null,notes:"Protein shake, chicken drunken noodles, rotisserie chicken breast, edamame snacks, health ones frozen chicken pasta meal, protein chips"},
+    {date:"2026-02-25",protein:183,carbs:155,fat:68,calories:2016,weight:164.4,lifting:null,drinks:null,notes:"Protein shake, chicken drunken noodles, puff bar, rotisserie chicken breast, edamame snacks, health ones frozen chicken pasta meal, protein chips"},
     {date:"2026-02-26",protein:220,carbs:123,fat:56,calories:2030,weight:164.5,lifting:"Y",drinks:null,notes:"Protein shake 2x, chinese buffet: white fish, mixed vegs, lo mein; greek yogurt, chipotle dbl chicken, banana"},
-    {date:"2026-02-27",protein:240,carbs:190,fat:128,calories:2840,weight:165.3,lifting:null,drinks:"8 whiskeys",notes:"Diet Break. Protein shake, 4 scrambled eggs, greek yogurt"},
-    {date:"2026-02-28",protein:195,carbs:295,fat:116,calories:3050,weight:163.7,lifting:null,drinks:null,notes:"Diet Break. Coconut water, mexican steak bowl, protein chips, chicken soup, 10 beef dumplings, protein shake, 3 pizza slices"}
+    {date:"2026-02-27",protein:240,carbs:190,fat:128,calories:2840,weight:165.3,lifting:null,drinks:"8 whiskeys",notes:"Diet Break. protein shake, 4 scrambled eggs, puff bar, greek yogurt"},
+    {date:"2026-02-28",protein:195,carbs:295,fat:116,calories:3050,weight:163.7,lifting:null,drinks:null,notes:"Diet Break. coconut water, mexican steak bowl, protein chips, chicken soup, 10 beef dumplings, protein shake, 3 pizza slices"},
   ],
   March: [
     {date:"2026-03-01",protein:206,carbs:174,fat:108,calories:2480,weight:null,lifting:null,drinks:null,notes:"Diet Break. 10 beef dumplings, protein shake, protein chips, tom yum soup, green curry w/ chicken, edamame snack 2x, protein pretzels, protein ramen"},
-    {date:"2026-03-02",protein:155,carbs:251,fat:75,calories:2510,weight:165.1,lifting:"Y",drinks:null,notes:"Diet Break, protein shake 2x, lunch pho, gummy candy, pork jerky"},
+    {date:"2026-03-02",protein:155,carbs:251,fat:75,calories:2510,weight:165.1,lifting:"Y",drinks:null,notes:"Diet Break, protein shake 2x, lunch pho, gummy candy, puff bar, pork jerky"},
     {date:"2026-03-03",protein:172,carbs:179,fat:105,calories:2305,weight:165.3,lifting:"Y",drinks:null,notes:"Diet Break, protein shake, work lunch plate, pastry, chicken and broccoli, pork jerky, edamame snack"},
     {date:"2026-03-04",protein:157,carbs:192,fat:82,calories:2240,weight:164.8,lifting:null,drinks:null,notes:"Diet Break, protein shake, lunch bowl, chicken kolhapuri, gummy worms, healthy frozen meal, edamame snack"},
     {date:"2026-03-05",protein:127,carbs:197,fat:70,calories:2000,weight:166.4,lifting:null,drinks:null,notes:"Diet Break, protein shake, lunch pizza, drunken noodles, edamame snack, protein chips"},
     {date:"2026-03-06",protein:183,carbs:200,fat:122,calories:2600,weight:166.7,lifting:null,drinks:null,notes:"Diet Break, protein shake, edamame snack, lunch pho, protein chips, soondubu, spicy pork bulgogi, dumplings"},
-    {date:"2026-03-07",protein:152,carbs:166,fat:81,calories:1990,weight:null,lifting:null,drinks:"7 whiskeys",notes:"Diet Break, taco bell: 3 tacos, avocado chicken stacker, beefy 5layer burrito, edamame snack, protein shake, mexican steak bowl"},
-    {date:"2026-03-08",protein:201,carbs:132,fat:54,calories:1900,weight:167.2,lifting:null,drinks:null,notes:"Mexican steak bowl, coconut water, edamame snack 2x, chicken soup, quarter chicken platter, protein chips, greek yogurt"},
-    {date:"2026-03-09",protein:210,carbs:180,fat:43,calories:2160,weight:166.1,lifting:"Y",drinks:null,notes:"Protein shake 2x, edamame snack 2x, lunch pho, chicken over rice, chicken chunks, banana"},
-    {date:"2026-03-10",protein:228,carbs:123,fat:46,calories:1893,weight:166.3,lifting:"Y",drinks:null,notes:"Protein shake 2x, rotisserie chicken breast, blueberries, protein chips, banana, edamame snack, protein noodles, chicken drumsticks"},
+    {date:"2026-03-07",protein:152,carbs:166,fat:81,calories:1990,weight:null,lifting:null,drinks:"7 whiskeys",notes:"Diet Break,  taco bell: 3 tacos, avocado chicken stacker, beefy 5layer burrito, edamame snack, protein shake, mexican steak bowl"},
+    {date:"2026-03-08",protein:201,carbs:132,fat:54,calories:1900,weight:167.2,lifting:null,drinks:null,notes:"Mexican steak bowl, coconut water, edamame snack 2x, puff bar, chicken soup, quarter chicken platter, protein chips, greek yogurt"},
+    {date:"2026-03-09",protein:210,carbs:180,fat:43,calories:2160,weight:166.1,lifting:"Y",drinks:null,notes:"Protein shake 2x, edamame snack 2x, lunch pho, puff bar, chicken over rice, chicken chunks, banana"},
+    {date:"2026-03-10",protein:228,carbs:123,fat:46,calories:1893,weight:166.3,lifting:"Y",drinks:null,notes:"Protein shake 2x, puff bar, rotisserie chicken breast, blueberries, protein chips, banana, edamame snack, protein noodles, chicken drumsticks"},
     {date:"2026-03-11",protein:174,carbs:104,fat:52,calories:1750,weight:162.3,lifting:null,drinks:"7 drinks",notes:"Protein shake, rotisserie chicken salad, edamame snack, protein ramen w/ chicken, oikos yogurt, soondubu w/ chicken"},
     {date:"2026-03-12",protein:197,carbs:142,fat:75,calories:2120,weight:null,lifting:"Y",drinks:null,notes:"Drunken noodles, edamame snack, protein shake 2x, mexican steak bowl 2x"},
     {date:"2026-03-13",protein:147,carbs:52,fat:41,calories:1510,weight:165.0,lifting:null,drinks:"7 drinks",notes:"Chicken over rice, protein shake, edamame snack, chicken soup, chicken fillet"},
     {date:"2026-03-14",protein:95,carbs:105,fat:25,calories:1250,weight:null,lifting:null,drinks:"6 drinks",notes:"Lemon chicken platter, protein shake, slice pizza"},
-    {date:"2026-03-15",protein:176,carbs:147,fat:78,calories:2160,weight:162.8,lifting:null,drinks:null,notes:"Protein shake, edamame snack 2x, 2 pho bowls, 2 lamb skewers"},
+    {date:"2026-03-15",protein:176,carbs:147,fat:78,calories:2160,weight:162.8,lifting:null,drinks:null,notes:"Protein shake, edamame snack 2x, puff bar, 2 pho bowls, 2 lamb skewers"},
     {date:"2026-03-16",protein:177,carbs:95,fat:50,calories:1740,weight:165.3,lifting:"Y",drinks:null,notes:"Protein shake 2x, edamame snack, chicken over rice, protein chips, mexican steak bowl, blueberries"},
-    {date:"2026-03-17",protein:185,carbs:112,fat:67,calories:1910,weight:162.8,lifting:"Y",drinks:null,notes:"Mexican steak bowl, edamame snack, chicken drunken noodles, protein shake 2x, frozen pasta chicken meal 2x"},
-    {date:"2026-03-18",protein:173,carbs:80,fat:70,calories:1730,weight:162.0,lifting:null,drinks:null,notes:"Protein shake, chicken chunks, whopper, 2 turkey sticks, mediterranean chicken chunks, deli turkey slices"}
-  ]
+    {date:"2026-03-17",protein:185,carbs:112,fat:67,calories:1910,weight:162.8,lifting:"Y",drinks:null,notes:"Mexican steak bowl, edamame snack, chicken drunken noodles - not all noodles, protein shake 2x, frozen pasta chicken meal 2x"},
+    {date:"2026-03-18",protein:173,carbs:80,fat:70,calories:1730,weight:162.0,lifting:null,drinks:null,notes:"Protein shake, chicken chunks, whopper, 2 turkey sticks, mediterranean chicken chunks, deli turkey slices"},
+    {date:"2026-03-19",protein:193,carbs:108,fat:88,calories:2100,weight:162.5,lifting:"Y",drinks:null,notes:"Protein shake, chinese buffet platter,turkey jerky , barebell protein bar, deli turkey breast, beef soon du bu"},
+    {date:"2026-03-20",protein:188,carbs:135,fat:60,calories:2100,weight:162.9,lifting:null,drinks:null,notes:"Edamame snack 2x, beef sundubu, puff bar, protein chips , greek yogurt, chicken soup"},
+  ],
 };
 
 const sleepData = [
@@ -1257,12 +1379,13 @@ function rollingAvg(arr, window) {
   });
 }
 
-// Recovery score: 40% sleep perf + 20% efficiency + 20% (inverse resp) + 20% no-drink
+// Recovery score: configurable weights
+let recoveryWeights = { sleep: 0.4, efficiency: 0.2, resp: 0.2, drink: 0.2 };
 function recoveryScore(sleepDay) {
   const prev = prevDay(sleepDay.date);
   const drinkPenalty = drinkDates.has(prev) ? 0 : 100;
   const respNorm = Math.max(0, Math.min(100, (20 - sleepDay.resp) / (20 - 13) * 100));
-  return Math.round(0.4 * sleepDay.perf + 0.2 * sleepDay.efficiency + 0.2 * respNorm + 0.2 * drinkPenalty);
+  return Math.round(recoveryWeights.sleep * sleepDay.perf + recoveryWeights.efficiency * sleepDay.efficiency + recoveryWeights.resp * respNorm + recoveryWeights.drink * drinkPenalty);
 }
 
 // Food parsing
@@ -1810,8 +1933,8 @@ allCharts.heroCalChart = new Chart(document.getElementById('heroCalChart'), {
 
 allCharts.heroSleepChart = new Chart(document.getElementById('heroSleepChart'), {
   type: 'line',
-  data: { labels: [], datasets: [{ data: [], borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.14)', fill: true }] },
-  options: sparklineOptions('#818cf8', 0, 100)
+  data: { labels: [], datasets: [{ data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.14)', fill: true }] },
+  options: sparklineOptions('#f59e0b', 0, 100)
 });
 
 // =====================================================================
@@ -1864,6 +1987,24 @@ function renderStatCards() {
       </div>`;
     grid.appendChild(card);
   });
+
+  // Macro-implied vs logged calorie mismatch
+  const mismatchCard = document.createElement('div');
+  mismatchCard.className = 'stat-card';
+  const allFilteredDays = getFilteredDays();
+  const mismatchVals = ['Jan', 'Feb', 'March'].map(mo => {
+    const mDays = filtered[mo];
+    if (!mDays.length) return null;
+    const avgLogged = avg(mDays, 'calories');
+    const avgImplied = mDays.reduce((s, d) => s + (d.protein * 4 + d.carbs * 4 + d.fat * 9), 0) / mDays.length;
+    return { logged: avgLogged, implied: avgImplied, gap: ((avgImplied - avgLogged) / avgLogged * 100) };
+  });
+  mismatchCard.innerHTML = `
+    <div class="label">Macro vs Logged Gap</div>
+    <div class="months">
+      ${['Jan', 'Feb', 'Mar'].map((mo, i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
+    </div>`;
+  grid.appendChild(mismatchCard);
 }
 
 // Highlights & Streaks
@@ -1911,12 +2052,18 @@ function renderSleepStatCards() {
   const metrics = [
     { label: 'Avg Sleep Performance', key: 'perf', fmt: v => Math.round(v)+'%', goodDir: 'up' },
     { label: 'Avg Sleep Duration', key: 'hours', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
+    { label: 'Avg Time in Bed', key: '_tib', fmt: v => v.toFixed(1)+'h', goodDir: 'down', computed: days => {
+      const valid = days.filter(d => d.hours && d.efficiency);
+      return valid.length ? valid.reduce((s, d) => s + (d.hours / (d.efficiency / 100)), 0) / valid.length : null;
+    }},
     { label: 'Avg Deep Sleep', key: 'deep', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
     { label: 'Avg REM Sleep', key: 'rem', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
   ];
   grid.innerHTML = '';
   metrics.forEach(m => {
-    const vals = [avgOrNull(months.Jan, m.key), avgOrNull(months.Feb, m.key), avgOrNull(months.Mar, m.key)];
+    const vals = m.computed
+      ? [m.computed(months.Jan), m.computed(months.Feb), m.computed(months.Mar)]
+      : [avgOrNull(months.Jan, m.key), avgOrNull(months.Feb, m.key), avgOrNull(months.Mar, m.key)];
     let arrows = ['','',''];
     for (let i = 1; i < 3; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
@@ -2268,7 +2415,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
       {
         label: 'Est. Lean Mass',
         data: bodyComp.map(d => +d.lean.toFixed(1)),
-        borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.08)',
+        borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)',
         pointRadius: bodyComp.map(d => d.measured ? 0 : 3), tension: 0.3, fill: true, borderWidth: 2,
         yAxisID: 'y2'
       },
@@ -2282,8 +2429,8 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
       {
         label: 'Measured DXA Lean',
         data: bodyComp.map(d => d.measured ? +d.lean.toFixed(1) : null),
-        borderColor: '#818cf8', backgroundColor: '#eef2ff', pointBackgroundColor: '#eef2ff',
-        pointBorderColor: '#818cf8', pointBorderWidth: 2, pointRadius: 7, pointHoverRadius: 8, showLine: false,
+        borderColor: '#f59e0b', backgroundColor: '#fef3c7', pointBackgroundColor: '#fef3c7',
+        pointBorderColor: '#f59e0b', pointBorderWidth: 2, pointRadius: 7, pointHoverRadius: 8, showLine: false,
         yAxisID: 'y2'
       },
     ]
@@ -2322,7 +2469,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
       },
       y2: {
         ...chartDefaults().scales.y, position: 'right',
-        title: { display:true, text:'Lean Mass (lbs)', color:'#818cf8', font:{size:10} },
+        title: { display:true, text:'Lean Mass (lbs)', color:'#f59e0b', font:{size:10} },
         min: Math.floor(Math.min(...bodyComp.map(d=>d.lean)) - 1),
         max: Math.ceil(Math.max(...bodyComp.map(d=>d.lean)) + 1),
         ticks: { ...TICK(), callback: v => v + ' lbs' },
@@ -2340,7 +2487,7 @@ let calVisibility = Array.isArray(persistedState.calVisibility) && persistedStat
 
 function makeCalDatasets() {
   const ds = [
-    { label:'Jan', data: data.Jan.map(d=>d.calories), borderColor: COLORS.jan, backgroundColor:'rgba(129,140,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
+    { label:'Jan', data: data.Jan.map(d=>d.calories), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'Feb', data: data.Feb.map(d=>d.calories), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'March', data: data.March.map(d=>d.calories), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
   ];
@@ -2369,13 +2516,25 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 // =====================================================================
 // WATERFALL DEFICIT (uses estimated TDEE based on actual weight loss)
 // =====================================================================
-// Estimate TDEE from actual weight loss: lost ~11 lbs over 77 days = ~500 kcal/day deficit
-// Average intake ~2020 kcal, so TDEE ≈ 2520 kcal
+// Estimate TDEE from actual weight loss with phase awareness
 const wDaysForTDEE = allDays.filter(d => d.weight);
 const totalWeightLoss = wDaysForTDEE.length >= 2 ? wDaysForTDEE[0].weight - wDaysForTDEE[wDaysForTDEE.length-1].weight : 0;
 const totalDaysSpan = allDays.length;
 const avgIntake = allDays.reduce((s,d) => s + d.calories, 0) / totalDaysSpan;
 const estimatedTDEE = Math.round(avgIntake + (totalWeightLoss * 3500 / totalDaysSpan));
+
+// Phase-aware TDEE: separate cutting vs maintenance/diet break phases
+const DIET_BREAK_START = '2026-02-27';
+const DIET_BREAK_END = '2026-03-07';
+function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
+const cuttingDays = allDays.filter(d => !isInDietBreak(d.date));
+const breakDays = allDays.filter(d => isInDietBreak(d.date));
+const cuttingWeightDays = cuttingDays.filter(d => d.weight);
+const cuttingWeightLoss = cuttingWeightDays.length >= 2 ? cuttingWeightDays[0].weight - cuttingWeightDays[cuttingWeightDays.length-1].weight : totalWeightLoss;
+const cuttingAvgIntake = cuttingDays.length ? cuttingDays.reduce((s,d) => s + d.calories, 0) / cuttingDays.length : avgIntake;
+const cuttingTDEE = cuttingDays.length ? Math.round(cuttingAvgIntake + (cuttingWeightLoss * 3500 / cuttingDays.length)) : estimatedTDEE;
+const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + d.calories, 0) / breakDays.length) : null;
+const tdeeRange = { low: Math.min(estimatedTDEE, cuttingTDEE) - 80, high: Math.max(estimatedTDEE, cuttingTDEE) + 80 };
 
 let cumDeficit = 0;
 const waterfallData = allDays.map(d => {
@@ -2531,7 +2690,7 @@ allCharts.macroStackedChart = new Chart(document.getElementById('macroStackedCha
   data: {
     labels: allDays.map(d => d.date.slice(5)),
     datasets: [
-      { label:'Protein (%)', data: macroSplitDays.map(d => d.proteinPct), backgroundColor:'rgba(129,140,248,0.08)', borderColor:'#818cf8', fill:false, tension:0.3, pointRadius:0, borderWidth:3 },
+      { label:'Protein (%)', data: macroSplitDays.map(d => d.proteinPct), backgroundColor:'rgba(99,102,241,0.08)', borderColor:'#6366f1', fill:false, tension:0.3, pointRadius:0, borderWidth:3 },
       { label:'Carbs (%)', data: macroSplitDays.map(d => d.carbsPct), backgroundColor:'rgba(56,189,248,0.08)', borderColor:'#38bdf8', fill:false, tension:0.3, pointRadius:0, borderWidth:3 },
       { label:'Fat (%)', data: macroSplitDays.map(d => d.fatPct), backgroundColor:'rgba(249,115,22,0.08)', borderColor:'#f97316', fill:false, tension:0.3, pointRadius:0, borderWidth:3 },
     ]
@@ -2578,7 +2737,7 @@ function donutChart(id, month) {
     type: 'doughnut',
     data: {
       labels: [`Protein (${(pCal/total*100).toFixed(0)}%)`, `Carbs (${(cCal/total*100).toFixed(0)}%)`, `Fat (${(fCal/total*100).toFixed(0)}%)`],
-      datasets: [{ data: [pCal,cCal,fCal], backgroundColor: ['#818cf8','#38bdf8','#f97316'], borderWidth:0, hoverOffset:8 }]
+      datasets: [{ data: [pCal,cCal,fCal], backgroundColor: ['#6366f1','#38bdf8','#f97316'], borderWidth:0, hoverOffset:8 }]
     },
     options: { responsive:true, animation:{duration:400}, plugins: { legend: { display:true, position:'bottom', labels:{color:'#94a3b8',font:{size:11},padding:10} }, tooltip: { backgroundColor:'#1e2535', titleColor:'#e2e8f0', bodyColor:'#94a3b8', callbacks: { label: ctx => ` ${ctx.label}: ${Math.round(ctx.parsed)} kcal` } } }, cutout:'65%' }
   });
@@ -2600,7 +2759,7 @@ new Chart(document.getElementById('liftingChart'), {
 const drinksCounts = { Jan: data.Jan.filter(d=>d.drinks).length, Feb: data.Feb.filter(d=>d.drinks).length, March: data.March.filter(d=>d.drinks).length };
 new Chart(document.getElementById('drinksChart'), {
   type: 'bar',
-  data: { labels: ['January','February','March (so far)'], datasets: [{ data: [drinksCounts.Jan, drinksCounts.Feb, drinksCounts.March], backgroundColor: ['rgba(129,140,248,0.6)','rgba(56,189,248,0.6)','rgba(52,211,153,0.6)'], borderRadius:6, borderSkipped:false }] },
+  data: { labels: ['January','February','March (so far)'], datasets: [{ data: [drinksCounts.Jan, drinksCounts.Feb, drinksCounts.March], backgroundColor: ['rgba(245,158,11,0.6)','rgba(56,189,248,0.6)','rgba(52,211,153,0.6)'], borderRadius:6, borderSkipped:false }] },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} drink days` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:1} } } }
 });
 
@@ -2643,7 +2802,7 @@ allCharts.liftRestChart = new Chart(document.getElementById('liftRestChart'), {
       {
         label: `Lift vs Rest Delta`,
         data: liftRestDeltaRows(allDays).map(r => r.pctDelta),
-        backgroundColor: liftRestDeltaRows(allDays).map(r => r.pctDelta >= 0 ? 'rgba(129,140,248,0.75)' : 'rgba(248,113,113,0.75)'),
+        backgroundColor: liftRestDeltaRows(allDays).map(r => r.pctDelta >= 0 ? 'rgba(245,158,11,0.75)' : 'rgba(248,113,113,0.75)'),
         borderRadius: 6,
         borderSkipped: false
       }
@@ -2692,7 +2851,7 @@ allCharts.foodFreqChart = new Chart(document.getElementById('foodFreqChart'), {
     labels: foodFreqs.map(f => f[0].length > 30 ? f[0].slice(0,28)+'…' : f[0]),
     datasets: [{
       data: foodFreqs.map(f => f[1]),
-      backgroundColor: foodFreqs.map(f => isFoodProteinRich(f[0]) ? 'rgba(129,140,248,0.7)' : 'rgba(100,116,139,0.5)'),
+      backgroundColor: foodFreqs.map(f => isFoodProteinRich(f[0]) ? 'rgba(245,158,11,0.7)' : 'rgba(100,116,139,0.5)'),
       borderRadius: 4, borderSkipped: false
     }]
   },
@@ -2700,7 +2859,7 @@ allCharts.foodFreqChart = new Chart(document.getElementById('foodFreqChart'), {
     ...chartDefaults(),
     indexAxis: 'y',
     plugins: { ...chartDefaults().plugins, legend: { display:true, labels:{ generateLabels: () => [
-      { text:'Protein-rich', fillStyle:'rgba(129,140,248,0.7)', strokeStyle:'transparent', fontColor:'#94a3b8' },
+      { text:'Protein-rich', fillStyle:'rgba(245,158,11,0.7)', strokeStyle:'transparent', fontColor:'#94a3b8' },
       { text:'Other', fillStyle:'rgba(100,116,139,0.5)', strokeStyle:'transparent', fontColor:'#94a3b8' },
     ], color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.x} times in ${allDays.length} days` } } },
     scales: {
@@ -2787,7 +2946,7 @@ allCharts.sleepDurChart = new Chart(document.getElementById('sleepDurChart'), {
     labels: sleepData.map(d => d.date.slice(5)),
     datasets: [{
       data: sleepData.map(d => d.hours),
-      borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.08)',
+      borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)',
       pointRadius: 3, pointHoverRadius: 6, tension: 0.3, fill: true,
       pointBackgroundColor: sleepData.map(d => perfColor(d.perf))
     }]
@@ -2806,7 +2965,7 @@ new Chart(document.getElementById('sleepStagesChart'), {
   data: {
     labels: sleepData.map(d => d.date.slice(5)),
     datasets: [
-      { label:'Deep', data: sleepData.map(d=>d.deep), backgroundColor:'rgba(129,140,248,0.85)', stack:'s' },
+      { label:'Deep', data: sleepData.map(d=>d.deep), backgroundColor:'rgba(245,158,11,0.85)', stack:'s' },
       { label:'REM',  data: sleepData.map(d=>d.rem),  backgroundColor:'rgba(56,189,248,0.85)',  stack:'s' },
       { label:'Light',data: sleepData.map(d=>d.light),backgroundColor:'rgba(100,116,139,0.5)', stack:'s' },
     ]
@@ -2905,7 +3064,7 @@ new Chart(document.getElementById('sleepAnnotatedChart'), {
     datasets: [{
       label:'Sleep Performance',
       data: sleepData.map(d => d.perf),
-      borderColor:'#818cf8', backgroundColor:'rgba(129,140,248,0.07)',
+      borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.07)',
       pointRadius: sleepData.map(d => { const prev=prevDay(d.date); return drinkDates.has(prev)||liftDates.has(d.date)?7:3; }),
       pointStyle: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev)) return 'triangle'; if(liftDates.has(d.date)) return 'rectRot'; return 'circle'; }),
       pointBackgroundColor: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev))return EVENT_COLORS.drink; if(liftDates.has(d.date))return EVENT_COLORS.lift; return EVENT_COLORS.normal; }),
@@ -3151,7 +3310,7 @@ function openPanel(dateStr) {
   const macroStats = document.getElementById('panelMacroStats');
   macroStats.innerHTML = `
     <div class="mini-stat"><div class="ms-label">Calories</div><div class="ms-val" style="color:#fbbf24">${day.calories ? energyLabel(day.calories) : '—'}</div></div>
-    <div class="mini-stat"><div class="ms-label">Protein</div><div class="ms-val" style="color:#818cf8">${day.protein ? day.protein+'g' : '—'}</div></div>
+    <div class="mini-stat"><div class="ms-label">Protein</div><div class="ms-val" style="color:#f59e0b">${day.protein ? day.protein+'g' : '—'}</div></div>
     <div class="mini-stat"><div class="ms-label">Carbs</div><div class="ms-val" style="color:#38bdf8">${day.carbs ? day.carbs+'g' : '—'}</div></div>
     <div class="mini-stat"><div class="ms-label">Fat</div><div class="ms-val" style="color:#f97316">${day.fat ? day.fat+'g' : '—'}</div></div>
   `;
@@ -3162,7 +3321,7 @@ function openPanel(dateStr) {
   if (sleep) {
     sleepStats.innerHTML = `
       <div class="mini-stat"><div class="ms-label">Sleep Perf</div><div class="ms-val" style="color:${perfColor(sleep.perf)}">${sleep.perf}%</div></div>
-      <div class="mini-stat"><div class="ms-label">Hours</div><div class="ms-val" style="color:#818cf8">${sleep.hours}h</div></div>
+      <div class="mini-stat"><div class="ms-label">Hours</div><div class="ms-val" style="color:#f59e0b">${sleep.hours}h</div></div>
       <div class="mini-stat"><div class="ms-label">Bedtime</div><div class="ms-val" style="color:#38bdf8;font-size:14px">${sleep.bedtime}</div></div>
       <div class="mini-stat"><div class="ms-label">Deep/REM</div><div class="ms-val" style="color:#34d399;font-size:14px">${sleep.deep}/${sleep.rem}h</div></div>
     `;
@@ -3183,7 +3342,7 @@ function openPanel(dateStr) {
 
   // Protein per lb
   if (day.weight && day.protein) {
-    badges.innerHTML += `<span class="pill" style="background:rgba(129,140,248,0.15);color:#818cf8;">💪 ${ratioLabel(day.protein, day.weight)}</span>`;
+    badges.innerHTML += `<span class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b;">💪 ${ratioLabel(day.protein, day.weight)}</span>`;
   }
 
   // Food pills
@@ -3302,6 +3461,15 @@ document.getElementById('applySettings').addEventListener('click', () => {
   goals.sleepPerf = parseInt(document.getElementById('goalSleepPerf').value) || 70;
   goals.bedtime = document.getElementById('goalBedtime').value || '12:30 AM';
 
+  // Recovery weights
+  const rws = +document.getElementById('recovWtSleep').value / 100;
+  const rwe = +document.getElementById('recovWtEff').value / 100;
+  const rwr = +document.getElementById('recovWtResp').value / 100;
+  const rwd = +document.getElementById('recovWtDrink').value / 100;
+  if (Math.abs((rws + rwe + rwr + rwd) - 1) < 0.02) {
+    recoveryWeights = { sleep: rws, efficiency: rwe, resp: rwr, drink: rwd };
+  }
+
   syncSettingsForm();
   refreshDashboard();
   persistUiState();
@@ -3324,6 +3492,13 @@ function updateRangeLabels() {
   const e = parseInt(rangeEndEl.value);
   document.getElementById('rangeStartLabel').textContent = allDates[s] ? allDates[s].slice(5) : '';
   document.getElementById('rangeEndLabel').textContent = allDates[e] ? allDates[e].slice(5) : '';
+  // Sync date pickers
+  const rsde = document.getElementById('rangeStartDate');
+  const rede = document.getElementById('rangeEndDate');
+  if (rsde && rede && allDates.length) {
+    rsde.value = allDates[Math.min(rangeStartIdx, allDates.length - 1)] || '';
+    rede.value = allDates[Math.min(rangeEndIdx, allDates.length - 1)] || '';
+  }
 }
 rangeStartEl.addEventListener('input', () => { updateRangeLabels(); refreshDashboard(); persistUiState(); });
 rangeEndEl.addEventListener('input', () => { updateRangeLabels(); refreshDashboard(); persistUiState(); });
@@ -3337,6 +3512,52 @@ eventFilterEl.addEventListener('change', () => {
   refreshDashboard();
   persistUiState();
 });
+
+// Recovery weight validation
+['recovWtSleep','recovWtEff','recovWtResp','recovWtDrink'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', () => {
+    const total = ['recovWtSleep','recovWtEff','recovWtResp','recovWtDrink'].reduce((s, i) => s + (+document.getElementById(i).value || 0), 0);
+    const el = document.getElementById('recovWtTotal');
+    if (el) {
+      el.textContent = `Total: ${total}%`;
+      el.style.color = total === 100 ? 'var(--col-green)' : 'var(--col-red)';
+    }
+  });
+});
+
+// Date picker sync
+const rangeStartDateEl = document.getElementById('rangeStartDate');
+const rangeEndDateEl = document.getElementById('rangeEndDate');
+if (rangeStartDateEl && rangeEndDateEl) {
+  rangeEndDateEl.value = allDates[allDates.length - 1] || '2026-03-18';
+  rangeStartDateEl.value = allDates[0] || '2026-01-01';
+  rangeStartDateEl.min = allDates[0] || '2026-01-01';
+  rangeStartDateEl.max = allDates[allDates.length - 1] || '2026-03-18';
+  rangeEndDateEl.min = allDates[0] || '2026-01-01';
+  rangeEndDateEl.max = allDates[allDates.length - 1] || '2026-03-18';
+
+  function syncDateToRange() {
+    const startDate = rangeStartDateEl.value;
+    const endDate = rangeEndDateEl.value;
+    let startIdx = allDates.indexOf(startDate);
+    let endIdx = allDates.indexOf(endDate);
+    if (startIdx < 0) startIdx = allDates.findIndex(d => d >= startDate);
+    if (endIdx < 0) endIdx = allDates.findIndex(d => d >= endDate);
+    if (startIdx < 0) startIdx = 0;
+    if (endIdx < 0) endIdx = allDates.length - 1;
+    if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
+    rangeStartEl.value = startIdx;
+    rangeEndEl.value = endIdx;
+    rangeStartIdx = startIdx;
+    rangeEndIdx = endIdx;
+    refreshDashboard();
+    persistUiState();
+  }
+
+  rangeStartDateEl.addEventListener('change', syncDateToRange);
+  rangeEndDateEl.addEventListener('change', syncDateToRange);
+}
+
 updateRangeLabels();
 
 // =====================================================================
@@ -3396,6 +3617,11 @@ function syncSettingsForm() {
   document.getElementById('goalSleep').value = goals.sleep;
   document.getElementById('goalBedtime').value = goals.bedtime;
   document.getElementById('goalSleepPerf').value = goals.sleepPerf;
+  // Recovery weights
+  document.getElementById('recovWtSleep').value = Math.round(recoveryWeights.sleep * 100);
+  document.getElementById('recovWtEff').value = Math.round(recoveryWeights.efficiency * 100);
+  document.getElementById('recovWtResp').value = Math.round(recoveryWeights.resp * 100);
+  document.getElementById('recovWtDrink').value = Math.round(recoveryWeights.drink * 100);
 }
 
 function syncControlsFromState() {
@@ -3481,6 +3707,39 @@ function updateWeightChart(days) {
   const rolling = rollingAvg(points.map(p => p.value), 7).map(v => v == null ? null : weightValue(v));
   chart.data.labels = points.map(p => p.label);
   chart.data.datasets[0].data = vals;
+  chart.data.datasets[1].data = rolling;
+  // Linear regression line
+  const validIndices = vals.map((v, i) => v != null ? i : null).filter(v => v !== null);
+  const validVals = validIndices.map(i => vals[i]);
+  if (validIndices.length >= 3) {
+    const n = validIndices.length;
+    const sumX = validIndices.reduce((a, b) => a + b, 0);
+    const sumY = validVals.reduce((a, b) => a + b, 0);
+    const sumXY = validIndices.reduce((s, x, i) => s + x * validVals[i], 0);
+    const sumX2 = validIndices.reduce((s, x) => s + x * x, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    const regressionData = vals.map((_, i) => +(intercept + slope * i).toFixed(1));
+    const lbsPerWeek = slope * 7;
+    if (!chart.data.datasets[2]) {
+      chart.data.datasets.push({
+        label: 'Trend',
+        data: regressionData,
+        borderColor: 'rgba(251,113,133,0.6)',
+        borderDash: [4, 6],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      });
+    } else {
+      chart.data.datasets[2].data = regressionData;
+    }
+    // Update chart header with rate
+    const rateText = `${lbsPerWeek < 0 ? '' : '+'}${weightValue(lbsPerWeek)} ${weightUnit()}/week`;
+    const weightChartHeader = document.querySelector('#weightChart')?.closest('.chart-card')?.querySelector('h3');
+    if (weightChartHeader) weightChartHeader.textContent = `Weight — 7d avg, regression (${rateText})`;
+  }
   chart.data.datasets[0].pointRadius = points.map(p => drinkDates.has(p.date) || liftDates.has(p.date) ? 7 : 5);
   chart.data.datasets[0].pointStyle = points.map(p => drinkDates.has(p.date) ? 'triangle' : liftDates.has(p.date) ? 'rectRot' : 'circle');
   chart.data.datasets[0].pointBackgroundColor = points.map(p => {
@@ -3495,7 +3754,11 @@ function updateWeightChart(days) {
     if (elements.length && elements[0].datasetIndex === 0) openPanel(points[elements[0].index].date);
   };
   const bounds = calcAxisBounds(vals, useMetric ? 0.8 : 2);
-  chart.options.plugins.tooltip.callbacks.label = ctx => ctx.datasetIndex === 0 ? ` ${weightLabel(points[ctx.dataIndex].value)}` : ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
+  chart.options.plugins.tooltip.callbacks.label = ctx => {
+    if (ctx.datasetIndex === 0) return ` ${weightLabel(points[ctx.dataIndex].value)}`;
+    if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
+    return ` Trend: ${ctx.parsed.y} ${weightUnit()}`;
+  };
   chart.options.scales.y.min = Math.floor(bounds.min);
   chart.options.scales.y.max = Math.ceil(bounds.max);
   chart.options.scales.y.ticks.stepSize = useMetric ? 1 : 2;
@@ -3550,7 +3813,7 @@ function updateCaloriesChart(months) {
   const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, 1);
   chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
-    { label:'Jan', data: months.Jan.map(d => energyValue(d.calories)), borderColor: COLORS.jan, backgroundColor:'rgba(129,140,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
+    { label:'Jan', data: months.Jan.map(d => energyValue(d.calories)), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'Feb', data: months.Feb.map(d => energyValue(d.calories)), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'March', data: months.March.map(d => energyValue(d.calories)), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:`Target (${energyLabel(goals.calories)})`, data: Array(maxLen).fill(energyValue(goals.calories)), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
@@ -3685,7 +3948,7 @@ function updateLiftRestChart(days) {
   chart.data.labels = rows.map(r => r.label);
   chart.data.datasets[0].label = `Lift vs Rest (lift n=${lift.length}, rest n=${rest.length})`;
   chart.data.datasets[0].data = rows.map(r => r.pctDelta);
-  chart.data.datasets[0].backgroundColor = rows.map(r => r.pctDelta >= 0 ? 'rgba(129,140,248,0.75)' : 'rgba(248,113,113,0.75)');
+  chart.data.datasets[0].backgroundColor = rows.map(r => r.pctDelta >= 0 ? 'rgba(245,158,11,0.75)' : 'rgba(248,113,113,0.75)');
   const bounds = calcAxisBounds(rows.map(r => r.pctDelta), 6);
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const row = rows[ctx.dataIndex];
@@ -3707,10 +3970,32 @@ function updateLiftRestChart(days) {
 function updateFoodFreqChart(days) {
   const chart = allCharts.foodFreqChart;
   const foodFreqs = foodFrequency(days).slice(0, 20);
+
+  // Compute average calorie day when each food appears
+  const foodCalAssoc = {};
+  foodFreqs.forEach(([food]) => {
+    const daysWithFood = days.filter(d => d.notes && d.notes.toLowerCase().includes(food.toLowerCase()));
+    const daysWithoutFood = days.filter(d => !d.notes || !d.notes.toLowerCase().includes(food.toLowerCase()));
+    foodCalAssoc[food] = {
+      withAvg: daysWithFood.length ? Math.round(daysWithFood.reduce((s, d) => s + d.calories, 0) / daysWithFood.length) : 0,
+      withoutAvg: daysWithoutFood.length ? Math.round(daysWithoutFood.reduce((s, d) => s + d.calories, 0) / daysWithoutFood.length) : 0,
+      count: daysWithFood.length
+    };
+  });
+
   chart.data.labels = foodFreqs.map(f => f[0].length > 30 ? f[0].slice(0, 28) + '…' : f[0]);
   chart.data.datasets[0].data = foodFreqs.map(f => f[1]);
-  chart.data.datasets[0].backgroundColor = foodFreqs.map(f => isFoodProteinRich(f[0]) ? 'rgba(129,140,248,0.7)' : 'rgba(100,116,139,0.5)');
-  chart.options.plugins.tooltip.callbacks.label = ctx => ` ${ctx.parsed.x} times in ${days.length} days`;
+  chart.data.datasets[0].backgroundColor = foodFreqs.map(f => isFoodProteinRich(f[0]) ? 'rgba(245,158,11,0.7)' : 'rgba(100,116,139,0.5)');
+  chart.options.plugins.tooltip.callbacks.label = ctx => {
+    const food = foodFreqs[ctx.dataIndex][0];
+    const assoc = foodCalAssoc[food];
+    return [
+      ` ${ctx.parsed.x} times in ${days.length} days`,
+      ` Avg cal when eaten: ${energyLabel(assoc.withAvg)}`,
+      ` Avg cal otherwise: ${energyLabel(assoc.withoutAvg)}`,
+      ` Δ ${assoc.withAvg - assoc.withoutAvg > 0 ? '+' : ''}${energyLabel(assoc.withAvg - assoc.withoutAvg)}`
+    ];
+  };
   chart.update();
 }
 
@@ -3882,6 +4167,8 @@ function refreshDashboard() {
   updateBodyCompChart(filteredDays);
   updateCaloriesChart(months);
   updateWaterfallChart(filteredDays);
+  // Update TDEE display
+  document.getElementById('waterfallTitle').textContent = `Cumulative Calorie Deficit (TDEE: ~${energyLabel(estimatedTDEE)}, cutting phase: ~${energyLabel(cuttingTDEE)}, range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)})`;
   updateMacroChart(months);
   updateMacroStackedChart(filteredDays);
   updateDonutCharts(months);
@@ -3921,6 +4208,383 @@ document.querySelectorAll('.mobile-detail-shell').forEach(shell => {
   });
 });
 window.addEventListener('resize', () => syncResponsiveLayout());
+
+// =====================================================================
+// DATA ENTRY
+// =====================================================================
+const DATA_STORAGE_KEY = 'macros_dashboard_v4_custom_data';
+
+function loadCustomData() {
+  try { return JSON.parse(localStorage.getItem(DATA_STORAGE_KEY) || '{"macro":[],"sleep":[]}'); }
+  catch { return { macro: [], sleep: [] }; }
+}
+
+function saveCustomData(cd) {
+  localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(cd));
+}
+
+function injectCustomData() {
+  const cd = loadCustomData();
+  cd.macro.forEach(entry => {
+    const month = entry.date.startsWith('2026-01') ? 'Jan' : entry.date.startsWith('2026-02') ? 'Feb' : 'March';
+    if (!data[month].find(d => d.date === entry.date)) {
+      data[month].push(entry);
+      data[month].sort((a, b) => a.date.localeCompare(b.date));
+    }
+  });
+  cd.sleep.forEach(entry => {
+    if (!sleepData.find(d => d.date === entry.date)) {
+      sleepData.push(entry);
+      sleepData.sort((a, b) => a.date.localeCompare(b.date));
+    }
+  });
+  // Rebuild derived structures
+  rebuildDerivedData();
+}
+
+function rebuildDerivedData() {
+  allDays.length = 0;
+  ['Jan', 'Feb', 'March'].forEach(m => data[m].forEach(d => allDays.push(d)));
+  allDates.length = 0;
+  allDays.forEach(d => allDates.push(d.date));
+  Object.keys(macroByDate).forEach(k => delete macroByDate[k]);
+  allDays.forEach(d => macroByDate[d.date] = d);
+  drinkDates.clear();
+  liftDates.clear();
+  allDays.forEach(d => { if (d.drinks) drinkDates.add(d.date); if (d.lifting === 'Y') liftDates.add(d.date); });
+  // Update range slider max
+  const rangeStartEl = document.getElementById('rangeStart');
+  const rangeEndEl = document.getElementById('rangeEnd');
+  if (rangeStartEl) rangeStartEl.max = allDates.length - 1;
+  if (rangeEndEl) { rangeEndEl.max = allDates.length - 1; rangeEndEl.value = allDates.length - 1; }
+  rangeEndIdx = allDates.length - 1;
+}
+
+function parseBedtimeHour(bedtime) {
+  const m = bedtime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return 2;
+  let hour = parseInt(m[1], 10) % 12;
+  if (m[3].toUpperCase() === 'PM') hour += 12;
+  return hour + parseInt(m[2], 10) / 60;
+}
+
+function openDataEntry() {
+  document.getElementById('dataEntryModal').style.display = '';
+  document.getElementById('dataEntryOverlay').classList.add('show');
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('deDate').value = today;
+  document.getElementById('deMsg').className = 'de-msg';
+  document.getElementById('deMsg').textContent = '';
+}
+
+function closeDataEntry() {
+  document.getElementById('dataEntryModal').style.display = 'none';
+  document.getElementById('dataEntryOverlay').classList.remove('show');
+}
+
+document.getElementById('dataEntryBtn').addEventListener('click', openDataEntry);
+document.getElementById('deCancelBtn').addEventListener('click', closeDataEntry);
+document.getElementById('dataEntryOverlay').addEventListener('click', closeDataEntry);
+
+document.querySelectorAll('.de-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.de-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.de-section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    const sectionMap = { form: 'deFormSection', csv: 'deCsvSection', file: 'deFileSection' };
+    document.getElementById(sectionMap[tab.dataset.de]).classList.add('active');
+    const labelMap = { form: 'Save Entry', csv: 'Import CSV', file: 'Import Files' };
+    document.getElementById('deSaveBtn').textContent = labelMap[tab.dataset.de];
+  });
+});
+
+document.getElementById('deCsvInput').addEventListener('input', () => {
+  const lines = document.getElementById('deCsvInput').value.trim().split('\n').filter(Boolean);
+  if (!lines.length) { document.getElementById('deCsvPreview').innerHTML = ''; return; }
+  const cols = ['date','protein','carbs','fat','calories','weight','lifting','drinks','notes'];
+  let html = '<table><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  lines.slice(0, 10).forEach(line => {
+    const parts = line.split(',').map(s => s.trim());
+    html += '<tr>' + cols.map((_, i) => `<td>${parts[i] || ''}</td>`).join('') + '</tr>';
+  });
+  if (lines.length > 10) html += `<tr><td colspan="${cols.length}" style="text-align:center;">...and ${lines.length - 10} more rows</td></tr>`;
+  html += '</table>';
+  document.getElementById('deCsvPreview').innerHTML = html;
+});
+
+// ===== File import helpers =====
+function parseXlsxMacros(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  const macroEntries = [];
+  // Look for sheets ending in "Macros"
+  const macroSheets = wb.SheetNames.filter(n => /macros/i.test(n));
+  macroSheets.forEach(sheetName => {
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+    rows.forEach(row => {
+      // First column is the date (unnamed or various names)
+      const dateKey = Object.keys(row).find(k => /unnamed|date/i.test(k)) || Object.keys(row)[0];
+      let dateVal = row[dateKey];
+      if (!dateVal) return;
+      // Handle Excel date objects
+      if (dateVal instanceof Date) {
+        dateVal = dateVal.toISOString().slice(0, 10);
+      } else if (typeof dateVal === 'number') {
+        // Excel serial date
+        const d = new Date((dateVal - 25569) * 86400 * 1000);
+        dateVal = d.toISOString().slice(0, 10);
+      } else {
+        dateVal = String(dateVal).slice(0, 10);
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return;
+
+      const protein = +row.protein || 0;
+      const carbs = +row.carbs || 0;
+      const fat = +row.fat || 0;
+      const calories = +row.calories || 0;
+      if (!calories && !protein) return; // skip empty rows
+
+      const liftKey = Object.keys(row).find(k => /lifting/i.test(k));
+      const drinkKey = Object.keys(row).find(k => /drink/i.test(k));
+      const weightKey = Object.keys(row).find(k => /weight/i.test(k));
+      const notesKey = Object.keys(row).find(k => /notes/i.test(k) && !/unnamed/i.test(k));
+
+      macroEntries.push({
+        date: dateVal,
+        protein, carbs, fat, calories,
+        weight: weightKey && row[weightKey] != null && row[weightKey] !== '' ? +row[weightKey] : null,
+        lifting: liftKey && row[liftKey] && String(row[liftKey]).toUpperCase() === 'Y' ? 'Y' : null,
+        drinks: drinkKey && row[drinkKey] ? String(row[drinkKey]) : null,
+        notes: notesKey && row[notesKey] ? String(row[notesKey]) : ''
+      });
+    });
+  });
+  return macroEntries;
+}
+
+function parseSleepCsv(csvText) {
+  const lines = csvText.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+
+  const colIdx = (pattern) => headers.findIndex(h => pattern.test(h));
+  const iCycleStart = colIdx(/cycle start time/i);
+  const iPerf = colIdx(/sleep performance/i);
+  const iResp = colIdx(/respiratory rate/i);
+  const iAsleep = colIdx(/asleep duration/i);
+  const iLight = colIdx(/light sleep/i);
+  const iDeep = colIdx(/deep.*duration/i);
+  const iRem = colIdx(/rem.*duration/i);
+  const iEfficiency = colIdx(/sleep efficiency/i);
+  const iNap = colIdx(/nap/i);
+
+  const entries = [];
+  const seen = new Set();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(s => s.trim());
+    // Skip naps
+    if (iNap >= 0 && cols[iNap] && cols[iNap].toLowerCase() === 'true') continue;
+
+    const cycleStart = cols[iCycleStart];
+    if (!cycleStart) continue;
+    // Extract date from cycle start time (format: 2026-03-17 23:57:32)
+    const dateStr = cycleStart.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+    // Use only one sleep entry per date (the first/most recent one in the file)
+    if (seen.has(dateStr)) continue;
+    seen.add(dateStr);
+
+    const perf = iPerf >= 0 ? +cols[iPerf] || 0 : 0;
+    const resp = iResp >= 0 ? +cols[iResp] || 16 : 16;
+    const asleepMin = iAsleep >= 0 ? +cols[iAsleep] || 0 : 0;
+    const deepMin = iDeep >= 0 ? +cols[iDeep] || 0 : 0;
+    const remMin = iRem >= 0 ? +cols[iRem] || 0 : 0;
+    const lightMin = iLight >= 0 ? +cols[iLight] || 0 : 0;
+    const efficiency = iEfficiency >= 0 ? +cols[iEfficiency] || 85 : 85;
+
+    // Derive bedtime from cycle start time
+    const timeMatch = cycleStart.match(/(\d{2}):(\d{2}):\d{2}$/);
+    let bedtimeStr = '02:00 AM';
+    let bedtimeHour = 2;
+    if (timeMatch) {
+      let h = +timeMatch[1];
+      const m = +timeMatch[2];
+      bedtimeHour = h + m / 60;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      bedtimeStr = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    entries.push({
+      date: dateStr,
+      perf,
+      hours: +(asleepMin / 60).toFixed(2),
+      bedtime: bedtimeStr,
+      bedtime_hour: bedtimeHour,
+      deep: +(deepMin / 60).toFixed(2),
+      rem: +(remMin / 60).toFixed(2),
+      light: +(lightMin / 60).toFixed(2),
+      efficiency,
+      resp
+    });
+  }
+  return entries;
+}
+
+// File preview on select
+['deFileXlsx', 'deFileCsv'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', () => {
+    const xlsxFile = document.getElementById('deFileXlsx').files[0];
+    const csvFile = document.getElementById('deFileCsv').files[0];
+    const preview = document.getElementById('deFilePreview');
+    const parts = [];
+    if (xlsxFile) parts.push(`Macros: ${xlsxFile.name} (${(xlsxFile.size / 1024).toFixed(0)} KB)`);
+    if (csvFile) parts.push(`Sleep: ${csvFile.name} (${(csvFile.size / 1024).toFixed(0)} KB)`);
+    preview.innerHTML = parts.length ? parts.map(p => `<div style="margin-bottom:4px;">${p}</div>`).join('') : '';
+  });
+});
+
+document.getElementById('deSaveBtn').addEventListener('click', () => {
+  const msgEl = document.getElementById('deMsg');
+  const activeTab = document.querySelector('.de-tab.active').dataset.de;
+  const cd = loadCustomData();
+
+  if (activeTab === 'file') {
+    // ===== File Import Mode =====
+    const xlsxFile = document.getElementById('deFileXlsx').files[0];
+    const csvFile = document.getElementById('deFileCsv').files[0];
+    if (!xlsxFile && !csvFile) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Select at least one file.'; return; }
+
+    msgEl.className = 'de-msg'; msgEl.textContent = '';
+    const promises = [];
+    let macroCount = 0, sleepCount = 0;
+
+    if (xlsxFile) {
+      promises.push(new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const entries = parseXlsxMacros(e.target.result);
+            entries.forEach(entry => {
+              cd.macro = cd.macro.filter(d => d.date !== entry.date);
+              cd.macro.push(entry);
+              macroCount++;
+            });
+            resolve();
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(xlsxFile);
+      }));
+    }
+
+    if (csvFile) {
+      promises.push(new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const entries = parseSleepCsv(e.target.result);
+            entries.forEach(entry => {
+              cd.sleep = cd.sleep.filter(d => d.date !== entry.date);
+              cd.sleep.push(entry);
+              sleepCount++;
+            });
+            resolve();
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsText(csvFile);
+      }));
+    }
+
+    Promise.all(promises).then(() => {
+      saveCustomData(cd);
+      injectCustomData();
+      updateRangeLabels();
+      refreshDashboard();
+      const parts = [];
+      if (macroCount) parts.push(`${macroCount} macro entries`);
+      if (sleepCount) parts.push(`${sleepCount} sleep entries`);
+      msgEl.className = 'de-msg success';
+      msgEl.textContent = `Imported ${parts.join(' and ')}. Dashboard refreshed.`;
+      // Clear file inputs
+      document.getElementById('deFileXlsx').value = '';
+      document.getElementById('deFileCsv').value = '';
+      document.getElementById('deFilePreview').innerHTML = '';
+    }).catch(err => {
+      msgEl.className = 'de-msg error';
+      msgEl.textContent = `Import error: ${err.message}`;
+    });
+
+  } else if (activeTab === 'csv') {
+    const lines = document.getElementById('deCsvInput').value.trim().split('\n').filter(Boolean);
+    if (!lines.length) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Paste CSV data first.'; return; }
+    let added = 0;
+    lines.forEach(line => {
+      const p = line.split(',').map(s => s.trim());
+      if (!p[0] || !p[0].match(/^\d{4}-\d{2}-\d{2}$/)) return;
+      const entry = {
+        date: p[0], protein: +p[1] || 0, carbs: +p[2] || 0, fat: +p[3] || 0,
+        calories: +p[4] || 0, weight: p[5] ? +p[5] : null,
+        lifting: p[6] === 'Y' ? 'Y' : null, drinks: p[7] || null, notes: p[8] || ''
+      };
+      cd.macro = cd.macro.filter(d => d.date !== entry.date);
+      cd.macro.push(entry);
+      added++;
+    });
+    saveCustomData(cd);
+    injectCustomData();
+    updateRangeLabels();
+    refreshDashboard();
+    msgEl.className = 'de-msg success';
+    msgEl.textContent = `Imported ${added} entries. Dashboard refreshed.`;
+  } else {
+    const date = document.getElementById('deDate').value;
+    const cal = +document.getElementById('deCal').value;
+    if (!date || !cal) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Date and calories are required.'; return; }
+    const entry = {
+      date, protein: +document.getElementById('dePro').value || 0,
+      carbs: +document.getElementById('deCarbs').value || 0,
+      fat: +document.getElementById('deFat').value || 0, calories: cal,
+      weight: document.getElementById('deWeight').value ? +document.getElementById('deWeight').value : null,
+      lifting: document.getElementById('deLifting').value || null,
+      drinks: document.getElementById('deDrinks').value || null,
+      notes: document.getElementById('deNotes').value || ''
+    };
+    cd.macro = cd.macro.filter(d => d.date !== date);
+    cd.macro.push(entry);
+
+    // Sleep data
+    const sleepPerf = document.getElementById('deSleepPerf').value;
+    if (sleepPerf) {
+      const bedtime = document.getElementById('deBedtime').value || '02:00 AM';
+      const sleepEntry = {
+        date, perf: +sleepPerf,
+        hours: +document.getElementById('deSleepHours').value || 0,
+        bedtime,
+        bedtime_hour: parseBedtimeHour(bedtime),
+        deep: +document.getElementById('deDeep').value || 0,
+        rem: +document.getElementById('deRem').value || 0,
+        light: +document.getElementById('deLight').value || 0,
+        efficiency: +document.getElementById('deEfficiency').value || 85,
+        resp: +document.getElementById('deResp').value || 16
+      };
+      cd.sleep = cd.sleep.filter(d => d.date !== date);
+      cd.sleep.push(sleepEntry);
+    }
+    saveCustomData(cd);
+    injectCustomData();
+    updateRangeLabels();
+    refreshDashboard();
+    msgEl.className = 'de-msg success';
+    msgEl.textContent = `Saved ${date}. Dashboard refreshed.`;
+  }
+});
+
+// Load custom data on startup
+injectCustomData();
+
 refreshDashboard();
 console.log('Dashboard v4 loaded with decision-support analysis and live filters.');
 </script></body></html>
