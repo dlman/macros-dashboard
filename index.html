@@ -95,7 +95,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-pulse .pulse-item .k { font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .hero-pulse .pulse-item .t { font-size: 10px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.7px; }
 .forecast-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: -2px 0 18px; }
-.forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; }
+.forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 144px; }
 .forecast-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
 .forecast-card .value { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .forecast-card .sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
@@ -104,6 +104,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .confidence-pill.high { background: rgba(52,211,153,0.14); color: var(--col-green); }
 .confidence-pill.medium { background: rgba(251,191,36,0.14); color: var(--col-amber); }
 .confidence-pill.low { background: rgba(248,113,113,0.14); color: var(--col-red); }
+.mini-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.mini-metric { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 10px; padding: 9px 10px; }
+.mini-metric .k { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.mini-metric .t { font-size: 10px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.7px; }
 
 /* ===== V4 SUMMARY ===== */
 .sticky-summary { position: sticky; top: 10px; z-index: 30; display: grid; grid-template-columns: 1.6fr repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
@@ -162,6 +166,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .mobile-control-shell > summary { display: none; }
 .mobile-control-shell .control-strip { margin: 0; }
 .mobile-detail-shell > summary { display: none; }
+.tab-bar { display: flex; gap: 8px; margin: -6px 0 18px; padding-bottom: 2px; overflow-x: auto; }
+.tab-btn { border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-muted); border-radius: 999px; padding: 8px 14px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.tab-btn:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
+.tab-btn.active { background: linear-gradient(135deg, rgba(56,189,248,0.14), rgba(245,158,11,0.12)); color: var(--text-primary); border-color: var(--border-card-hover); }
+.tab-section-hidden { display: none !important; }
 .control-strip { display: grid; grid-template-columns: repeat(2, minmax(220px, 260px)) 1fr; gap: 12px; margin: -8px 0 20px; align-items: end; }
 .control-group { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
 .control-group label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-faint); margin-bottom: 8px; }
@@ -413,6 +422,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   }
   .mobile-control-shell[open] > summary { border-bottom: 1px solid var(--border-card); }
   .mobile-control-shell[open] > summary::after { content: 'Close'; }
+  .tab-bar { margin: -4px 0 16px; gap: 6px; }
+  .tab-btn { padding: 8px 12px; font-size: 11px; }
   .control-strip { grid-template-columns: 1fr; gap: 10px; margin: 0; padding: 12px; }
   .control-group, .control-note { padding: 10px 12px; }
   .control-note { min-height: 0; font-size: 11px; }
@@ -534,6 +545,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-side .hero-mini:last-child { grid-column: auto; }
   .hero-pulse { grid-template-columns: 1fr; }
   .hero-pulse .pulse-item .t { font-size: 9px; }
+  .mini-metric-grid { grid-template-columns: 1fr; }
   .stat-grid, .score-grid, .compare-grid { grid-template-columns: 1fr; }
   .heatmap-row .row-label { width: 26px; }
   .heatmap-cell { width: 24px; height: 24px; border-radius: 5px; }
@@ -602,7 +614,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </details>
 
-  <div class="hero-stage">
+  <div class="tab-bar" id="tabBar">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="progress">Progress</button>
+    <button class="tab-btn" data-tab="nutrition">Nutrition</button>
+    <button class="tab-btn" data-tab="sleep">Sleep</button>
+    <button class="tab-btn" data-tab="explore">Explore</button>
+  </div>
+
+  <div class="hero-stage" data-tab-section="overview">
     <div class="hero-main">
       <div class="hero-copy">
         <div>
@@ -635,11 +655,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </div>
 
-  <div class="forecast-strip" id="forecastStrip"></div>
+  <div class="forecast-strip" id="forecastStrip" data-tab-section="overview"></div>
 
-  <div class="sticky-summary" id="stickySummary"></div>
+  <div class="sticky-summary" id="stickySummary" data-tab-section="overview"></div>
 
-  <div class="section-shell">
+  <div class="section-shell" data-tab-section="overview">
     <div class="shell-header">
       <h2>Executive Summary</h2>
       <p>Use this section first. It summarizes the selected range, compares it with the previous period, and highlights the highest-leverage actions.</p>
@@ -681,7 +701,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- WEEKLY REPORT CARD -->
-  <details class="mobile-detail-shell" id="weeklyReportShell" open>
+  <details class="mobile-detail-shell" id="weeklyReportShell" open data-tab-section="overview">
     <summary>Latest Week Summary</summary>
     <div class="report-card" id="weeklyReport">
       <h3>📋 Latest Week Summary</h3>
@@ -690,7 +710,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </details>
 
-  <div class="section-shell">
+  <div class="section-shell" data-tab-section="progress">
     <div class="shell-header">
       <h2>Progress</h2>
       <p>Outcome-first view of the range: overall highlights, body weight, and a DXA-anchored body-composition estimate.</p>
@@ -740,7 +760,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 
   </div>
 
-  <div class="section-shell">
+  <div class="section-shell" data-tab-section="nutrition">
     <div class="shell-header">
       <h2>Nutrition & Behavior</h2>
       <p>Primary behavior levers: calories, protein adherence, macro composition, training, alcohol, and food patterns.</p>
@@ -847,7 +867,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- ===== SLEEP SECTION ===== -->
-  <div class="section-shell">
+  <div class="section-shell" data-tab-section="sleep">
   <div class="shell-header">
     <h2>Sleep & Recovery</h2>
     <p>Lag framing matters here: bedtime and alcohol are previous-night drivers, while calorie response is usually next-day behavior.</p>
@@ -898,7 +918,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     <div class="chart-card"><div class="card-header"><h3>Sleep Performance: Previous Night Drink vs Clean</h3></div><div class="chart-wrapper medium"><canvas id="drinkSleepChart"></canvas></div></div>
     <div class="chart-card"><div class="card-header"><h3>Sleep Perf by Day of Week</h3></div><div class="chart-wrapper medium"><canvas id="dowChart"></canvas></div></div>
   </div>
-  <details class="advanced-shell" open>
+  <details class="advanced-shell" open data-tab-section="explore">
     <summary>More Sleep Analysis</summary>
     <div class="advanced-inner">
   <div class="chart-row two">
@@ -1424,25 +1444,32 @@ function parseFoods(notes) {
   return items;
 }
 
+const FOOD_REPLACEMENTS = [
+  [/protein shake(?:s)?/g, 'protein shake'],
+  [/greek yogurts?/g, 'greek yogurt'],
+  [/rotisserie chicken breasts?/g, 'rotisserie chicken'],
+  [/mexican steak bowls?/g, 'mexican steak bowl'],
+  [/chipotle chicken bowls?/g, 'chipotle chicken bowl'],
+  [/boiled eggs?/g, 'boiled eggs'],
+  [/^(lunch\s+)?pho$/g, 'pho']
+];
+
+function normalizeFoodItem(item) {
+  let norm = item.replace(/\d+x\s*/g,'').replace(/^\d+\s*/,'').replace(/\s*\d+x$/,'').trim();
+  norm = norm.replace(/^(diet break\.?\s*)/i, '').trim();
+  FOOD_REPLACEMENTS.forEach(([pattern, value]) => { norm = norm.replace(pattern, value); });
+  norm = norm.replace(/\s{2,}/g, ' ').trim();
+  return norm.length >= 3 ? norm : null;
+}
+
+function foodsForDay(day) {
+  return [...new Set(parseFoods(day.notes).map(normalizeFoodItem).filter(Boolean))];
+}
+
 function foodFrequency(days = allDays) {
   const freq = {};
-  const replacements = [
-    [/protein shake(?:s)?/g, 'protein shake'],
-    [/greek yogurts?/g, 'greek yogurt'],
-    [/rotisserie chicken breasts?/g, 'rotisserie chicken'],
-    [/mexican steak bowls?/g, 'mexican steak bowl'],
-    [/chipotle chicken bowls?/g, 'chipotle chicken bowl'],
-    [/boiled eggs?/g, 'boiled eggs'],
-    [/^(lunch\s+)?pho$/g, 'pho']
-  ];
   days.forEach(d => {
-    const items = parseFoods(d.notes);
-    items.forEach(item => {
-      let norm = item.replace(/\d+x\s*/g,'').replace(/^\d+\s*/,'').replace(/\s*\d+x$/,'').trim();
-      norm = norm.replace(/^(diet break\.?\s*)/i, '').trim();
-      replacements.forEach(([pattern, value]) => { norm = norm.replace(pattern, value); });
-      norm = norm.replace(/\s{2,}/g, ' ').trim();
-      if (norm.length < 3) return;
+    foodsForDay(d).forEach(norm => {
       freq[norm] = (freq[norm] || 0) + 1;
     });
   });
@@ -1580,6 +1607,7 @@ let rangeStartIdx = 0;
 let rangeEndIdx = allDates.length - 1;
 let compareMode = persistedState.compareMode || 'equal_span';
 let eventFilter = persistedState.eventFilter || 'all';
+let activeTab = persistedState.activeTab || 'overview';
 let suppressEventFilter = false;
 
 function getRangeState() {
@@ -1744,6 +1772,41 @@ function topFoodsForDays(days, limit = 3) {
   return foodFrequency(days).slice(0, limit).map(([name, count]) => `${name} (${count})`);
 }
 
+function currentStreak(items, predicate) {
+  let streak = 0;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (!predicate(items[i])) break;
+    streak++;
+  }
+  return streak;
+}
+
+function bestStreak(items, predicate) {
+  let best = 0;
+  let current = 0;
+  items.forEach(item => {
+    if (predicate(item)) {
+      current++;
+      best = Math.max(best, current);
+    } else {
+      current = 0;
+    }
+  });
+  return best;
+}
+
+function latestWeighInDelta(days) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return null;
+  const latest = weightDays[weightDays.length - 1];
+  const prior = weightDays[weightDays.length - 2];
+  return { latest, prior, delta: latest.weight - prior.weight };
+}
+
+function overallOnTrack(day) {
+  return !!day && day.calories <= goals.calories && hitProteinFloor(day) && !day.drinks;
+}
+
 function compareDelta(current, previous, betterDirection = 'up', formatter = v => v.toString(), suffix = '') {
   if (current == null) return { text: '—', cls: 'neutral', detail: 'No current data' };
   if (previous == null || Number.isNaN(previous)) return { text: formatter(current), cls: 'neutral', detail: 'No prior period available' };
@@ -1876,14 +1939,46 @@ function sleepTargetProjection(sleep, horizonNights = 14) {
   };
 }
 
+function topAssociatedFoods(days, predicate, limit = 3) {
+  if (!days.length) return [];
+  const subset = days.filter(predicate);
+  if (!subset.length) return [];
+  const overallCounts = new Map();
+  const subsetCounts = new Map();
+  days.forEach(day => {
+    foodsForDay(day).forEach(food => overallCounts.set(food, (overallCounts.get(food) || 0) + 1));
+  });
+  subset.forEach(day => {
+    foodsForDay(day).forEach(food => subsetCounts.set(food, (subsetCounts.get(food) || 0) + 1));
+  });
+  return [...subsetCounts.entries()]
+    .map(([food, subsetCount]) => {
+      const overallCount = overallCounts.get(food) || 0;
+      const subsetRate = subsetCount / subset.length;
+      const overallRate = overallCount / days.length;
+      return { food, subsetCount, overallCount, lift: subsetRate - overallRate, subsetRate, overallRate };
+    })
+    .filter(item => item.subsetCount >= 2 && item.lift > 0)
+    .sort((a, b) => (b.lift - a.lift) || (b.subsetCount - a.subsetCount))
+    .slice(0, limit)
+    .map(item => `${item.food} (+${Math.round(item.lift * 100)}pp, n=${item.subsetCount})`);
+}
+
 function foodPatternSummary(days) {
   const onTrack = days.filter(d => d.calories <= goals.calories && hitProteinFloor(d) && !d.drinks);
-  const offTrack = days.filter(d => d.calories > goals.calories || !hitProteinFloor(d) || d.drinks);
+  const overTarget = days.filter(d => d.calories > goals.calories);
+  const poorNextSleepDays = days.filter(d => {
+    const nextSleep = sleepByDate[nextDayStr(d.date)];
+    return nextSleep && nextSleep.perf < goals.sleepPerf;
+  });
   return {
-    onTrackFoods: topFoodsForDays(onTrack),
-    offTrackFoods: topFoodsForDays(offTrack),
+    onTrackFoods: topAssociatedFoods(days, d => onTrack.includes(d)),
+    overTargetFoods: topAssociatedFoods(days, d => overTarget.includes(d)),
+    poorNextSleepFoods: topAssociatedFoods(days, d => poorNextSleepDays.includes(d)),
+    stapleFoods: topFoodsForDays(days),
     onTrackCount: onTrack.length,
-    offTrackCount: offTrack.length
+    overTargetCount: overTarget.length,
+    poorNextSleepCount: poorNextSleepDays.length
   };
 }
 
@@ -2232,7 +2327,19 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const weightProjection = observedWeightProjection(filteredDays, 30);
   const deficitPace = deficitProjection(filteredDays, 30);
   const sleepProjection = sleepTargetProjection(filteredSleep, 14);
-  const freshness = projectionFreshness();
+  const latestDay = filteredDays[filteredDays.length - 1] || null;
+  const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
+  const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
+  const weighInDelta = latestWeighInDelta(filteredDays);
+  const calorieCurrent = currentStreak(filteredDays, d => d.calories <= goals.calories);
+  const proteinCurrent = currentStreak(filteredDays, hitProteinFloor);
+  const cleanCurrent = currentStreak(filteredDays, d => !d.drinks);
+  const sleepCurrent = currentStreak(filteredSleep, d => d.perf >= goals.sleepPerf);
+  const latestCalDelta = latestDay ? latestDay.calories - goals.calories : null;
+  const flags = [];
+  if (latestDay?.lifting === 'Y') flags.push('Lift');
+  if (latestDay?.drinks) flags.push('Drink');
+  if (latestDay && overallOnTrack(latestDay)) flags.push('On-track');
 
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
@@ -2294,10 +2401,16 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       `,
     `
       <div class="forecast-card">
-        <div class="eyebrow">Latest Data</div>
-        <div class="value">${formatShortDate(freshness.latestMacro)}</div>
-        <div class="sub">Nutrition logged through ${formatShortDate(freshness.latestMacro)}, sleep through ${formatShortDate(freshness.latestSleep)}.</div>
-        <div class="tiny">${freshness.latestWeight ? `Latest weigh-in: ${formatShortDate(freshness.latestWeight)}` : 'No weigh-ins logged yet'}</div>
+        <div class="eyebrow">Latest Snapshot</div>
+        <div class="value">${latestDay ? formatShortDate(latestDay.date) : '—'}</div>
+        <div class="sub">${latestDay ? `${energyLabel(latestDay.calories)} (${latestCalDelta > 0 ? '+' : ''}${energyLabel(latestCalDelta || 0)} vs goal) · ${Math.round(latestDay.protein)}g protein` : 'No entries in the active view.'}</div>
+        <div class="sub">${latestSleep ? `${Math.round(latestSleep.perf)}% sleep · ${latestSleep.hours.toFixed(1)}h` : 'No sleep entry for the latest logged day.'}</div>
+        <div class="mini-metric-grid">
+          <div class="mini-metric"><div class="k">${calorieCurrent}</div><div class="t">Cal Goal</div></div>
+          <div class="mini-metric"><div class="k">${proteinCurrent}</div><div class="t">Protein</div></div>
+          <div class="mini-metric"><div class="k">${cleanCurrent}</div><div class="t">Clean Days</div></div>
+        </div>
+        <div class="tiny">${weighInDelta ? `${weightLabel(weighInDelta.latest.weight)} (${weighInDelta.delta > 0 ? '+' : ''}${weightLabel(weighInDelta.delta)} vs prior)` : latestWeightDay ? `${weightLabel(latestWeightDay.weight)} latest weigh-in` : 'No weigh-ins in active view'}${flags.length ? ` · ${flags.join(' · ')}` : ''}${sleepCurrent ? ` · ${sleepCurrent} sleep-target nights` : ''}</div>
       </div>
     `
   ].join('');
@@ -2377,11 +2490,11 @@ function renderExecutiveSummary() {
   `).join('');
 
   document.getElementById('behaviorScorecard').innerHTML = [
-    { label: 'Calories', value: `${Math.round(current.calorieHitRate)}%`, sub: `${filteredDays.filter(d => d.calories <= goals.calories).length}/${filteredDays.length} days under calorie goal` },
-    { label: 'Protein', value: `${Math.round(current.proteinHitRate)}%`, sub: `${filteredDays.filter(hitProteinFloor).length}/${filteredDays.length} days at protein floor (${proteinGoalRangeLabel(filteredDays)})` },
-    { label: 'Sleep Perf', value: `${Math.round(current.sleepHitRate)}%`, sub: `${filteredSleep.filter(d => d.perf >= goals.sleepPerf).length}/${filteredSleep.length || 0} nights at sleep target` },
+    { label: 'Calories', value: `${Math.round(current.calorieHitRate)}%`, sub: `${filteredDays.filter(d => d.calories <= goals.calories).length}/${filteredDays.length} days under calorie goal · ${currentStreak(filteredDays, d => d.calories <= goals.calories)} current / ${bestStreak(filteredDays, d => d.calories <= goals.calories)} best streak` },
+    { label: 'Protein', value: `${Math.round(current.proteinHitRate)}%`, sub: `${filteredDays.filter(hitProteinFloor).length}/${filteredDays.length} days at protein floor (${proteinGoalRangeLabel(filteredDays)}) · ${currentStreak(filteredDays, hitProteinFloor)} current / ${bestStreak(filteredDays, hitProteinFloor)} best` },
+    { label: 'Sleep Perf', value: `${Math.round(current.sleepHitRate)}%`, sub: `${filteredSleep.filter(d => d.perf >= goals.sleepPerf).length}/${filteredSleep.length || 0} nights at sleep target · ${currentStreak(filteredSleep, d => d.perf >= goals.sleepPerf)} current / ${bestStreak(filteredSleep, d => d.perf >= goals.sleepPerf)} best` },
     { label: 'Bedtime', value: `${Math.round(current.bedtimeHitRate)}%`, sub: `Goal: ${goals.bedtime}` },
-    { label: 'Clean Nights', value: `${Math.round(current.cleanRate)}%`, sub: `${current.drinkNights} drink nights in range` },
+    { label: 'Clean Nights', value: `${Math.round(current.cleanRate)}%`, sub: `${current.drinkNights} drink nights in range · ${currentStreak(filteredDays, d => !d.drinks)} current / ${bestStreak(filteredDays, d => !d.drinks)} best clean streak` },
     { label: 'Lifts / Week', value: `${(current.liftCount / Math.max(filteredDays.length, 1) * 7).toFixed(1)}`, sub: `${current.liftCount} sessions across the range` }
   ].map(card => `
     <div class="score-card">
@@ -2414,9 +2527,10 @@ function renderExecutiveSummary() {
   `).join('');
 
   document.getElementById('foodPatternList').innerHTML = [
-    { title: `On-track day foods (n=${foodPatterns.onTrackCount})`, text: foodPatterns.onTrackFoods.length ? foodPatterns.onTrackFoods.join(', ') : 'No consistent on-track foods yet in this range.' },
-    { title: `Off-track day foods (n=${foodPatterns.offTrackCount})`, text: foodPatterns.offTrackFoods.length ? foodPatterns.offTrackFoods.join(', ') : 'No off-track foods detected in this range.' },
-    { title: 'Most consistent staples', text: current.topFoods.length ? current.topFoods.join(', ') : 'No repeated foods found.' }
+    { title: `Foods overrepresented on on-target days (n=${foodPatterns.onTrackCount})`, text: foodPatterns.onTrackFoods.length ? foodPatterns.onTrackFoods.join(', ') : 'No food stands out as especially associated with on-target days in this range.' },
+    { title: `Foods overrepresented on high-calorie days (n=${foodPatterns.overTargetCount})`, text: foodPatterns.overTargetFoods.length ? foodPatterns.overTargetFoods.join(', ') : 'No food stands out as especially associated with over-target days in this range.' },
+    { title: `Foods before poor-sleep follow-up days (n=${foodPatterns.poorNextSleepCount})`, text: foodPatterns.poorNextSleepFoods.length ? foodPatterns.poorNextSleepFoods.join(', ') : 'No food stands out as especially associated with poor next-day sleep in this range.' },
+    { title: 'Most consistent staples', text: foodPatterns.stapleFoods.length ? foodPatterns.stapleFoods.join(', ') : 'No repeated foods found.' }
   ].map(item => `
     <div class="insight-item">
       <strong>${item.title}</strong>
@@ -2956,6 +3070,13 @@ function liftRestDeltaRows(days) {
   });
 }
 
+function liftRestDisplayDelta(pctDelta) {
+  if (!Number.isFinite(pctDelta)) return 0;
+  if (pctDelta === 0) return 0.35;
+  if (Math.abs(pctDelta) < 0.35) return Math.sign(pctDelta) * 0.35;
+  return pctDelta;
+}
+
 allCharts.liftRestChart = new Chart(document.getElementById('liftRestChart'), {
   type: 'bar',
   data: {
@@ -2963,8 +3084,8 @@ allCharts.liftRestChart = new Chart(document.getElementById('liftRestChart'), {
     datasets: [
       {
         label: `Lift vs Rest Delta`,
-        data: liftRestDeltaRows(allDays).map(r => r.pctDelta),
-        backgroundColor: liftRestDeltaRows(allDays).map(r => r.pctDelta >= 0 ? 'rgba(245,158,11,0.75)' : 'rgba(248,113,113,0.75)'),
+        data: liftRestDeltaRows(allDays).map(r => liftRestDisplayDelta(r.pctDelta)),
+        backgroundColor: liftRestDeltaRows(allDays).map(r => r.pctDelta > 0 ? 'rgba(245,158,11,0.75)' : r.pctDelta < 0 ? 'rgba(248,113,113,0.75)' : 'rgba(148,163,184,0.7)'),
         borderRadius: 6,
         borderSkipped: false
       }
@@ -3726,6 +3847,14 @@ if (rangeStartDateEl && rangeEndDateEl) {
 }
 
 updateRangeLabels();
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTab = btn.dataset.tab;
+    applyActiveTab();
+    refreshDashboard();
+    persistUiState();
+  });
+});
 
 // =====================================================================
 // EXPORT
@@ -3796,9 +3925,17 @@ function syncControlsFromState() {
   document.getElementById('unitToggle').textContent = useMetric ? 'kg / kJ' : 'lbs / kcal';
   document.getElementById('compareMode').value = compareMode;
   document.getElementById('eventFilter').value = eventFilter;
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
   document.querySelectorAll('.mtab[data-metric]').forEach(btn => btn.classList.toggle('active', btn.dataset.metric === currentMetric));
   document.querySelectorAll('.mtoggle[data-chart="calories"]').forEach((btn, idx) => btn.classList.toggle('off', !calVisibility[idx]));
   document.querySelectorAll('.mtoggle[data-chart="macro"]').forEach((btn, idx) => btn.classList.toggle('off', !macroVisibility[idx]));
+}
+
+function applyActiveTab() {
+  document.querySelectorAll('[data-tab-section]').forEach(section => {
+    section.classList.toggle('tab-section-hidden', section.dataset.tabSection !== activeTab);
+  });
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
 }
 
 const MOBILE_BREAKPOINT = 900;
@@ -3838,7 +3975,8 @@ function persistUiState() {
     calVisibility,
     macroVisibility,
     compareMode,
-    eventFilter
+    eventFilter,
+    activeTab
   });
 }
 
@@ -4114,8 +4252,8 @@ function updateLiftRestChart(days) {
   const rows = liftRestDeltaRows(days);
   chart.data.labels = rows.map(r => r.label);
   chart.data.datasets[0].label = `Lift vs Rest (lift n=${lift.length}, rest n=${rest.length})`;
-  chart.data.datasets[0].data = rows.map(r => r.pctDelta);
-  chart.data.datasets[0].backgroundColor = rows.map(r => r.pctDelta >= 0 ? 'rgba(245,158,11,0.75)' : 'rgba(248,113,113,0.75)');
+  chart.data.datasets[0].data = rows.map(r => liftRestDisplayDelta(r.pctDelta));
+  chart.data.datasets[0].backgroundColor = rows.map(r => r.pctDelta > 0 ? 'rgba(245,158,11,0.75)' : r.pctDelta < 0 ? 'rgba(248,113,113,0.75)' : 'rgba(148,163,184,0.7)');
   const bounds = calcAxisBounds(rows.map(r => r.pctDelta), 6);
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const row = rows[ctx.dataIndex];
@@ -4358,7 +4496,9 @@ if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persiste
 if (typeof persistedState.rangeEnd === 'number') rangeEndEl.value = persistedState.rangeEnd;
 if (typeof persistedState.compareMode === 'string') compareMode = persistedState.compareMode;
 if (typeof persistedState.eventFilter === 'string') eventFilter = persistedState.eventFilter;
+if (typeof persistedState.activeTab === 'string') activeTab = persistedState.activeTab;
 updateRangeLabels();
+applyActiveTab();
 syncResponsiveLayout(true);
 responsiveLayoutInitialized = true;
 document.querySelectorAll('#mobileControlShell, .advanced-shell').forEach(shell => {
