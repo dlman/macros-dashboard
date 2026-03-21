@@ -333,6 +333,32 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .audit-item.warn { border-color: rgba(251,191,36,0.22); }
 .audit-item.bad { border-color: rgba(248,113,113,0.22); }
 .explore-note { font-size: 11px; color: var(--text-faint); margin: -6px 0 16px; }
+.explore-module { margin-top: 14px; border: 1px solid var(--border-card); border-radius: 14px; background: rgba(15,23,42,0.32); overflow: hidden; }
+.explore-module > summary { list-style: none; cursor: pointer; padding: 14px 16px; font-size: 13px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.explore-module > summary::-webkit-details-marker { display: none; }
+.explore-module > summary::after { content: 'Open'; font-size: 11px; color: var(--text-faint); font-weight: 700; }
+.explore-module[open] > summary { border-bottom: 1px solid var(--border-card); }
+.explore-module[open] > summary::after { content: 'Close'; }
+.explore-module-inner { padding: 18px; }
+.food-assoc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.food-assoc-card { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
+.food-assoc-card.good { border-color: rgba(86,180,233,0.28); }
+.food-assoc-card.warn { border-color: rgba(230,159,0,0.28); }
+.food-assoc-card.bad { border-color: rgba(213,94,0,0.28); }
+.food-assoc-card.neutral { border-color: rgba(148,163,184,0.24); }
+.food-assoc-card h4 { font-size: 13px; color: var(--text-primary); margin-bottom: 4px; }
+.food-assoc-card p { font-size: 11px; color: var(--text-faint); margin-bottom: 12px; line-height: 1.5; }
+.food-assoc-list { display: flex; flex-direction: column; gap: 10px; }
+.food-assoc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.food-assoc-copy { min-width: 0; }
+.food-assoc-name { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.food-assoc-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; }
+.food-assoc-delta { font-size: 11px; font-weight: 800; color: var(--text-primary); }
+.food-assoc-bar { margin-top: 6px; height: 6px; border-radius: 999px; background: rgba(148,163,184,0.12); overflow: hidden; }
+.food-assoc-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(86,180,233,0.82), rgba(0,114,178,0.92)); }
+.food-assoc-card.warn .food-assoc-fill { background: linear-gradient(90deg, rgba(240,171,0,0.82), rgba(230,159,0,0.92)); }
+.food-assoc-card.bad .food-assoc-fill { background: linear-gradient(90deg, rgba(230,159,0,0.82), rgba(213,94,0,0.92)); }
+.food-empty { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
 /* ===== DAY PANEL ===== */
 #dayPanel {
@@ -560,6 +586,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .month-toggles, .metric-tabs { width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 2px; }
   #dayPanel, #settingsPanel { width: 100%; max-width: 100%; padding: 22px 18px 28px; }
   .export-btn { display: none !important; }
+  .explore-module-inner { padding: 14px; }
+  #exploreShell .chart-row.two,
+  #exploreShell .food-assoc-grid { grid-template-columns: 1fr; }
+  #exploreShell .chart-wrapper.medium { height: 200px; }
+  #exploreShell .chart-wrapper[style*="420px"] { height: 260px !important; }
 }
 
 @media (max-width: 560px) {
@@ -607,6 +638,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .chart-wrapper.short { height: 140px; }
   .scenario-btn,
   .jump-chip { padding: 10px 12px; min-height: 42px; }
+  #exploreShell > summary { padding: 13px 14px; min-height: 46px; }
+  #exploreShell .explore-module > summary { padding: 13px 14px; min-height: 46px; }
+  #exploreShell .explore-module-inner { padding: 12px; }
+  #exploreShell .section-title { margin-top: 0; }
 }
 </style>
 </head>
@@ -1020,72 +1055,100 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <details class="advanced-shell" id="exploreShell" open>
     <summary>Explore More</summary>
     <div class="advanced-inner">
-  <div class="section-title" id="exploreCorrSection" style="margin-top:0;">📊 Full Correlation Matrix</div>
-  <div class="chart-row full">
-    <div class="chart-card">
-      <button class="export-btn" data-chart="corrMatrix">📸</button>
-      <div class="card-header"><h3>Pearson Correlations Across All Metrics</h3></div>
-      <div class="chart-wrapper" style="height:420px; overflow-x:auto;"><canvas id="corrMatrix"></canvas></div>
-    </div>
-  </div>
-
-  <div class="section-title" id="exploreTrendSection" style="margin-top:36px;">🧭 Trend Decomposition</div>
-  <p class="explore-note" id="exploreScopeNote">Explore diagnostics use the selected date range before event filters so the math stays stable.</p>
-  <div class="chart-row two">
-    <div class="chart-card">
-      <div class="card-header with-meta">
-        <div class="card-heading">
-          <h3>Observed vs Modeled Weight Drivers</h3>
-          <div class="trust-row trust-inline">
-            <span class="trust-pill logged">Observed scale</span>
-            <span class="trust-pill estimated">Estimated body-comp split</span>
+      <details class="explore-module" id="exploreCorrModule" open>
+        <summary>📊 Full Correlation Matrix</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreCorrSection" style="margin-top:0;">📊 Full Correlation Matrix</div>
+          <div class="chart-row full">
+            <div class="chart-card">
+              <button class="export-btn" data-chart="corrMatrix">📸</button>
+              <div class="card-header"><h3>Pearson Correlations Across All Metrics</h3></div>
+              <div class="chart-wrapper" style="height:420px; overflow-x:auto;"><canvas id="corrMatrix"></canvas></div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="chart-wrapper medium"><canvas id="trendDecompChart"></canvas></div>
-    </div>
-    <div class="mini-panel">
-      <div class="shell-header">
-        <h2 style="font-size:16px;">What The Trend Suggests</h2>
-        <p>Scale movement, deficit math, and the DXA-anchored body-comp estimate in one place.</p>
-      </div>
-      <div class="audit-list" id="trendDecompSummary"></div>
-    </div>
-  </div>
+      </details>
 
-  <div class="section-title" id="exploreAuditSection" style="margin-top:28px;">🩺 Data Quality & Gap Detector</div>
-  <div class="mini-panel">
-    <div class="audit-grid" id="qualityAuditGrid"></div>
-    <div class="audit-list" id="qualityAuditList"></div>
-  </div>
+      <details class="explore-module" id="exploreTrendModule" open>
+        <summary>🧭 Trend Decomposition</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreTrendSection" style="margin-top:0;">🧭 Trend Decomposition</div>
+          <p class="explore-note" id="exploreScopeNote">Explore diagnostics use the selected date range before event filters so the math stays stable.</p>
+          <div class="chart-row two">
+            <div class="chart-card">
+              <div class="card-header with-meta">
+                <div class="card-heading">
+                  <h3>Observed vs Modeled Weight Drivers</h3>
+                  <div class="trust-row trust-inline">
+                    <span class="trust-pill logged">Observed scale</span>
+                    <span class="trust-pill estimated">Estimated body-comp split</span>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-wrapper medium"><canvas id="trendDecompChart"></canvas></div>
+            </div>
+            <div class="mini-panel">
+              <div class="shell-header">
+                <h2 style="font-size:16px;">What The Trend Suggests</h2>
+                <p>Scale movement, deficit math, and the DXA-anchored body-comp estimate in one place.</p>
+              </div>
+              <div class="audit-list" id="trendDecompSummary"></div>
+            </div>
+          </div>
+        </div>
+      </details>
 
-  <!-- WHAT-IF CALCULATOR -->
-  <div class="section-title" id="exploreScenarioSection" style="margin-top:36px;">🔮 Scenario Planner</div>
-  <div class="whatif-card">
-    <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
-    <div class="trust-row trust-inline" style="margin-bottom:12px;">
-      <span class="trust-pill projected">Projected</span>
-      <span class="trust-pill estimated">Estimated maintenance and penalties</span>
-    </div>
-    <div class="scenario-presets" id="scenarioPresetRow">
-      <button class="scenario-btn" data-preset="current">Current Setup</button>
-      <button class="scenario-btn" data-preset="maintain">Maintain</button>
-      <button class="scenario-btn" data-preset="mild_cut">Mild Cut</button>
-      <button class="scenario-btn" data-preset="aggressive_cut">Aggressive Cut</button>
-      <button class="scenario-btn" data-preset="better_sleep">Better Sleep</button>
-      <button class="scenario-btn" data-preset="no_drinks">No Drinks</button>
-    </div>
-    <div class="whatif-inputs">
-      <div class="whatif-field"><label>Daily Calories</label><input type="number" id="whatifCal" value="1900"></div>
-      <div class="whatif-field"><label>Weeks</label><input type="number" id="whatifWeeks" value="4"></div>
-      <div class="whatif-field"><label>Avg Sleep (hrs)</label><input type="number" id="whatifSleep" value="6" step="0.5"></div>
-      <div class="whatif-field"><label>Drink Nights / Week</label><input type="number" id="whatifDrinks" value="1" step="0.5" class="wide"></div>
-      <button class="hdr-btn" id="whatifCalcBtn" style="margin-bottom:0;">Calculate</button>
-    </div>
-    <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
-    <div class="scenario-grid" id="scenarioResultGrid"></div>
-    <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
-  </div>
+      <details class="explore-module" id="exploreAuditModule" open>
+        <summary>🩺 Data Quality & Gap Detector</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreAuditSection" style="margin-top:0;">🩺 Data Quality & Gap Detector</div>
+          <div class="mini-panel">
+            <div class="audit-grid" id="qualityAuditGrid"></div>
+            <div class="audit-list" id="qualityAuditList"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="explore-module" id="exploreFoodModule" open>
+        <summary>🍽️ Food Associations</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreFoodSection" style="margin-top:0;">🍽️ Food Associations</div>
+          <p class="explore-note" id="foodAssocNote">Foods are ranked by overrepresentation in the selected range, using repeated appearances rather than one-off entries.</p>
+          <div class="food-assoc-grid" id="foodAssociationGrid"></div>
+        </div>
+      </details>
+
+      <details class="explore-module" id="exploreScenarioModule" open>
+        <summary>🔮 Scenario Planner</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreScenarioSection" style="margin-top:0;">🔮 Scenario Planner</div>
+          <div class="whatif-card">
+            <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
+            <div class="trust-row trust-inline" style="margin-bottom:12px;">
+              <span class="trust-pill projected">Projected</span>
+              <span class="trust-pill estimated">Estimated maintenance and penalties</span>
+            </div>
+            <div class="scenario-presets" id="scenarioPresetRow">
+              <button class="scenario-btn" data-preset="current">Current Setup</button>
+              <button class="scenario-btn" data-preset="maintain">Maintain</button>
+              <button class="scenario-btn" data-preset="mild_cut">Mild Cut</button>
+              <button class="scenario-btn" data-preset="aggressive_cut">Aggressive Cut</button>
+              <button class="scenario-btn" data-preset="better_sleep">Better Sleep</button>
+              <button class="scenario-btn" data-preset="no_drinks">No Drinks</button>
+            </div>
+            <div class="whatif-inputs">
+              <div class="whatif-field"><label>Daily Calories</label><input type="number" id="whatifCal" value="1900"></div>
+              <div class="whatif-field"><label>Weeks</label><input type="number" id="whatifWeeks" value="4"></div>
+              <div class="whatif-field"><label>Avg Sleep (hrs)</label><input type="number" id="whatifSleep" value="6" step="0.5"></div>
+              <div class="whatif-field"><label>Drink Nights / Week</label><input type="number" id="whatifDrinks" value="1" step="0.5" class="wide"></div>
+              <button class="hdr-btn" id="whatifCalcBtn" style="margin-bottom:0;">Calculate</button>
+            </div>
+            <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
+            <div class="scenario-grid" id="scenarioResultGrid"></div>
+            <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
+          </div>
+        </div>
+      </details>
     </div>
   </details>
 
@@ -1789,6 +1852,7 @@ const TAB_CHROME = {
     jumps: [
       { label: 'Correlations', selector: '#exploreCorrSection' },
       { label: 'Trend', selector: '#exploreTrendSection' },
+      { label: 'Food', selector: '#exploreFoodSection' },
       { label: 'Audit', selector: '#exploreAuditSection' },
       { label: 'Scenario', selector: '#exploreScenarioSection' }
     ]
@@ -2251,7 +2315,14 @@ function topAssociatedFoods(days, predicate, limit = 3) {
     .filter(item => item.subsetCount >= 2 && item.lift > 0)
     .sort((a, b) => (b.lift - a.lift) || (b.subsetCount - a.subsetCount))
     .slice(0, limit)
-    .map(item => `${item.food} (+${Math.round(item.lift * 100)}pp, n=${item.subsetCount})`);
+    .map(item => ({
+      ...item,
+      liftPoints: Math.round(item.lift * 100)
+    }));
+}
+
+function formatFoodAssoc(item) {
+  return `${item.food} (+${item.liftPoints}pp, n=${item.subsetCount})`;
 }
 
 function foodPatternSummary(days) {
@@ -2261,14 +2332,17 @@ function foodPatternSummary(days) {
     const nextSleep = sleepByDate[nextDayStr(d.date)];
     return nextSleep && nextSleep.perf < goals.sleepPerf;
   });
+  const strongProteinDays = days.filter(d => hitProteinFloor(d));
   return {
     onTrackFoods: topAssociatedFoods(days, d => onTrack.includes(d)),
     overTargetFoods: topAssociatedFoods(days, d => overTarget.includes(d)),
     poorNextSleepFoods: topAssociatedFoods(days, d => poorNextSleepDays.includes(d)),
+    strongProteinFoods: topAssociatedFoods(days, d => strongProteinDays.includes(d)),
     stapleFoods: topFoodsForDays(days),
     onTrackCount: onTrack.length,
     overTargetCount: overTarget.length,
-    poorNextSleepCount: poorNextSleepDays.length
+    poorNextSleepCount: poorNextSleepDays.length,
+    strongProteinCount: strongProteinDays.length
   };
 }
 
@@ -2853,9 +2927,9 @@ function renderExecutiveSummary() {
   `).join('');
 
   document.getElementById('foodPatternList').innerHTML = [
-    { title: `Foods overrepresented on on-target days (n=${foodPatterns.onTrackCount})`, text: foodPatterns.onTrackFoods.length ? foodPatterns.onTrackFoods.join(', ') : 'No food stands out as especially associated with on-target days in this range.' },
-    { title: `Foods overrepresented on high-calorie days (n=${foodPatterns.overTargetCount})`, text: foodPatterns.overTargetFoods.length ? foodPatterns.overTargetFoods.join(', ') : 'No food stands out as especially associated with over-target days in this range.' },
-    { title: `Foods before poor-sleep follow-up days (n=${foodPatterns.poorNextSleepCount})`, text: foodPatterns.poorNextSleepFoods.length ? foodPatterns.poorNextSleepFoods.join(', ') : 'No food stands out as especially associated with poor next-day sleep in this range.' },
+    { title: `Foods overrepresented on on-target days (n=${foodPatterns.onTrackCount})`, text: foodPatterns.onTrackFoods.length ? foodPatterns.onTrackFoods.map(formatFoodAssoc).join(', ') : 'No food stands out as especially associated with on-target days in this range.' },
+    { title: `Foods overrepresented on high-calorie days (n=${foodPatterns.overTargetCount})`, text: foodPatterns.overTargetFoods.length ? foodPatterns.overTargetFoods.map(formatFoodAssoc).join(', ') : 'No food stands out as especially associated with over-target days in this range.' },
+    { title: `Foods before poor-sleep follow-up days (n=${foodPatterns.poorNextSleepCount})`, text: foodPatterns.poorNextSleepFoods.length ? foodPatterns.poorNextSleepFoods.map(formatFoodAssoc).join(', ') : 'No food stands out as especially associated with poor next-day sleep in this range.' },
     { title: 'Most consistent staples', text: foodPatterns.stapleFoods.length ? foodPatterns.stapleFoods.join(', ') : 'No repeated foods found.' }
   ].map(item => `
     <div class="insight-item">
@@ -3787,6 +3861,7 @@ function renderExploreDiagnostics() {
   const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
   const decomp = trendDecomposition(rangeDays);
   const quality = qualityAudit(rangeDays, rangeSleep);
+  const foodPatterns = foodPatternSummary(rangeDays);
   document.getElementById('exploreScopeNote').textContent = eventFilter === 'all'
     ? 'Explore diagnostics use the full selected date range.'
     : `Explore diagnostics use the full selected date range before the "${filterLabel()}" filter so the math stays stable.`;
@@ -3889,6 +3964,61 @@ function renderExploreDiagnostics() {
     <div class="audit-item ${item.cls}">
       <strong>${item.title}</strong>
       <p>${item.text}</p>
+    </div>
+  `).join('');
+
+  const assocSets = [
+    {
+      cls: 'good',
+      title: `Foods linked to on-target days`,
+      sub: `${foodPatterns.onTrackCount} days under calories, at protein floor, and alcohol-free`,
+      items: foodPatterns.onTrackFoods,
+      empty: 'No food is meaningfully overrepresented on on-target days in this range.'
+    },
+    {
+      cls: 'warn',
+      title: `Foods linked to strong protein days`,
+      sub: `${foodPatterns.strongProteinCount} days at the 90%-of-body-weight protein floor`,
+      items: foodPatterns.strongProteinFoods,
+      empty: 'No food stands out as especially linked to protein-floor days yet.'
+    },
+    {
+      cls: 'bad',
+      title: `Foods linked to high-calorie days`,
+      sub: `${foodPatterns.overTargetCount} days over the calorie target`,
+      items: foodPatterns.overTargetFoods,
+      empty: 'No food is strongly overrepresented on high-calorie days in this range.'
+    },
+    {
+      cls: 'neutral',
+      title: `Foods before poor next-day sleep`,
+      sub: `${foodPatterns.poorNextSleepCount} follow-up days below the sleep-performance target`,
+      items: foodPatterns.poorNextSleepFoods,
+      empty: 'No food stands out as especially associated with poorer next-day sleep.'
+    }
+  ];
+  const maxLift = Math.max(12, ...assocSets.flatMap(set => set.items.map(item => item.liftPoints || 0)));
+  document.getElementById('foodAssocNote').textContent = eventFilter === 'all'
+    ? 'Foods are ranked by overrepresentation inside the selected date range, using repeated appearances rather than one-off entries.'
+    : `Foods are ranked using the full selected date range before the "${filterLabel()}" filter so the associations stay stable.`;
+  document.getElementById('foodAssociationGrid').innerHTML = assocSets.map(set => `
+    <div class="food-assoc-card ${set.cls}">
+      <h4>${set.title}</h4>
+      <p>${set.sub}</p>
+      ${
+        set.items.length
+          ? `<div class="food-assoc-list">${set.items.map(item => `
+              <div class="food-assoc-row">
+                <div class="food-assoc-copy">
+                  <div class="food-assoc-name">${item.food}</div>
+                  <div class="food-assoc-meta">${item.subsetCount}/${item.overallCount} appearances in this outcome vs full range</div>
+                  <div class="food-assoc-bar"><div class="food-assoc-fill" style="width:${Math.max(16, (item.liftPoints / maxLift) * 100)}%"></div></div>
+                </div>
+                <div class="food-assoc-delta">+${item.liftPoints}pp</div>
+              </div>
+            `).join('')}</div>`
+          : `<div class="food-empty">${set.empty}</div>`
+      }
     </div>
   `).join('');
 }
@@ -4460,8 +4590,11 @@ function renderTabChrome() {
 function scrollToTabTarget(selector) {
   const target = document.querySelector(selector);
   if (!target) return;
-  const detailsParent = target.closest('details');
-  if (detailsParent) detailsParent.open = true;
+  let current = target.parentElement;
+  while (current) {
+    if (current.tagName === 'DETAILS') current.open = true;
+    current = current.parentElement;
+  }
   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -4492,7 +4625,7 @@ function syncResponsiveLayout(force = false) {
     }
   }
 
-  document.querySelectorAll('.advanced-shell, .mobile-detail-shell').forEach(shell => {
+  document.querySelectorAll('.advanced-shell, .mobile-detail-shell, .explore-module').forEach(shell => {
     if (mobile) {
       if (shell.dataset.userToggled !== 'true') shell.open = false;
     } else {
@@ -5047,7 +5180,7 @@ updateRangeLabels();
 applyActiveTab();
 syncResponsiveLayout(true);
 responsiveLayoutInitialized = true;
-document.querySelectorAll('#mobileControlShell, .advanced-shell').forEach(shell => {
+document.querySelectorAll('#mobileControlShell, .advanced-shell, .explore-module').forEach(shell => {
   if (!shell) return;
   shell.addEventListener('toggle', () => {
     if (!responsiveLayoutInitialized) return;
