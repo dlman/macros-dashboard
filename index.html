@@ -1052,7 +1052,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   </div>
 
   <!-- CORRELATION MATRIX -->
-  <details class="advanced-shell" id="exploreShell" open>
+  <details class="advanced-shell" id="exploreShell" open data-tab-section="explore">
     <summary>Explore More</summary>
     <div class="advanced-inner">
       <details class="explore-module" id="exploreCorrModule" open>
@@ -1742,6 +1742,44 @@ function sleepDebt(days = sleepData) {
   });
 }
 
+function estimateDrinkCalories(drinks) {
+  if (!drinks) return 0;
+  const text = String(drinks).toLowerCase();
+  let total = 0;
+  const drinkPatterns = [
+    { re: /(\d+(?:\.\d+)?)\s*(?:jameson|jamesons|whiskey|whiskeys)/g, kcal: 110 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:tequila|tequilas)/g, kcal: 100 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:beer|beers)/g, kcal: 150 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:wine)/g, kcal: 125 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:champagne)/g, kcal: 125 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:sake|sake's)/g, kcal: 135 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:white claw|white claws)/g, kcal: 100 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:old fashioned|old fashioneds)/g, kcal: 170 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:highball|highballs)/g, kcal: 130 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:negroni|negronis)/g, kcal: 180 },
+    { re: /(\d+(?:\.\d+)?)\s*(?:drink|drinks)/g, kcal: 140 }
+  ];
+  drinkPatterns.forEach(({ re, kcal }) => {
+    for (const match of text.matchAll(re)) total += parseFloat(match[1]) * kcal;
+  });
+  const sojuMatch = text.match(/(?:(half)|(\d+(?:\.\d+)?))\s*soju bottle/);
+  if (sojuMatch) {
+    const count = sojuMatch[1] ? 0.5 : parseFloat(sojuMatch[2] || '1');
+    total += count * 540;
+  }
+  if (!total && text.includes('soju')) total += 270;
+  if (!total && text.trim()) total += 140;
+  return Math.round(total);
+}
+
+function effectiveCalories(day) {
+  return (day?.calories || 0) + estimateDrinkCalories(day?.drinks);
+}
+
+function avgEffectiveCalories(days) {
+  return days.length ? days.reduce((sum, day) => sum + effectiveCalories(day), 0) / days.length : null;
+}
+
 // What-if calculation
 function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days = allDays, sleep = sleepData) {
   const lastWeightDays = allDays.filter(d => d.weight);
@@ -2141,7 +2179,7 @@ function projectionFreshness() {
 
 function expectedWeightLoss(days) {
   if (!days.length) return null;
-  return days.reduce((sum, d) => sum + (estimatedTDEE - d.calories), 0) / 3500;
+  return days.reduce((sum, d) => sum + (estimatedTDEE - effectiveCalories(d)), 0) / 3500;
 }
 
 function weightTrendReality(days) {
@@ -2191,8 +2229,8 @@ function trendDecomposition(days) {
 function historicalDrinkEffects(days, sleep) {
   const drinkDays = days.filter(d => d.drinks);
   const cleanDays = days.filter(d => !d.drinks);
-  const avgDrinkCalories = avgOrNull(drinkDays, 'calories');
-  const avgCleanCalories = avgOrNull(cleanDays, 'calories');
+  const avgDrinkCalories = avgEffectiveCalories(drinkDays);
+  const avgCleanCalories = avgEffectiveCalories(cleanDays);
   const calorieDelta = avgDrinkCalories != null && avgCleanCalories != null ? Math.max(0, avgDrinkCalories - avgCleanCalories) : 0;
 
   const afterDrink = sleep.filter(d => drinkDates.has(prevDay(d.date))).map(d => d.perf);
@@ -2205,7 +2243,7 @@ function historicalDrinkEffects(days, sleep) {
 }
 
 function getScenarioDefaults(days, sleep) {
-  const avgCalories = avgOrNull(days, 'calories') ?? goals.calories;
+  const avgCalories = avgEffectiveCalories(days) ?? goals.calories;
   const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
   const drinkPerWeek = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
   return {
@@ -2272,7 +2310,7 @@ function observedWeightProjection(days, horizonDays = 30) {
 
 function deficitProjection(days, horizonDays = 30) {
   if (!days.length) return null;
-  const avgDeficit = avgOrNull(days.map(d => ({ v: estimatedTDEE - d.calories })), 'v');
+  const avgDeficit = avgOrNull(days.map(d => ({ v: estimatedTDEE - effectiveCalories(d) })), 'v');
   if (avgDeficit == null) return null;
   return {
     avgDeficit,
@@ -2761,10 +2799,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-secondary">
           <div class="eyebrow">30-Day Deficit Pace</div>
           <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
-          <div class="sub">If intake stays near ${energyLabel(avgOrNull(filteredDays, 'calories'))}, the logged deficit pace implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
+          <div class="sub">If intake stays near ${energyLabel(avgEffectiveCalories(filteredDays))}, the logged deficit pace implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
-          <div class="tiny">${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE</div>
+          <div class="tiny">${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE (drink calories estimated in)</div>
         </div>
       `
       : `
@@ -2777,6 +2815,15 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="tiny">Deficit-based estimate</div>
         </div>
       `,
+    `
+      <div class="forecast-card mobile-primary">
+        <div class="eyebrow">Estimated TDEE</div>
+        <div class="value">${energyLabel(estimatedTDEE)}</div>
+        <div class="sub">Current working maintenance estimate from logged intake, estimated drink calories, and observed scale movement.</div>
+        <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance</span></div>
+        <div class="tiny">Cutting phase: ~${energyLabel(cuttingTDEE)} · plausible range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
+      </div>
+    `,
     sleepProjection
       ? `
         <div class="forecast-card mobile-secondary">
@@ -3196,7 +3243,7 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 const wDaysForTDEE = allDays.filter(d => d.weight);
 const totalWeightLoss = wDaysForTDEE.length >= 2 ? wDaysForTDEE[0].weight - wDaysForTDEE[wDaysForTDEE.length-1].weight : 0;
 const totalDaysSpan = allDays.length;
-const avgIntake = allDays.reduce((s,d) => s + d.calories, 0) / totalDaysSpan;
+const avgIntake = allDays.reduce((s,d) => s + effectiveCalories(d), 0) / totalDaysSpan;
 const estimatedTDEE = Math.round(avgIntake + (totalWeightLoss * 3500 / totalDaysSpan));
 
 // Phase-aware TDEE: separate cutting vs maintenance/diet break phases
@@ -3207,19 +3254,20 @@ const cuttingDays = allDays.filter(d => !isInDietBreak(d.date));
 const breakDays = allDays.filter(d => isInDietBreak(d.date));
 const cuttingWeightDays = cuttingDays.filter(d => d.weight);
 const cuttingWeightLoss = cuttingWeightDays.length >= 2 ? cuttingWeightDays[0].weight - cuttingWeightDays[cuttingWeightDays.length-1].weight : totalWeightLoss;
-const cuttingAvgIntake = cuttingDays.length ? cuttingDays.reduce((s,d) => s + d.calories, 0) / cuttingDays.length : avgIntake;
+const cuttingAvgIntake = cuttingDays.length ? cuttingDays.reduce((s,d) => s + effectiveCalories(d), 0) / cuttingDays.length : avgIntake;
 const cuttingTDEE = cuttingDays.length ? Math.round(cuttingAvgIntake + (cuttingWeightLoss * 3500 / cuttingDays.length)) : estimatedTDEE;
-const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + d.calories, 0) / breakDays.length) : null;
+const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
 const tdeeRange = { low: Math.min(estimatedTDEE, cuttingTDEE) - 80, high: Math.max(estimatedTDEE, cuttingTDEE) + 80 };
 
 let cumDeficit = 0;
 const waterfallData = allDays.map(d => {
-  cumDeficit += (estimatedTDEE - d.calories);  // positive = deficit (ate less than TDEE)
-  return { date: d.date, cum: cumDeficit };
+  const totalCalories = effectiveCalories(d);
+  cumDeficit += (estimatedTDEE - totalCalories);  // positive = deficit (ate less than TDEE)
+  return { date: d.date, cum: cumDeficit, totalCalories };
 });
 
 // Daily surplus/deficit per day (not cumulative)
-const dailyDelta = allDays.map(d => estimatedTDEE - d.calories);
+const dailyDelta = allDays.map(d => estimatedTDEE - effectiveCalories(d));
 
 allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), {
   type: 'bar',
@@ -3261,8 +3309,8 @@ allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), 
             return [` Cumulative: ${cum > 0 ? '+' : ''}${cum.toLocaleString()} kcal`, ` ≈ ${Math.abs(lbsEquiv)} lbs fat loss`];
           } else {
             const v = ctx.parsed.y;
-            const day = allDays[ctx.dataIndex];
-            return [` Today: ${v > 0 ? '+' : ''}${v.toLocaleString()} kcal ${v >= 0 ? 'deficit' : 'surplus'}`, ` Ate ${day.calories.toLocaleString()} vs ~${estimatedTDEE} TDEE`];
+            const day = waterfallData[ctx.dataIndex];
+            return [` Today: ${v > 0 ? '+' : ''}${v.toLocaleString()} kcal ${v >= 0 ? 'deficit' : 'surplus'}`, ` Ate ~${day.totalCalories.toLocaleString()} incl. est. drinks vs ~${estimatedTDEE} TDEE`];
           }
         }
       }}
@@ -4042,7 +4090,7 @@ function runScenarioPlanner() {
   const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
   const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
   const r = calculateWhatIf(cal, weeks, sleepHours, drinkNights, rangeDays, rangeSleep);
-  const currentAvgCalories = avgOrNull(rangeDays, 'calories') ?? goals.calories;
+  const currentAvgCalories = avgEffectiveCalories(rangeDays) ?? goals.calories;
   const currentAvgSleep = avgOrNull(rangeSleep, 'hours') ?? goals.sleep;
   const currentDrinkNights = rangeDays.length ? (rangeDays.filter(d => d.drinks).length / Math.max(rangeDays.length / 7, 1)) : 0;
   const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
@@ -4079,7 +4127,7 @@ function runScenarioPlanner() {
     </div>
   `).join('');
 
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, selected-range average intake ${energyLabel(currentAvgCalories)}, average sleep ${currentAvgSleep.toFixed(1)}h, and drink frequency ${currentDrinkNights.toFixed(1)} nights/week.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, selected-range average intake ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep ${currentAvgSleep.toFixed(1)}h, and drink frequency ${currentDrinkNights.toFixed(1)} nights/week.`;
 }
 
 // =====================================================================
@@ -4812,8 +4860,9 @@ function updateWaterfallChart(days) {
   const chart = allCharts.waterfallChart;
   let cum = 0;
   const view = days.map(d => {
-    cum += (estimatedTDEE - d.calories);
-    return { date: d.date, cum, delta: estimatedTDEE - d.calories, calories: d.calories };
+    const totalCalories = effectiveCalories(d);
+    cum += (estimatedTDEE - totalCalories);
+    return { date: d.date, cum, delta: estimatedTDEE - totalCalories, calories: d.calories, totalCalories };
   });
   chart.data.labels = view.map(d => d.date.slice(5));
   chart.data.datasets[0].data = view.map(d => energyValue(d.cum));
@@ -4830,7 +4879,7 @@ function updateWaterfallChart(days) {
       const eqLbs = Math.abs(d.cum) / 3500;
       return [` Cumulative: ${energyLabel(d.cum)}`, ` ≈ ${weightValue(eqLbs)} ${weightUnit()} equivalent`];
     }
-    return [` Today: ${energyLabel(d.delta)}`, ` Ate ${energyLabel(d.calories)} vs ~${energyLabel(estimatedTDEE)} TDEE`];
+    return [` Today: ${energyLabel(d.delta)}`, ` Ate ~${energyLabel(d.totalCalories)} incl. est. drinks vs ~${energyLabel(estimatedTDEE)} TDEE`];
   };
   chart.options.scales.y.title.text = `Cumulative (${energyUnit()})`;
   chart.options.scales.y.ticks.callback = v => `${v.toLocaleString()} ${energyUnit()}`;
