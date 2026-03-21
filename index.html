@@ -297,8 +297,24 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .whatif-field { display: flex; flex-direction: column; gap: 4px; }
 .whatif-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-faint); }
 .whatif-field input { width: 100px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 6px 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.whatif-field input.wide { width: 132px; }
 .whatif-result { font-size: 14px; color: var(--text-secondary); line-height: 1.7; padding: 12px 16px; background: var(--bg-input); border-radius: 8px; }
 .whatif-result strong { color: var(--col-green); }
+.scenario-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.scenario-btn { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 999px; padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+.scenario-btn:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
+.scenario-btn.active { color: var(--text-primary); border-color: rgba(56,189,248,0.34); background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(245,158,11,0.08)); }
+.scenario-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.scenario-note { margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
+.audit-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.audit-list { display: flex; flex-direction: column; gap: 10px; }
+.audit-item { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
+.audit-item strong { display: block; font-size: 13px; color: var(--text-primary); margin-bottom: 4px; }
+.audit-item p { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.audit-item.good { border-color: rgba(52,211,153,0.22); }
+.audit-item.warn { border-color: rgba(251,191,36,0.22); }
+.audit-item.bad { border-color: rgba(248,113,113,0.22); }
+.explore-note { font-size: 11px; color: var(--text-faint); margin: -6px 0 16px; }
 
 /* ===== DAY PANEL ===== */
 #dayPanel {
@@ -512,6 +528,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .shell-header h2 { font-size: 17px; }
   .shell-header p { font-size: 12px; }
   .kpi-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 18px; }
+  .scenario-grid, .audit-grid { grid-template-columns: 1fr 1fr; }
   .kpi-card.mobile-optional { display: none; }
   .kpi-card, .mini-panel, .chart-card, .whatif-card, .report-card, .heatmap-container { padding: 16px; }
   .chart-row.two, .chart-row.three { grid-template-columns: 1fr; }
@@ -952,17 +969,50 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
     </div>
   </div>
 
+  <div class="section-title" style="margin-top:36px;">🧭 Trend Decomposition</div>
+  <p class="explore-note" id="exploreScopeNote">Explore diagnostics use the selected date range before event filters so the math stays stable.</p>
+  <div class="chart-row two">
+    <div class="chart-card">
+      <div class="card-header"><h3>Observed vs Modeled Weight Drivers</h3></div>
+      <div class="chart-wrapper medium"><canvas id="trendDecompChart"></canvas></div>
+    </div>
+    <div class="mini-panel">
+      <div class="shell-header">
+        <h2 style="font-size:16px;">What The Trend Suggests</h2>
+        <p>Scale movement, deficit math, and the DXA-anchored body-comp estimate in one place.</p>
+      </div>
+      <div class="audit-list" id="trendDecompSummary"></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:28px;">🩺 Data Quality & Gap Detector</div>
+  <div class="mini-panel">
+    <div class="audit-grid" id="qualityAuditGrid"></div>
+    <div class="audit-list" id="qualityAuditList"></div>
+  </div>
+
   <!-- WHAT-IF CALCULATOR -->
-  <div class="section-title" style="margin-top:36px;">🔮 Predictive What-If Calculator</div>
+  <div class="section-title" style="margin-top:36px;">🔮 Scenario Planner</div>
   <div class="whatif-card">
-    <h3>If I eat X calories/day for Y weeks...</h3>
+    <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
+    <div class="scenario-presets" id="scenarioPresetRow">
+      <button class="scenario-btn" data-preset="current">Current Setup</button>
+      <button class="scenario-btn" data-preset="maintain">Maintain</button>
+      <button class="scenario-btn" data-preset="mild_cut">Mild Cut</button>
+      <button class="scenario-btn" data-preset="aggressive_cut">Aggressive Cut</button>
+      <button class="scenario-btn" data-preset="better_sleep">Better Sleep</button>
+      <button class="scenario-btn" data-preset="no_drinks">No Drinks</button>
+    </div>
     <div class="whatif-inputs">
       <div class="whatif-field"><label>Daily Calories</label><input type="number" id="whatifCal" value="1900"></div>
       <div class="whatif-field"><label>Weeks</label><input type="number" id="whatifWeeks" value="4"></div>
       <div class="whatif-field"><label>Avg Sleep (hrs)</label><input type="number" id="whatifSleep" value="6" step="0.5"></div>
+      <div class="whatif-field"><label>Drink Nights / Week</label><input type="number" id="whatifDrinks" value="1" step="0.5" class="wide"></div>
       <button class="hdr-btn" id="whatifCalcBtn" style="margin-bottom:0;">Calculate</button>
     </div>
     <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
+    <div class="scenario-grid" id="scenarioResultGrid"></div>
+    <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
   </div>
     </div>
   </details>
@@ -1556,19 +1606,29 @@ function sleepDebt(days = sleepData) {
 }
 
 // What-if calculation
-function calculateWhatIf(dailyCal, weeks, avgSleep) {
+function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days = allDays, sleep = sleepData) {
   const lastWeightDays = allDays.filter(d => d.weight);
   const currentWeight = lastWeightDays.length ? lastWeightDays[lastWeightDays.length-1].weight : 162;
-  // Use estimated TDEE (calculated from actual weight loss data), not the calorie goal
-  const tdee = estimatedTDEE; // ~2520 based on actual weight loss
+  const tdee = estimatedTDEE;
   const dailyDeficit = tdee - dailyCal;
-  // Sleep penalty: poor sleep historically correlates with eating more
-  const sleepPenalty = avgSleep < 5 ? 150 : (avgSleep < 6 ? 80 : 0);
-  const effectiveDeficit = dailyDeficit - sleepPenalty;
+  const sleepPenalty = avgSleep < 5 ? 170 : (avgSleep < 6 ? 90 : (avgSleep < 7 ? 30 : 0));
+  const drinkEffect = historicalDrinkEffects(days, sleep);
+  const drinkPenalty = (drinkEffect.calorieDelta || 0) * (Math.max(0, drinkNightsPerWeek) / 7);
+  const effectiveDeficit = dailyDeficit - sleepPenalty - drinkPenalty;
   const totalDeficit = effectiveDeficit * weeks * 7;
   const weightChange = totalDeficit / 3500;
   const projectedWeight = currentWeight - weightChange;
-  return { currentWeight, projectedWeight: projectedWeight.toFixed(1), weightChange: weightChange.toFixed(1), totalDeficit, sleepPenalty, effectiveDeficit, tdee };
+  return {
+    currentWeight,
+    projectedWeight: projectedWeight.toFixed(1),
+    weightChange: weightChange.toFixed(1),
+    totalDeficit,
+    sleepPenalty,
+    drinkPenalty,
+    drinkSleepPenalty: drinkEffect.drinkSleepPenalty,
+    effectiveDeficit,
+    tdee
+  };
 }
 
 // Weekly report
@@ -1608,6 +1668,8 @@ let rangeEndIdx = allDates.length - 1;
 let compareMode = persistedState.compareMode || 'equal_span';
 let eventFilter = persistedState.eventFilter || 'all';
 let activeTab = persistedState.activeTab || 'overview';
+let scenarioPreset = 'current';
+let scenarioFormInitialized = false;
 let suppressEventFilter = false;
 
 function getRangeState() {
@@ -1749,6 +1811,11 @@ function getPreviousPeriodDays() {
 function getSleepForDays(days) {
   const dateSet = new Set(days.map(d => d.date));
   return sleepData.filter(d => dateSet.has(d.date) && matchesSleepEvent(d));
+}
+
+function getSleepForDaysUnfiltered(days) {
+  const dateSet = new Set(days.map(d => d.date));
+  return sleepData.filter(d => dateSet.has(d.date));
 }
 
 function pct(part, total) {
@@ -1896,6 +1963,106 @@ function weightTrendReality(days) {
   const gap = expectedLoss != null && actualLoss != null ? actualLoss - expectedLoss : null;
   const efficiency = expectedLoss && actualLoss != null ? (actualLoss / expectedLoss) * 100 : null;
   return { expectedLoss, actualLoss, gap, efficiency };
+}
+
+function formatSignedWeight(v, digits = 1) {
+  if (v == null || Number.isNaN(v)) return '—';
+  return `${v > 0 ? '+' : v < 0 ? '−' : ''}${weightLabel(Math.abs(v), digits)}`;
+}
+
+function formatSignedPct(v, digits = 0) {
+  if (v == null || Number.isNaN(v)) return '—';
+  return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%`;
+}
+
+function trendDecomposition(days) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return null;
+  const scaleLoss = weightDays[0].weight - weightDays[weightDays.length - 1].weight;
+  const expectedLoss = expectedWeightLoss(days);
+  const compPoints = bodyCompEstimate(days).filter(p => !p.measured);
+  const firstComp = compPoints[0] || null;
+  const lastComp = compPoints[compPoints.length - 1] || null;
+  const fatLoss = firstComp && lastComp ? firstComp.fat - lastComp.fat : null;
+  const leanLoss = firstComp && lastComp ? firstComp.lean - lastComp.lean : null;
+  const nonFatShift = scaleLoss != null && fatLoss != null ? scaleLoss - fatLoss : null;
+  const residual = nonFatShift != null && leanLoss != null ? nonFatShift - leanLoss : null;
+  const modelGap = scaleLoss != null && expectedLoss != null ? scaleLoss - expectedLoss : null;
+  return {
+    scaleLoss,
+    expectedLoss,
+    fatLoss,
+    leanLoss,
+    nonFatShift,
+    residual,
+    modelGap,
+    weightSpan: weightDays.length,
+    daySpan: Math.max(1, Math.round((new Date(weightDays[weightDays.length - 1].date + 'T12:00:00') - new Date(weightDays[0].date + 'T12:00:00')) / 86400000))
+  };
+}
+
+function historicalDrinkEffects(days, sleep) {
+  const drinkDays = days.filter(d => d.drinks);
+  const cleanDays = days.filter(d => !d.drinks);
+  const avgDrinkCalories = avgOrNull(drinkDays, 'calories');
+  const avgCleanCalories = avgOrNull(cleanDays, 'calories');
+  const calorieDelta = avgDrinkCalories != null && avgCleanCalories != null ? Math.max(0, avgDrinkCalories - avgCleanCalories) : 0;
+
+  const afterDrink = sleep.filter(d => drinkDates.has(prevDay(d.date))).map(d => d.perf);
+  const afterClean = sleep.filter(d => !drinkDates.has(prevDay(d.date))).map(d => d.perf);
+  const drinkSleepPenalty = afterDrink.length && afterClean.length
+    ? Math.max(0, avgOrNull(afterClean.map(v => ({ v })), 'v') - avgOrNull(afterDrink.map(v => ({ v })), 'v'))
+    : 0;
+
+  return { calorieDelta, drinkSleepPenalty };
+}
+
+function getScenarioDefaults(days, sleep) {
+  const avgCalories = avgOrNull(days, 'calories') ?? goals.calories;
+  const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
+  const drinkPerWeek = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
+  return {
+    current: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    maintain: { calories: Math.round(estimatedTDEE / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    mild_cut: { calories: Math.round((estimatedTDEE - 350) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    aggressive_cut: { calories: Math.round((estimatedTDEE - 650) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    better_sleep: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +Math.min(8, Math.max(goals.sleep, avgSleep + 1)).toFixed(1), drinks: drinkPerWeek },
+    no_drinks: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: 0 }
+  };
+}
+
+function qualityAudit(days, sleep) {
+  const sleepCoverage = pct(sleep.length, days.length);
+  const weightDays = days.filter(d => d.weight);
+  const weightCoverage = pct(weightDays.length, days.length);
+  const noteDays = days.filter(d => foodsForDay(d).length);
+  const noteCoverage = pct(noteDays.length, days.length);
+  const mismatchDays = days.map(d => {
+    const macroCalories = d.protein * 4 + d.carbs * 4 + d.fat * 9;
+    const gapPct = d.calories ? ((macroCalories - d.calories) / d.calories) * 100 : 0;
+    return { date: d.date, logged: d.calories, macroCalories, gapPct };
+  }).filter(d => d.logged > 0);
+  const mismatchFlagged = mismatchDays.filter(d => Math.abs(d.gapPct) > 8).sort((a, b) => Math.abs(b.gapPct) - Math.abs(a.gapPct));
+  const macroAgreement = mismatchDays.length ? 100 - (mismatchFlagged.length / mismatchDays.length) * 100 : 100;
+  const missingSleepDates = days.filter(d => !sleepByDate[d.date]).map(d => d.date);
+  let longestGap = null;
+  for (let i = 1; i < weightDays.length; i++) {
+    const prev = weightDays[i - 1];
+    const curr = weightDays[i];
+    const gapDays = Math.round((new Date(curr.date + 'T12:00:00') - new Date(prev.date + 'T12:00:00')) / 86400000);
+    if (!longestGap || gapDays > longestGap.days) longestGap = { days: gapDays, start: prev.date, end: curr.date };
+  }
+  return {
+    sleepCoverage,
+    weightCoverage,
+    noteCoverage,
+    macroAgreement,
+    mismatchFlagged,
+    missingSleepDates,
+    longestGap,
+    noteMissing: days.length - noteDays.length,
+    missingWeight: days.length - weightDays.length
+  };
 }
 
 function observedWeightProjection(days, horizonDays = 30) {
@@ -2116,6 +2283,35 @@ allCharts.heroSleepChart = new Chart(document.getElementById('heroSleepChart'), 
   type: 'line',
   data: { labels: [], datasets: [{ data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.14)', fill: true }] },
   options: sparklineOptions('#f59e0b', 0, 100)
+});
+
+allCharts.trendDecompChart = new Chart(document.getElementById('trendDecompChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Scale change', 'Deficit-implied', 'Est. fat change', 'Est. non-fat change'],
+    datasets: [{
+      data: [],
+      backgroundColor: ['rgba(56,189,248,0.72)', 'rgba(245,158,11,0.78)', 'rgba(248,113,113,0.76)', 'rgba(148,163,184,0.72)'],
+      borderRadius: 10,
+      borderSkipped: false
+    }]
+  },
+  options: {
+    ...chartDefaults(),
+    indexAxis: 'y',
+    plugins: {
+      ...chartDefaults().plugins,
+      legend: { display: false },
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} }
+    },
+    scales: {
+      x: {
+        ...chartDefaults().scales.x,
+        ticks: { ...TICK(), callback: v => `${v} ${weightUnit()}` }
+      },
+      y: { ...chartDefaults().scales.y, ticks: TICK() }
+    }
+  }
 });
 
 // =====================================================================
@@ -3456,6 +3652,176 @@ function renderCorrMatrix() {
   }
 }
 
+function renderExploreDiagnostics() {
+  const rangeDays = getRangeDays();
+  const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
+  const decomp = trendDecomposition(rangeDays);
+  const quality = qualityAudit(rangeDays, rangeSleep);
+  document.getElementById('exploreScopeNote').textContent = eventFilter === 'all'
+    ? 'Explore diagnostics use the full selected date range.'
+    : `Explore diagnostics use the full selected date range before the "${filterLabel()}" filter so the math stays stable.`;
+
+  if (decomp) {
+    const values = [decomp.scaleLoss, decomp.expectedLoss, decomp.fatLoss ?? 0, decomp.nonFatShift ?? 0];
+    allCharts.trendDecompChart.data.datasets[0].data = values.map(v => +(v ?? 0).toFixed(2));
+    allCharts.trendDecompChart.options.plugins.tooltip.callbacks.label = ctx => `${ctx.label}: ${formatSignedWeight(ctx.parsed.x || 0)}`;
+    allCharts.trendDecompChart.options.scales.x.ticks.callback = v => `${v} ${weightUnit()}`;
+    allCharts.trendDecompChart.update();
+
+    const summary = [
+      {
+        cls: 'good',
+        title: 'Observed scale trend',
+        text: `${decomp.scaleLoss >= 0 ? 'Down' : 'Up'} ${weightLabel(Math.abs(decomp.scaleLoss))} across ${decomp.weightSpan} weigh-ins over ${decomp.daySpan} days.`
+      },
+      {
+        cls: Math.abs(decomp.modelGap ?? 0) <= 1 ? 'good' : 'warn',
+        title: 'Logged deficit vs scale',
+        text: decomp.expectedLoss != null
+          ? `Deficit math implies ${weightLabel(Math.abs(decomp.expectedLoss))} of ${decomp.expectedLoss >= 0 ? 'loss' : 'gain'}. The scale is ${decomp.modelGap >= 0 ? 'ahead by' : 'behind by'} ${weightLabel(Math.abs(decomp.modelGap || 0))}.`
+          : 'Need logged calories across the range to compare deficit math with the scale.'
+      },
+      {
+        cls: 'warn',
+        title: 'DXA-anchored composition split',
+        text: decomp.fatLoss != null && decomp.leanLoss != null
+          ? `About ${weightLabel(Math.abs(decomp.fatLoss))} of the move looks like fat change, with ${weightLabel(Math.abs(decomp.leanLoss))} as estimated lean-mass movement.`
+          : 'Need at least two weigh-ins in the selected range for the DXA-anchored split.'
+      },
+      {
+        cls: Math.abs(decomp.residual ?? 0) <= 0.8 ? 'good' : 'bad',
+        title: 'Residual water / glycogen noise',
+        text: decomp.residual != null
+          ? `${formatSignedWeight(decomp.residual)} after backing out the modeled lean-mass change. Larger residuals usually mean water, glycogen, or logging noise is still dominating part of the scale move.`
+          : 'Residual non-fat movement will appear once the body-comp model has enough weigh-ins.'
+      }
+    ];
+    document.getElementById('trendDecompSummary').innerHTML = summary.map(item => `
+      <div class="audit-item ${item.cls}">
+        <strong>${item.title}</strong>
+        <p>${item.text}</p>
+      </div>
+    `).join('');
+  } else {
+    allCharts.trendDecompChart.data.datasets[0].data = [0, 0, 0, 0];
+    allCharts.trendDecompChart.update();
+    document.getElementById('trendDecompSummary').innerHTML = `
+      <div class="audit-item warn">
+        <strong>Need more weigh-ins in range</strong>
+        <p>Trend decomposition needs at least two weigh-ins inside the selected date range.</p>
+      </div>
+    `;
+  }
+
+  document.getElementById('qualityAuditGrid').innerHTML = [
+    { title: 'Sleep Coverage', value: `${Math.round(quality.sleepCoverage)}%`, sub: `${rangeSleep.length}/${rangeDays.length} days have sleep entries` },
+    { title: 'Weigh-In Coverage', value: `${Math.round(quality.weightCoverage)}%`, sub: `${rangeDays.length - quality.missingWeight}/${rangeDays.length} days have weight` },
+    { title: 'Macro Agreement', value: `${Math.round(quality.macroAgreement)}%`, sub: `${quality.mismatchFlagged.length} days flagged at >8% mismatch` },
+    { title: 'Food-Note Coverage', value: `${Math.round(quality.noteCoverage)}%`, sub: `${rangeDays.length - quality.noteMissing}/${rangeDays.length} days have usable food notes` }
+  ].map(card => `
+    <div class="score-card">
+      <div class="value">${card.value}</div>
+      <div class="sub"><strong style="display:block;color:var(--text-primary);margin-bottom:4px;font-size:12px;">${card.title}</strong>${card.sub}</div>
+    </div>
+  `).join('');
+
+  const qualityItems = [];
+  if (quality.longestGap) {
+    qualityItems.push({
+      cls: quality.longestGap.days > 6 ? 'bad' : quality.longestGap.days > 4 ? 'warn' : 'good',
+      title: 'Longest weigh-in gap',
+      text: `${quality.longestGap.days} days between ${formatShortDate(quality.longestGap.start)} and ${formatShortDate(quality.longestGap.end)}.`
+    });
+  }
+  if (quality.mismatchFlagged[0]) {
+    const top = quality.mismatchFlagged[0];
+    qualityItems.push({
+      cls: Math.abs(top.gapPct) > 15 ? 'bad' : 'warn',
+      title: 'Largest macro/log mismatch',
+      text: `${formatShortDate(top.date)} logged ${energyLabel(top.logged)} but macros imply ${energyLabel(top.macroCalories)} (${formatSignedPct(top.gapPct)}).`
+    });
+  }
+  if (quality.missingSleepDates.length) {
+    qualityItems.push({
+      cls: quality.missingSleepDates.length > Math.max(3, rangeDays.length * 0.1) ? 'warn' : 'good',
+      title: 'Missing sleep entries',
+      text: `${quality.missingSleepDates.length} day${quality.missingSleepDates.length === 1 ? '' : 's'} without sleep data${quality.missingSleepDates.length <= 4 ? `: ${quality.missingSleepDates.map(formatShortDate).join(', ')}` : `, including ${quality.missingSleepDates.slice(0, 4).map(formatShortDate).join(', ')}`}.`
+    });
+  }
+  qualityItems.push({
+    cls: quality.noteCoverage >= 70 ? 'good' : quality.noteCoverage >= 50 ? 'warn' : 'bad',
+    title: 'Food logging depth',
+    text: quality.noteCoverage >= 70
+      ? 'Food-note coverage is strong enough to trust the association analysis.'
+      : `Food notes are thin on ${quality.noteMissing} day${quality.noteMissing === 1 ? '' : 's'}, so food associations should be treated as directional only.`
+  });
+  document.getElementById('qualityAuditList').innerHTML = qualityItems.map(item => `
+    <div class="audit-item ${item.cls}">
+      <strong>${item.title}</strong>
+      <p>${item.text}</p>
+    </div>
+  `).join('');
+}
+
+function setScenarioInputs(values) {
+  document.getElementById('whatifCal').value = values.calories;
+  document.getElementById('whatifWeeks').value = values.weeks;
+  document.getElementById('whatifSleep').value = values.sleep;
+  document.getElementById('whatifDrinks').value = values.drinks;
+}
+
+function syncScenarioPresetButtons() {
+  document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.preset === scenarioPreset));
+}
+
+function runScenarioPlanner() {
+  const rangeDays = getRangeDays();
+  const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
+  const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
+  const weeks = parseInt(document.getElementById('whatifWeeks').value) || 4;
+  const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
+  const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
+  const r = calculateWhatIf(cal, weeks, sleepHours, drinkNights, rangeDays, rangeSleep);
+  const currentAvgCalories = avgOrNull(rangeDays, 'calories') ?? goals.calories;
+  const currentAvgSleep = avgOrNull(rangeSleep, 'hours') ?? goals.sleep;
+  const currentDrinkNights = rangeDays.length ? (rangeDays.filter(d => d.drinks).length / Math.max(rangeDays.length / 7, 1)) : 0;
+  const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
+  const deltaVsBaseline = parseFloat(r.weightChange) - parseFloat(baseline.weightChange);
+  const dir = parseFloat(r.weightChange) >= 0 ? 'lose' : 'gain';
+
+  let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong>, the model still uses about <strong>${energyLabel(r.tdee)}</strong> as maintenance.`;
+  html += `<br>That creates an effective <strong>${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong> after behavior drag.`;
+  html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
+  html += `<br>Compared with your current-range pace, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
+  document.getElementById('whatifResult').innerHTML = html;
+
+  document.getElementById('scenarioResultGrid').innerHTML = [
+    {
+      value: `${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}`,
+      sub: `Effective daily deficit after ${energyLabel(r.sleepPenalty)} sleep drag and ${energyLabel(r.drinkPenalty)} drink drag`
+    },
+    {
+      value: weightLabel(Math.abs(parseFloat(r.weightChange)), 1),
+      sub: `${dir === 'lose' ? 'Projected loss' : 'Projected gain'} over ${weeks} week${weeks === 1 ? '' : 's'}`
+    },
+    {
+      value: weightLabel(parseFloat(r.projectedWeight)),
+      sub: `Projected endpoint from current ${weightLabel(r.currentWeight)}`
+    },
+    {
+      value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
+      sub: r.drinkSleepPenalty ? `Historical next-morning sleep hit after drink nights` : 'No strong drink-related sleep penalty in the current range'
+    }
+  ].map(card => `
+    <div class="score-card">
+      <div class="value">${card.value}</div>
+      <div class="sub">${card.sub}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, selected-range average intake ${energyLabel(currentAvgCalories)}, average sleep ${currentAvgSleep.toFixed(1)}h, and drink frequency ${currentDrinkNights.toFixed(1)} nights/week.`;
+}
+
 // =====================================================================
 // HEATMAP CALENDAR
 // =====================================================================
@@ -3888,21 +4254,23 @@ document.getElementById('exportAllBtn').addEventListener('click', () => {
 // =====================================================================
 // WHAT-IF CALCULATOR
 // =====================================================================
-document.getElementById('whatifCalcBtn').addEventListener('click', () => {
-  const cal = parseInt(document.getElementById('whatifCal').value) || 1900;
-  const weeks = parseInt(document.getElementById('whatifWeeks').value) || 4;
-  const sleep = parseFloat(document.getElementById('whatifSleep').value) || 6;
-  const r = calculateWhatIf(cal, weeks, sleep);
-  const dir = parseFloat(r.weightChange) > 0 ? 'lose' : 'gain';
-  let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} weeks</strong> (vs estimated TDEE of <strong>${energyLabel(r.tdee)}</strong>):`;
-  html += `<br>Daily deficit: <strong>${r.effectiveDeficit > 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong>`;
-  html += `<br>Current weight: <strong>${weightLabel(r.currentWeight)}</strong>`;
-  html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
-  html += `<br>Total deficit: <strong>${energyLabel(r.totalDeficit)}</strong> over ${weeks * 7} days`;
-  if (r.sleepPenalty > 0) {
-    html += `<br>⚠️ Sleep penalty: +${energyLabel(r.sleepPenalty)}/day effective intake (poor sleep → more eating historically)`;
-  }
-  document.getElementById('whatifResult').innerHTML = html;
+document.getElementById('whatifCalcBtn').addEventListener('click', runScenarioPlanner);
+document.querySelectorAll('.scenario-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const defaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
+    scenarioPreset = btn.dataset.preset;
+    const presetValues = defaults[scenarioPreset] || defaults.current;
+    setScenarioInputs(presetValues);
+    syncScenarioPresetButtons();
+    scenarioFormInitialized = true;
+    runScenarioPlanner();
+  });
+});
+['whatifCal', 'whatifWeeks', 'whatifSleep', 'whatifDrinks'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    scenarioPreset = '';
+    syncScenarioPresetButtons();
+  });
 });
 
 function syncSettingsForm() {
@@ -4468,6 +4836,7 @@ function refreshDashboard() {
   renderSleepInsights();
   renderHeatmap();
   renderCorrMatrix();
+  renderExploreDiagnostics();
   updateWeightChart(filteredDays);
   updateBodyCompChart(filteredDays);
   updateCaloriesChart(months);
@@ -4482,6 +4851,16 @@ function refreshDashboard() {
   updateFoodFreqChart(filteredDays);
   updateSleepCharts(filteredSleep);
   updateInsightCharts(filteredSleep);
+  const scenarioDefaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
+  if (!scenarioFormInitialized) {
+    setScenarioInputs(scenarioDefaults.current);
+    scenarioPreset = 'current';
+    scenarioFormInitialized = true;
+  } else if (scenarioPreset && scenarioDefaults[scenarioPreset]) {
+    setScenarioInputs(scenarioDefaults[scenarioPreset]);
+  }
+  syncScenarioPresetButtons();
+  runScenarioPlanner();
   syncControlsFromState();
   suppressEventFilter = false;
 }
