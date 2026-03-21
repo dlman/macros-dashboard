@@ -94,6 +94,16 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-pulse .pulse-item { background: color-mix(in srgb, var(--bg-input) 84%, transparent); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 10px; }
 .hero-pulse .pulse-item .k { font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .hero-pulse .pulse-item .t { font-size: 10px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.7px; }
+.forecast-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: -2px 0 18px; }
+.forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; }
+.forecast-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
+.forecast-card .value { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
+.forecast-card .sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
+.forecast-card .tiny { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
+.confidence-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 700; margin-top: 8px; }
+.confidence-pill.high { background: rgba(52,211,153,0.14); color: var(--col-green); }
+.confidence-pill.medium { background: rgba(251,191,36,0.14); color: var(--col-amber); }
+.confidence-pill.low { background: rgba(248,113,113,0.14); color: var(--col-red); }
 
 /* ===== V4 SUMMARY ===== */
 .sticky-summary { position: sticky; top: 10px; z-index: 30; display: grid; grid-template-columns: 1.6fr repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
@@ -462,6 +472,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-pulse { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .hero-pulse .pulse-item { padding: 10px 8px; }
   .hero-pulse .pulse-item .k { font-size: 16px; }
+  .forecast-strip { grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
+  .forecast-card { padding: 11px 12px; }
+  .forecast-card .value { font-size: 18px; }
   .sticky-summary {
     position: sticky;
     top: 0;
@@ -506,7 +519,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .header-left h1 { font-size: 18px; }
   .header-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .hdr-btn { font-size: 11px; padding: 8px 10px; }
-  #themeToggle, #exportAllBtn { display: none; }
+  #exportAllBtn { display: none; }
   .summary-hero .hero-sub,
   .summary-chip .sub {
     display: -webkit-box;
@@ -621,6 +634,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
       </div>
     </div>
   </div>
+
+  <div class="forecast-strip" id="forecastStrip"></div>
 
   <div class="sticky-summary" id="stickySummary"></div>
 
@@ -1074,6 +1089,7 @@ const STORAGE_KEY = 'macros_dashboard_v4_state';
 
 // Units
 let useMetric = false; // false = lbs/kcal, true = kg/kJ
+let themePreference = 'system';
 function convWeight(lbs) { return useMetric ? (lbs * 0.453592).toFixed(1) : lbs; }
 function convEnergy(kcal) { return useMetric ? Math.round(kcal * 4.184) : kcal; }
 function weightUnit() { return useMetric ? 'kg' : 'lbs'; }
@@ -1113,6 +1129,8 @@ function loadPersistedState() {
     if (Array.isArray(saved.annotations)) annotations = saved.annotations;
     if (typeof saved.useMetric === 'boolean') useMetric = saved.useMetric;
     if (saved.recoveryWeights) recoveryWeights = saved.recoveryWeights;
+    if (typeof saved.themePreference === 'string') themePreference = saved.themePreference;
+    else if (typeof saved.theme === 'string') themePreference = saved.theme;
     return saved;
   } catch {
     return {};
@@ -1134,6 +1152,17 @@ function persistState(extra = {}) {
 }
 
 const persistedState = loadPersistedState();
+const systemThemeQuery = window.matchMedia('(prefers-color-scheme: light)');
+
+function resolvedTheme(preference = themePreference) {
+  if (preference === 'light' || preference === 'dark') return preference;
+  return systemThemeQuery.matches ? 'light' : 'dark';
+}
+
+function applyTheme(preference = themePreference) {
+  themePreference = preference;
+  document.documentElement.setAttribute('data-theme', resolvedTheme(preference));
+}
 
 // Raw data
 const data = {
@@ -1638,11 +1667,14 @@ function currentRangeLabel() {
   return `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${last.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
+function formatShortDate(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function labelForDays(days) {
   if (!days.length) return 'No data';
-  const first = new Date(days[0].date + 'T12:00:00');
-  const last = new Date(days[days.length - 1].date + 'T12:00:00');
-  return `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${last.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  return `${formatShortDate(days[0].date)} - ${formatShortDate(days[days.length - 1].date)}`;
 }
 
 function getComparisonCurrentBaseDays() {
@@ -1777,6 +1809,19 @@ function actualWeightLoss(days) {
   return weightDays[0].weight - weightDays[weightDays.length - 1].weight;
 }
 
+function projectionConfidence(level) {
+  if (level >= 0.75) return { label: 'High confidence', cls: 'high' };
+  if (level >= 0.45) return { label: 'Medium confidence', cls: 'medium' };
+  return { label: 'Low confidence', cls: 'low' };
+}
+
+function projectionFreshness() {
+  const latestMacro = allDays[allDays.length - 1]?.date || null;
+  const latestSleep = sleepData[sleepData.length - 1]?.date || null;
+  const latestWeight = [...allDays].reverse().find(d => d.weight)?.date || null;
+  return { latestMacro, latestSleep, latestWeight };
+}
+
 function expectedWeightLoss(days) {
   if (!days.length) return null;
   return days.reduce((sum, d) => sum + (estimatedTDEE - d.calories), 0) / 3500;
@@ -1788,6 +1833,47 @@ function weightTrendReality(days) {
   const gap = expectedLoss != null && actualLoss != null ? actualLoss - expectedLoss : null;
   const efficiency = expectedLoss && actualLoss != null ? (actualLoss / expectedLoss) * 100 : null;
   return { expectedLoss, actualLoss, gap, efficiency };
+}
+
+function observedWeightProjection(days, horizonDays = 30) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return null;
+  const first = weightDays[0];
+  const last = weightDays[weightDays.length - 1];
+  const spanDays = Math.max(1, Math.round((new Date(last.date + 'T12:00:00') - new Date(first.date + 'T12:00:00')) / (1000 * 60 * 60 * 24)));
+  const dailySlope = (last.weight - first.weight) / spanDays;
+  return {
+    latestWeight: last.weight,
+    dailySlope,
+    spanDays,
+    sampleSize: weightDays.length,
+    confidence: projectionConfidence(Math.min(1, (weightDays.length / 8) * 0.45 + (spanDays / 30) * 0.55)),
+    projectedDelta: dailySlope * horizonDays,
+    projectedWeight: last.weight + (dailySlope * horizonDays)
+  };
+}
+
+function deficitProjection(days, horizonDays = 30) {
+  if (!days.length) return null;
+  const avgDeficit = avgOrNull(days.map(d => ({ v: estimatedTDEE - d.calories })), 'v');
+  if (avgDeficit == null) return null;
+  return {
+    avgDeficit,
+    confidence: projectionConfidence(Math.min(1, days.length / 28)),
+    projectedLoss: (avgDeficit * horizonDays) / 3500
+  };
+}
+
+function sleepTargetProjection(sleep, horizonNights = 14) {
+  if (!sleep.length) return null;
+  const hitRate = pct(sleep.filter(d => d.perf >= goals.sleepPerf).length, sleep.length);
+  return {
+    avgPerf: avgOrNull(sleep, 'perf'),
+    hitRate,
+    horizonNights,
+    confidence: projectionConfidence(Math.min(1, sleep.length / 21)),
+    expectedHits: Math.round((hitRate / 100) * horizonNights)
+  };
 }
 
 function foodPatternSummary(days) {
@@ -2142,6 +2228,81 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   `;
 }
 
+function renderForecastStrip(filteredDays, filteredSleep) {
+  const weightProjection = observedWeightProjection(filteredDays, 30);
+  const deficitPace = deficitProjection(filteredDays, 30);
+  const sleepProjection = sleepTargetProjection(filteredSleep, 14);
+  const freshness = projectionFreshness();
+
+  document.getElementById('forecastStrip').innerHTML = [
+    weightProjection
+      ? `
+        <div class="forecast-card">
+          <div class="eyebrow">30-Day Weight Pace</div>
+          <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
+          <div class="sub">If the observed scale slope holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
+          <div class="confidence-pill ${weightProjection.confidence.cls}">${weightProjection.confidence.label}</div>
+          <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card">
+          <div class="eyebrow">30-Day Weight Pace</div>
+          <div class="value">—</div>
+          <div class="sub">Need at least two weigh-ins in the active view to project the current weight slope forward.</div>
+          <div class="confidence-pill low">Low confidence</div>
+          <div class="tiny">Observed trend projection</div>
+        </div>
+      `,
+    deficitPace
+      ? `
+        <div class="forecast-card">
+          <div class="eyebrow">30-Day Deficit Pace</div>
+          <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
+          <div class="sub">If intake stays near ${energyLabel(avgOrNull(filteredDays, 'calories'))}, the logged deficit pace implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
+          <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
+          <div class="tiny">${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card">
+          <div class="eyebrow">30-Day Deficit Pace</div>
+          <div class="value">—</div>
+          <div class="sub">Need enough intake data in the active view to project the current deficit pace.</div>
+          <div class="confidence-pill low">Low confidence</div>
+          <div class="tiny">Deficit-based estimate</div>
+        </div>
+      `,
+    sleepProjection
+      ? `
+        <div class="forecast-card">
+          <div class="eyebrow">Next 14 Nights</div>
+          <div class="value">${sleepProjection.expectedHits}/${sleepProjection.horizonNights}</div>
+          <div class="sub">Projected sleep-target hits if the current ${Math.round(sleepProjection.hitRate)}% pace holds across the next two weeks.</div>
+          <div class="confidence-pill ${sleepProjection.confidence.cls}">${sleepProjection.confidence.label}</div>
+          <div class="tiny">${sleepProjection.avgPerf != null ? `${Math.round(sleepProjection.avgPerf)}% average sleep performance` : 'Sleep pace only'}</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card">
+          <div class="eyebrow">Next 14 Nights</div>
+          <div class="value">—</div>
+          <div class="sub">Need sleep entries in the active view to project target-hit pace over the next two weeks.</div>
+          <div class="confidence-pill low">Low confidence</div>
+          <div class="tiny">Sleep-target projection</div>
+        </div>
+      `,
+    `
+      <div class="forecast-card">
+        <div class="eyebrow">Latest Data</div>
+        <div class="value">${formatShortDate(freshness.latestMacro)}</div>
+        <div class="sub">Nutrition logged through ${formatShortDate(freshness.latestMacro)}, sleep through ${formatShortDate(freshness.latestSleep)}.</div>
+        <div class="tiny">${freshness.latestWeight ? `Latest weigh-in: ${formatShortDate(freshness.latestWeight)}` : 'No weigh-ins logged yet'}</div>
+      </div>
+    `
+  ].join('');
+}
+
 function renderExecutiveSummary() {
   const filteredDays = getComparisonCurrentDays();
   const filteredSleep = getSleepForDays(getComparisonCurrentBaseDays());
@@ -2162,6 +2323,7 @@ function renderExecutiveSummary() {
   const foodPatterns = foodPatternSummary(filteredDays);
 
   renderHeroStage(current, previous, filteredDays, filteredSleep);
+  renderForecastStrip(filteredDays, filteredSleep);
 
   document.getElementById('stickySummary').innerHTML = `
     <div class="summary-hero">
@@ -3391,10 +3553,15 @@ document.addEventListener('keydown', (e) => {
 // THEME TOGGLE
 // =====================================================================
 document.getElementById('themeToggle').addEventListener('click', () => {
-  const body = document.documentElement;
-  const isDark = !body.hasAttribute('data-theme') || body.getAttribute('data-theme') === 'dark';
-  body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isDark ? '☀️ Theme' : '🌙 Theme';
+  const nextTheme = resolvedTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(nextTheme);
+  refreshDashboard();
+  persistUiState();
+});
+
+systemThemeQuery.addEventListener('change', () => {
+  if (themePreference !== 'system') return;
+  applyTheme('system');
   refreshDashboard();
   persistUiState();
 });
@@ -3432,7 +3599,7 @@ function renderAnnotations() {
     <div class="annotation-item">
       <span class="dot"></span>
       <span>${a.date.slice(5)} — ${a.label}</span>
-      <button onclick="annotations.splice(${i},1);renderAnnotations();persistState({ theme: document.documentElement.getAttribute('data-theme') || 'dark', rangeStart: rangeStartIdx, rangeEnd: rangeEndIdx, currentMetric, calVisibility, macroVisibility, compareMode, eventFilter });">✕</button>
+      <button onclick="annotations.splice(${i},1);renderAnnotations();persistState({ themePreference, rangeStart: rangeStartIdx, rangeEnd: rangeEndIdx, currentMetric, calVisibility, macroVisibility, compareMode, eventFilter });">✕</button>
     </div>
   `).join('');
 }
@@ -3625,7 +3792,7 @@ function syncSettingsForm() {
 }
 
 function syncControlsFromState() {
-  document.getElementById('themeToggle').textContent = document.documentElement.getAttribute('data-theme') === 'light' ? '☀️ Theme' : '🌙 Theme';
+  document.getElementById('themeToggle').textContent = resolvedTheme() === 'light' ? '☀️ Theme' : '🌙 Theme';
   document.getElementById('unitToggle').textContent = useMetric ? 'kg / kJ' : 'lbs / kcal';
   document.getElementById('compareMode').value = compareMode;
   document.getElementById('eventFilter').value = eventFilter;
@@ -3664,7 +3831,7 @@ function syncResponsiveLayout(force = false) {
 
 function persistUiState() {
   persistState({
-    theme: document.documentElement.getAttribute('data-theme') || 'dark',
+    themePreference,
     rangeStart: rangeStartIdx,
     rangeEnd: rangeEndIdx,
     currentMetric,
@@ -4186,7 +4353,7 @@ function refreshDashboard() {
 // =====================================================================
 renderAnnotations();
 syncSettingsForm();
-if (persistedState.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+applyTheme(themePreference);
 if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
 if (typeof persistedState.rangeEnd === 'number') rangeEndEl.value = persistedState.rangeEnd;
 if (typeof persistedState.compareMode === 'string') compareMode = persistedState.compareMode;
