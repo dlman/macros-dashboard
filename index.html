@@ -328,6 +328,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .scenario-btn.active { color: var(--text-primary); border-color: rgba(56,189,248,0.34); background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(245,158,11,0.08)); }
 .scenario-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .scenario-note { margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
+.scenario-forecast-wrap { margin-top: 14px; padding: 14px; border-radius: 12px; border: 1px solid var(--border-card); background: rgba(15,23,42,0.35); }
+.scenario-forecast-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.scenario-forecast-head h4 { font-size: 13px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.scenario-forecast-head p { font-size: 11px; line-height: 1.5; color: var(--text-faint); margin: 4px 0 0; max-width: 420px; }
+.scenario-forecast-canvas { height: 240px; }
 .audit-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .audit-list { display: flex; flex-direction: column; gap: 10px; }
 .audit-item { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
@@ -582,6 +587,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .scenario-grid, .audit-grid { grid-template-columns: 1fr 1fr; }
   .kpi-card.mobile-optional { display: none; }
   .kpi-card, .mini-panel, .chart-card, .whatif-card, .report-card, .heatmap-container { padding: 16px; }
+  .scenario-forecast-head { flex-direction: column; }
+  .scenario-forecast-canvas { height: 220px; }
   .chart-row.two, .chart-row.three { grid-template-columns: 1fr; }
   .chart-wrapper.tall { height: 260px; }
   .chart-wrapper.medium { height: 220px; }
@@ -595,6 +602,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   #exploreShell .food-assoc-grid { grid-template-columns: 1fr; }
   #exploreShell .chart-wrapper.medium { height: 200px; }
   #exploreShell .chart-wrapper[style*="420px"] { height: 260px !important; }
+  #exploreShell .scenario-forecast-canvas { height: 190px; }
 }
 
 @media (max-width: 560px) {
@@ -1151,6 +1159,21 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
             </div>
             <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
             <div class="scenario-grid" id="scenarioResultGrid"></div>
+            <div class="scenario-forecast-wrap">
+              <div class="scenario-forecast-head">
+                <div>
+                  <h4>Projected Weight Over Time</h4>
+                  <p>Starts from the latest weigh-in inside the selected range and compares your active scenario with current pace and core preset paths.</p>
+                </div>
+                <div class="trust-row trust-inline">
+                  <span class="trust-pill projected">Projected</span>
+                  <span class="trust-pill logged">Range-anchored start</span>
+                </div>
+              </div>
+              <div class="scenario-forecast-canvas">
+                <canvas id="scenarioForecastChart"></canvas>
+              </div>
+            </div>
             <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
           </div>
         </div>
@@ -1787,10 +1810,16 @@ function avgEffectiveCalories(days) {
   return days.length ? days.reduce((sum, day) => sum + effectiveCalories(day), 0) / days.length : null;
 }
 
+function latestWeightForScenario(days = allDays) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length) return weightDays[weightDays.length - 1].weight;
+  const fallback = [...allDays].reverse().find(d => d.weight);
+  return fallback ? fallback.weight : 162;
+}
+
 // What-if calculation
 function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days = allDays, sleep = sleepData) {
-  const lastWeightDays = allDays.filter(d => d.weight);
-  const currentWeight = lastWeightDays.length ? lastWeightDays[lastWeightDays.length-1].weight : 162;
+  const currentWeight = latestWeightForScenario(days);
   const tdee = estimatedTDEE;
   const dailyDeficit = tdee - dailyCal;
   const sleepPenalty = avgSleep < 5 ? 170 : (avgSleep < 6 ? 90 : (avgSleep < 7 ? 30 : 0));
@@ -1810,6 +1839,20 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
     drinkSleepPenalty: drinkEffect.drinkSleepPenalty,
     effectiveDeficit,
     tdee
+  };
+}
+
+function scenarioForecastSeries(label, values, days, sleep) {
+  const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
+  const weeks = Math.max(1, values.weeks);
+  return {
+    label,
+    values,
+    projection,
+    data: Array.from({ length: weeks + 1 }, (_, week) => {
+      const projected = projection.currentWeight - ((projection.effectiveDeficit * 7 * week) / 3500);
+      return weightValue(projected);
+    })
   };
 }
 
@@ -2263,6 +2306,101 @@ function getScenarioDefaults(days, sleep) {
   };
 }
 
+function scenarioPresetLabel(key) {
+  const labels = {
+    current: 'Current pace',
+    maintain: 'Maintain',
+    mild_cut: 'Mild cut',
+    aggressive_cut: 'Aggressive cut',
+    better_sleep: 'Better sleep',
+    no_drinks: 'No drinks'
+  };
+  return labels[key] || 'Active scenario';
+}
+
+function updateScenarioForecastChart(activeValues, days, sleep) {
+  const chart = allCharts.scenarioForecastChart;
+  const weeks = Math.max(1, activeValues.weeks);
+  const avgCalories = avgEffectiveCalories(days) ?? goals.calories;
+  const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
+  const avgDrinks = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
+  const defaults = getScenarioDefaults(days, sleep);
+  const labels = Array.from({ length: weeks + 1 }, (_, week) => week === 0 ? 'Now' : `Week ${week}`);
+  const activeLabel = scenarioPreset ? scenarioPresetLabel(scenarioPreset) : 'Active scenario';
+  const activeSeries = scenarioForecastSeries(activeLabel, { ...activeValues, weeks }, days, sleep);
+  const currentSeries = scenarioForecastSeries('Current pace', { calories: avgCalories, weeks, sleep: avgSleep, drinks: avgDrinks }, days, sleep);
+  const comparisonKeys = ['maintain', 'mild_cut', 'aggressive_cut'].filter(key => key !== scenarioPreset);
+  const isCurrentEquivalent =
+    Math.abs(activeValues.calories - avgCalories) < 1 &&
+    Math.abs(activeValues.sleep - avgSleep) < 0.11 &&
+    Math.abs(activeValues.drinks - avgDrinks) < 0.11;
+  const colorMap = {
+    current: '#60a5fa',
+    active: '#fbbf24',
+    maintain: '#94a3b8',
+    mild_cut: '#2dd4bf',
+    aggressive_cut: '#c084fc'
+  };
+
+  chart.data.labels = labels;
+  chart.data.datasets = [
+    ...(!isCurrentEquivalent ? [{
+      label: currentSeries.label,
+      data: currentSeries.data,
+      borderColor: colorMap.current,
+      backgroundColor: 'transparent',
+      borderDash: [6, 5],
+      pointStyle: 'circle',
+      pointRadius: 0,
+      borderWidth: 2
+    }] : [{
+      label: currentSeries.label,
+      data: currentSeries.data,
+      borderColor: colorMap.active,
+      backgroundColor: 'transparent',
+      pointStyle: 'circle',
+      pointRadius: 0,
+      borderWidth: 3
+    }]),
+    ...comparisonKeys.map(key => {
+      const values = { ...defaults[key], weeks };
+      return {
+        label: scenarioPresetLabel(key),
+        data: scenarioForecastSeries(scenarioPresetLabel(key), values, days, sleep).data,
+        borderColor: colorMap[key],
+        backgroundColor: 'transparent',
+        pointRadius: 0,
+        borderWidth: 1.8,
+        borderDash: [3, 4]
+      };
+    }),
+    ...(!isCurrentEquivalent ? [{
+      label: activeSeries.label,
+      data: activeSeries.data,
+      borderColor: colorMap.active,
+      backgroundColor: 'rgba(251,191,36,0.08)',
+      pointStyle: 'rectRounded',
+      pointRadius: 0,
+      borderWidth: 3,
+      fill: false
+    }] : [])
+  ];
+
+  const allValues = chart.data.datasets.flatMap(ds => ds.data).filter(v => Number.isFinite(v));
+  const bounds = calcAxisBounds(allValues, useMetric ? 0.6 : 1.2);
+  chart.options.scales.y.min = Math.floor(bounds.min);
+  chart.options.scales.y.max = Math.ceil(bounds.max);
+  chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
+  chart.options.plugins.tooltip.callbacks.label = ctx => `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}`;
+  chart.options.plugins.tooltip.callbacks.footer = items => {
+    const point = items[0];
+    if (!point) return '';
+    if (point.dataIndex === 0) return 'Latest weigh-in in selected range';
+    return `Projected ${point.label.toLowerCase()} endpoint path`;
+  };
+  chart.update();
+}
+
 function qualityAudit(days, sleep) {
   const sleepCoverage = pct(sleep.length, days.length);
   const weightDays = days.filter(d => d.weight);
@@ -2552,6 +2690,33 @@ allCharts.trendDecompChart = new Chart(document.getElementById('trendDecompChart
         ticks: { ...TICK(), callback: v => `${v} ${weightUnit()}` }
       },
       y: { ...chartDefaults().scales.y, ticks: TICK() }
+    }
+  }
+});
+
+allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioForecastChart'), {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    ...chartDefaults(),
+    interaction: { mode: 'index', intersect: false },
+    elements: { line: { tension: 0.25, borderWidth: 2.2 }, point: { radius: 0, hoverRadius: 4 } },
+    plugins: {
+      ...chartDefaults().plugins,
+      legend: {
+        display: true,
+        labels: {
+          color: '#94a3b8',
+          usePointStyle: true,
+          boxWidth: 10,
+          padding: 16
+        }
+      },
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} }
+    },
+    scales: {
+      x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
+      y: { ...chartDefaults().scales.y, ticks: { ...TICK(), callback: v => `${v} ${weightUnit()}` } }
     }
   }
 });
@@ -4093,7 +4258,7 @@ function runScenarioPlanner() {
   const rangeDays = getRangeDays();
   const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
   const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
-  const weeks = parseInt(document.getElementById('whatifWeeks').value) || 4;
+  const weeks = Math.max(1, parseInt(document.getElementById('whatifWeeks').value) || 4);
   const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
   const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
   const r = calculateWhatIf(cal, weeks, sleepHours, drinkNights, rangeDays, rangeSleep);
@@ -4134,7 +4299,8 @@ function runScenarioPlanner() {
     </div>
   `).join('');
 
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, selected-range average intake ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep ${currentAvgSleep.toFixed(1)}h, and drink frequency ${currentDrinkNights.toFixed(1)} nights/week.`;
+  updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, and drink frequency is ${currentDrinkNights.toFixed(1)} nights/week.`;
 }
 
 // =====================================================================
