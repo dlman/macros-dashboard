@@ -205,6 +205,16 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .report-card p { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
 .report-card .metric-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .report-card .rpill { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.report-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.report-meta { display: flex; flex-direction: column; gap: 6px; }
+.report-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.report-btn { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 999px; padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.report-btn:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
+.review-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.review-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.review-note { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 14px; }
+.review-note strong { display: block; font-size: 12px; color: var(--text-primary); margin-bottom: 4px; }
+.review-note p { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
 .rpill.good { background: rgba(52,211,153,0.15); color: var(--col-green); }
 .rpill.good::before { content: '✓ '; }
 .rpill.warn { background: rgba(251,191,36,0.15); color: var(--col-amber); }
@@ -585,6 +595,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .shell-header p { font-size: 12px; }
   .kpi-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 18px; }
   .scenario-grid, .audit-grid { grid-template-columns: 1fr 1fr; }
+  .review-grid { grid-template-columns: 1fr 1fr; }
+  .review-callouts { grid-template-columns: 1fr; }
   .kpi-card.mobile-optional { display: none; }
   .kpi-card, .mini-panel, .chart-card, .whatif-card, .report-card, .heatmap-container { padding: 16px; }
   .scenario-forecast-head { flex-direction: column; }
@@ -642,6 +654,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .forecast-strip .forecast-card.mobile-secondary { display: none; }
   .sticky-summary { display: none; }
   .stat-grid, .score-grid, .compare-grid { grid-template-columns: 1fr; }
+  .report-head { flex-direction: column; align-items: flex-start; }
+  .report-actions { width: 100%; }
+  .review-grid { grid-template-columns: 1fr; }
   .heatmap-row .row-label { width: 26px; }
   .heatmap-cell { width: 24px; height: 24px; border-radius: 5px; }
   .card-header { margin-bottom: 10px; }
@@ -814,9 +829,22 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   <details class="mobile-detail-shell" id="weeklyReportShell" open data-tab-section="overview">
     <summary>Latest Week Summary</summary>
     <div class="report-card" id="weeklyReport">
-      <h3>📋 Latest Week Summary</h3>
+      <div class="report-head">
+        <div class="report-meta">
+          <h3>📋 Weekly Review</h3>
+          <div class="trust-row trust-inline" style="margin-top:0;">
+            <span class="trust-pill logged">Latest 7 logged days</span>
+            <span class="trust-pill projected">Review-ready summary</span>
+          </div>
+        </div>
+        <div class="report-actions">
+          <button class="report-btn" id="weeklyReviewExportBtn">📸 Export Weekly Review</button>
+        </div>
+      </div>
       <p id="weeklyReportText">Loading...</p>
       <div class="metric-pills" id="weeklyReportPills"></div>
+      <div class="review-grid" id="weeklyReviewGrid"></div>
+      <div class="review-callouts" id="weeklyReviewCallouts"></div>
     </div>
   </details>
 
@@ -1725,31 +1753,38 @@ const DXA_FAT_MASS = DXA_SCAN.totalMass * (DXA_SCAN.bodyFatPct / 100);
 const DXA_BONE_MASS = Math.max(DXA_SCAN.totalMass - DXA_SCAN.leanMass - DXA_FAT_MASS, 0);
 const DXA_FAT_FREE_MASS = DXA_SCAN.leanMass + DXA_BONE_MASS;
 
+function bodyCompModelShares(days = allDays) {
+  const liftPerWeek = days.filter(d => d.lifting === 'Y').length / Math.max(days.length / 7, 1);
+  const proteinHitRate = days.filter(hitProteinFloor).length / Math.max(days.length, 1);
+  return {
+    cutFatFreeShare: Math.max(0.16, Math.min(0.24, 0.24 - (Math.min(liftPerWeek, 4) * 0.015) - (proteinHitRate * 0.03))),
+    gainFatFreeShare: Math.max(0.08, Math.min(0.14, 0.14 - (Math.min(liftPerWeek, 4) * 0.01) - (proteinHitRate * 0.01)))
+  };
+}
+
+function estimateBodyCompAtWeight(weight, days = allDays) {
+  const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelShares(days);
+  const weightDelta = weight - DXA_SCAN.totalMass;
+  const fatFreeShare = weightDelta < 0 ? cutFatFreeShare : gainFatFreeShare;
+  const fatFreeMass = Math.max(DXA_FAT_FREE_MASS + (weightDelta * fatFreeShare), 0);
+  const lean = Math.max(fatFreeMass - DXA_BONE_MASS, 0);
+  const fat = Math.max(weight - fatFreeMass, 0);
+  return {
+    weight,
+    lean,
+    fat,
+    fatFreeShare,
+    bodyFatPct: weight ? (fat / weight) * 100 : 0
+  };
+}
+
 // Body composition estimate anchored to the Jan 6, 2026 DXA scan.
 function bodyCompEstimate(days = allDays) {
   const weightDays = days.filter(d => d.weight);
   const scanDay = macroByDate[DXA_SCAN.date];
   const includeScan = isDateInRange(DXA_SCAN.date) && (!scanDay || matchesDayEvent(scanDay));
   if (!weightDays.length && !includeScan) return [];
-  const liftPerWeek = days.filter(d => d.lifting === 'Y').length / Math.max(days.length / 7, 1);
-  const proteinHitRate = days.filter(hitProteinFloor).length / Math.max(days.length, 1);
-  const cutFatFreeShare = Math.max(0.16, Math.min(0.24, 0.24 - (Math.min(liftPerWeek, 4) * 0.015) - (proteinHitRate * 0.03)));
-  const gainFatFreeShare = Math.max(0.08, Math.min(0.14, 0.14 - (Math.min(liftPerWeek, 4) * 0.01) - (proteinHitRate * 0.01)));
-  const points = weightDays.map((d) => {
-    const weightDelta = d.weight - DXA_SCAN.totalMass;
-    const fatFreeShare = weightDelta < 0 ? cutFatFreeShare : gainFatFreeShare;
-    const fatFreeMass = Math.max(DXA_FAT_FREE_MASS + (weightDelta * fatFreeShare), 0);
-    const lean = Math.max(fatFreeMass - DXA_BONE_MASS, 0);
-    const fat = Math.max(d.weight - fatFreeMass, 0);
-    return {
-      date: d.date,
-      weight: d.weight,
-      lean,
-      fat,
-      fatFreeShare,
-      bodyFatPct: d.weight ? (fat / d.weight) * 100 : 0
-    };
-  });
+  const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompAtWeight(d.weight, days) }));
   if (includeScan) {
     points.push({
       date: DXA_SCAN.date,
@@ -1845,14 +1880,17 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
 function scenarioForecastSeries(label, values, days, sleep) {
   const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
   const weeks = Math.max(1, values.weeks);
+  const weights = Array.from({ length: weeks + 1 }, (_, week) => {
+    const projected = projection.currentWeight - ((projection.effectiveDeficit * 7 * week) / 3500);
+    return projected;
+  });
+  const bodyComp = weights.map(weight => estimateBodyCompAtWeight(weight, days));
   return {
     label,
     values,
     projection,
-    data: Array.from({ length: weeks + 1 }, (_, week) => {
-      const projected = projection.currentWeight - ((projection.effectiveDeficit * 7 * week) / 3500);
-      return weightValue(projected);
-    })
+    bodyComp,
+    data: weights.map(weight => weightValue(weight))
   };
 }
 
@@ -1863,7 +1901,25 @@ function generateWeeklyReport() {
   const lastDays = filteredDays.slice(-7);
   const lastSleep = filteredSleep.slice(-7);
   if (!lastDays.length) {
-    return { text: 'No data in the selected range.', avgCal: 0, avgPro: 0, liftCount: 0, drinkCount: 0, avgSleepPerf: 0, hiProDays: 0 };
+    return {
+      text: 'No data in the selected range.',
+      avgCal: 0,
+      avgPro: 0,
+      liftCount: 0,
+      drinkCount: 0,
+      avgSleepPerf: 0,
+      hiProDays: 0,
+      lastDays: [],
+      lastSleep: [],
+      prevWeek: [],
+      prevSleep: [],
+      currentSummary: null,
+      previousSummary: null,
+      avgSleepHrs: null,
+      rangeStr: '',
+      weightChange: null,
+      prevWeightChange: null
+    };
   }
   const avgCal = Math.round(avg(lastDays, 'calories'));
   const avgPro = Math.round(avg(lastDays, 'protein'));
@@ -1872,6 +1928,7 @@ function generateWeeklyReport() {
   const avgSleepPerf = Math.round(avg(lastSleep, 'perf'));
   const avgSleepHrs = avg(lastSleep, 'hours').toFixed(1);
   const prevWeek = filteredDays.slice(-14, -7);
+  const prevSleep = filteredSleep.slice(-14, -7);
   const prevAvgCal = Math.round(avg(prevWeek, 'calories'));
   const calDelta = avgCal - prevAvgCal;
   const calDir = calDelta > 0 ? '↑' : '↓';
@@ -1883,8 +1940,30 @@ function generateWeeklyReport() {
   const hiProDays = lastDays.filter(hitProteinFloor).length;
   const proteinFloorLabel = proteinGoalRangeLabel(lastDays);
   const text = `Range ${currentRangeLabel()}. Latest 7 logged days (${rangeStr}): averaged ${energyLabel(avgCal)} (${calDir}${convEnergy(Math.abs(calDelta)).toLocaleString()} ${energyUnit()} vs prior 7 days), hit the 90%-of-body-weight protein floor (${proteinFloorLabel}) on ${hiProDays}/${lastDays.length} days, lifted ${liftCount}x, drank on ${drinkCount} night${drinkCount!==1?'s':''}, sleep averaged ${avgSleepPerf}% perf / ${avgSleepHrs}h.`;
+  const currentSummary = summarizeRange(lastDays, lastSleep);
+  const previousSummary = summarizeRange(prevWeek, prevSleep);
+  const weightChange = actualWeightLoss(lastDays);
+  const prevWeightChange = actualWeightLoss(prevWeek);
 
-  return { text, avgCal, avgPro, liftCount, drinkCount, avgSleepPerf, hiProDays };
+  return {
+    text,
+    avgCal,
+    avgPro,
+    liftCount,
+    drinkCount,
+    avgSleepPerf,
+    hiProDays,
+    lastDays,
+    lastSleep,
+    prevWeek,
+    prevSleep,
+    currentSummary,
+    previousSummary,
+    avgSleepHrs: Number(avgSleepHrs),
+    rangeStr,
+    weightChange,
+    prevWeightChange
+  };
 }
 
 // Date range state
@@ -2347,6 +2426,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     ...(!isCurrentEquivalent ? [{
       label: currentSeries.label,
       data: currentSeries.data,
+      bodyFatPcts: currentSeries.bodyComp.map(point => point.bodyFatPct),
       borderColor: colorMap.current,
       backgroundColor: 'transparent',
       borderDash: [6, 5],
@@ -2356,6 +2436,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     }] : [{
       label: currentSeries.label,
       data: currentSeries.data,
+      bodyFatPcts: currentSeries.bodyComp.map(point => point.bodyFatPct),
       borderColor: colorMap.active,
       backgroundColor: 'transparent',
       pointStyle: 'circle',
@@ -2364,9 +2445,11 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     }]),
     ...comparisonKeys.map(key => {
       const values = { ...defaults[key], weeks };
+      const series = scenarioForecastSeries(scenarioPresetLabel(key), values, days, sleep);
       return {
         label: scenarioPresetLabel(key),
-        data: scenarioForecastSeries(scenarioPresetLabel(key), values, days, sleep).data,
+        data: series.data,
+        bodyFatPcts: series.bodyComp.map(point => point.bodyFatPct),
         borderColor: colorMap[key],
         backgroundColor: 'transparent',
         pointRadius: 0,
@@ -2377,6 +2460,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     ...(!isCurrentEquivalent ? [{
       label: activeSeries.label,
       data: activeSeries.data,
+      bodyFatPcts: activeSeries.bodyComp.map(point => point.bodyFatPct),
       borderColor: colorMap.active,
       backgroundColor: 'rgba(251,191,36,0.08)',
       pointStyle: 'rectRounded',
@@ -2391,12 +2475,16 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.scales.y.min = Math.floor(bounds.min);
   chart.options.scales.y.max = Math.ceil(bounds.max);
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
-  chart.options.plugins.tooltip.callbacks.label = ctx => `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}`;
+  chart.options.plugins.tooltip.callbacks.label = ctx => {
+    const bfPct = ctx.dataset.bodyFatPcts?.[ctx.dataIndex];
+    const bfText = Number.isFinite(bfPct) ? ` · ~${bfPct.toFixed(1)}% BF` : '';
+    return `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}${bfText}`;
+  };
   chart.options.plugins.tooltip.callbacks.footer = items => {
     const point = items[0];
     if (!point) return '';
     if (point.dataIndex === 0) return 'Latest weigh-in in selected range';
-    return `Projected ${point.label.toLowerCase()} endpoint path`;
+    return `Projected ${point.label.toLowerCase()} path using the DXA-anchored body-comp model`;
   };
   chart.update();
 }
@@ -2878,6 +2966,64 @@ function renderWeeklyReport() {
     <span class="rpill ${r.liftCount >= 3 ? 'good' : r.liftCount >= 2 ? 'warn' : 'bad'}">${r.liftCount}x lifted</span>
     <span class="rpill ${r.drinkCount === 0 ? 'good' : r.drinkCount <= 1 ? 'warn' : 'bad'}">${r.drinkCount} drink nights</span>
     <span class="rpill ${r.avgSleepPerf >= 65 ? 'good' : r.avgSleepPerf >= 50 ? 'warn' : 'bad'}">${r.avgSleepPerf}% sleep</span>
+  `;
+  const reviewGrid = document.getElementById('weeklyReviewGrid');
+  const reviewCallouts = document.getElementById('weeklyReviewCallouts');
+  if (!r.lastDays.length) {
+    reviewGrid.innerHTML = '';
+    reviewCallouts.innerHTML = '';
+    return;
+  }
+
+  const current = r.currentSummary;
+  const previous = r.previousSummary;
+  const drivers = getDriverRanking(r.lastDays, r.lastSleep);
+  const recommendations = recommendationList(current, previous, r.lastDays, r.lastSleep);
+  const weightDelta = compareDelta(r.weightChange, r.prevWeightChange, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
+  const calorieDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
+  const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
+  const sleepDelta = compareDelta(current.avgSleepPerf, previous.avgSleepPerf, 'up', v => `${Math.round(v)}%`);
+  const weeklyFocus = recommendations[0] || { title: 'Keep the current setup stable', text: 'The latest week does not show one dominant issue. Stay consistent and keep collecting clean signal.' };
+  const biggestDriver = drivers[0] || { title: 'Not enough signal yet', text: 'The latest week does not have enough contrast to rank a strong behavioral driver.', sample: 'n is limited in the latest 7-day view.' };
+
+  reviewGrid.innerHTML = [
+    {
+      label: 'Weight Trend',
+      value: r.weightChange != null ? `${r.weightChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(r.weightChange), 1)}` : '—',
+      sub: weightDelta.detail
+    },
+    {
+      label: 'Average Intake',
+      value: energyLabel(current.avgCalories),
+      sub: `${Math.round(current.calorieHitRate)}% under target · ${calorieDelta.text} vs prior week`
+    },
+    {
+      label: 'Protein Adherence',
+      value: `${Math.round(current.proteinHitRate)}%`,
+      sub: `${r.hiProDays}/${r.lastDays.length} days at floor · ${proteinDelta.text} vs prior week`
+    },
+    {
+      label: 'Sleep Trend',
+      value: current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—',
+      sub: current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h avg · ${sleepDelta.text} vs prior week` : 'No sleep entries'
+    }
+  ].map(card => `
+    <div class="score-card">
+      <div class="eyebrow">${card.label}</div>
+      <div class="value">${card.value}</div>
+      <div class="sub">${card.sub}</div>
+    </div>
+  `).join('');
+
+  reviewCallouts.innerHTML = `
+    <div class="review-note">
+      <strong>Biggest Driver</strong>
+      <p>${biggestDriver.title}. ${biggestDriver.text} ${biggestDriver.sample || ''}</p>
+    </div>
+    <div class="review-note">
+      <strong>Next Focus</strong>
+      <p>${weeklyFocus.title}. ${weeklyFocus.text}</p>
+    </div>
   `;
 }
 
@@ -4268,10 +4414,12 @@ function runScenarioPlanner() {
   const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
   const deltaVsBaseline = parseFloat(r.weightChange) - parseFloat(baseline.weightChange);
   const dir = parseFloat(r.weightChange) >= 0 ? 'lose' : 'gain';
+  const projectedComp = estimateBodyCompAtWeight(parseFloat(r.projectedWeight), rangeDays);
 
   let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong>, the model still uses about <strong>${energyLabel(r.tdee)}</strong> as maintenance.`;
   html += `<br>That creates an effective <strong>${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong> after behavior drag.`;
   html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
+  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean estimate)`;
   html += `<br>Compared with your current-range pace, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
   document.getElementById('whatifResult').innerHTML = html;
 
@@ -4289,6 +4437,10 @@ function runScenarioPlanner() {
       sub: `Projected endpoint from current ${weightLabel(r.currentWeight)}`
     },
     {
+      value: `~${projectedComp.bodyFatPct.toFixed(1)}%`,
+      sub: `Projected body fat from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
+    },
+    {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
       sub: r.drinkSleepPenalty ? `Historical next-morning sleep hit after drink nights` : 'No strong drink-related sleep penalty in the current range'
     }
@@ -4300,7 +4452,7 @@ function runScenarioPlanner() {
   `).join('');
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, and drink frequency is ${currentDrinkNights.toFixed(1)} nights/week.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress.`;
 }
 
 // =====================================================================
@@ -4743,6 +4895,18 @@ document.getElementById('exportAllBtn').addEventListener('click', () => {
   html2canvas(main, { backgroundColor: getComputedStyle(document.body).backgroundColor, scale: 2 }).then(canvas => {
     const link = document.createElement('a');
     link.download = 'macros_dashboard_2026.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+});
+
+document.getElementById('weeklyReviewExportBtn').addEventListener('click', () => {
+  const review = document.getElementById('weeklyReport');
+  html2canvas(review, { backgroundColor: getComputedStyle(document.body).backgroundColor, scale: 2 }).then(canvas => {
+    const link = document.createElement('a');
+    const rangeDays = getFilteredDays().slice(-7);
+    const stamp = rangeDays.length ? `${rangeDays[0].date}_to_${rangeDays[rangeDays.length - 1].date}` : 'latest_week';
+    link.download = `weekly_review_${stamp}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   });
