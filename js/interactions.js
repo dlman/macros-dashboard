@@ -248,12 +248,12 @@ eventFilterEl.addEventListener('change', () => {
 const rangeStartDateEl = document.getElementById('rangeStartDate');
 const rangeEndDateEl = document.getElementById('rangeEndDate');
 if (rangeStartDateEl && rangeEndDateEl) {
-  rangeEndDateEl.value = allDates[allDates.length - 1] || '2026-03-18';
+  rangeEndDateEl.value = allDates[allDates.length - 1] || '2026-03-24';
   rangeStartDateEl.value = allDates[0] || '2026-01-01';
   rangeStartDateEl.min = allDates[0] || '2026-01-01';
-  rangeStartDateEl.max = allDates[allDates.length - 1] || '2026-03-18';
+  rangeStartDateEl.max = allDates[allDates.length - 1] || '2026-03-24';
   rangeEndDateEl.min = allDates[0] || '2026-01-01';
-  rangeEndDateEl.max = allDates[allDates.length - 1] || '2026-03-18';
+  rangeEndDateEl.max = allDates[allDates.length - 1] || '2026-03-24';
 
   function syncDateToRange() {
     const startDate = rangeStartDateEl.value;
@@ -1389,4 +1389,3 @@ injectCustomData();
 
 refreshDashboard();
 console.log('Dashboard v4 loaded with decision-support analysis and live filters.');
-

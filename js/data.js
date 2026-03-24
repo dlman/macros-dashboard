@@ -85,6 +85,10 @@ const data = {
     {date:"2026-03-18",protein:173,carbs:80,fat:70,calories:1730,weight:162.0,lifting:null,drinks:null,notes:"Protein shake, chicken chunks, whopper, 2 turkey sticks, mediterranean chicken chunks, deli turkey slices"},
     {date:"2026-03-19",protein:193,carbs:108,fat:88,calories:2100,weight:162.5,lifting:"Y",drinks:null,notes:"Protein shake, chinese buffet platter,turkey jerky , barebell protein bar, deli turkey breast, beef soon du bu"},
     {date:"2026-03-20",protein:188,carbs:135,fat:60,calories:2100,weight:162.9,lifting:null,drinks:null,notes:"Edamame snack 2x, beef sundubu, puff bar, protein chips , greek yogurt, chicken soup"},
+    {date:"2026-03-21",protein:160,carbs:105,fat:52,calories:1650,weight:162.4,lifting:null,drinks:"7 drinks",notes:"chicken platter, protein chips,edamame snack, protein shake, costco chicken chunks, peeps, hot chocolate"},
+    {date:"2026-03-22",protein:154,carbs:114,fat:132,calories:2500,weight:162.7,lifting:null,drinks:null,notes:"3 taco bell tacos, rolled up chicken quesadilla, hot pot, protein shake"},
+    {date:"2026-03-23",protein:214,carbs:93,fat:67,calories:2000,weight:163.9,lifting:null,drinks:null,notes:"protein shake 2x, protein chips, rotisserie chicken breast, greek yogurt 2x, edamame snack 2x, dumplings"},
+    {date:"2026-03-24",protein:153,carbs:34,fat:46,calories:1200,weight:161.7,lifting:null,drinks:null,notes:"protein shake, protein ramen with chicken, greek yogurt, edamame snack, 4 boiled eggs, protein chips"},
   ],
 };
 
