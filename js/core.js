@@ -359,11 +359,20 @@ function avgEffectiveCalories(days) {
   return days.length ? days.reduce((sum, day) => sum + effectiveCalories(day), 0) / days.length : null;
 }
 
-function latestWeightForScenario(days = allDays) {
+function latestWeightPointForScenario(days = allDays) {
   const weightDays = days.filter(d => d.weight);
-  if (weightDays.length) return weightDays[weightDays.length - 1].weight;
-  const fallback = [...allDays].reverse().find(d => d.weight);
-  return fallback ? fallback.weight : 162;
+  if (weightDays.length) return weightDays[weightDays.length - 1];
+  return [...allDays].reverse().find(d => d.weight) || null;
+}
+
+function latestWeightForScenario(days = allDays) {
+  return latestWeightPointForScenario(days)?.weight ?? 162;
+}
+
+function addDaysToDate(dateStr, daysToAdd) {
+  const date = new Date(`${dateStr}T12:00:00`);
+  date.setDate(date.getDate() + daysToAdd);
+  return date.toISOString().slice(0, 10);
 }
 
 // What-if calculation
@@ -394,15 +403,18 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
 function scenarioForecastSeries(label, values, days, sleep) {
   const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
   const weeks = Math.max(1, values.weeks);
+  const anchorDate = latestWeightPointForScenario(days)?.date || allDays[allDays.length - 1]?.date || DXA_SCAN.date;
   const weights = Array.from({ length: weeks + 1 }, (_, week) => {
     const projected = projection.currentWeight - ((projection.effectiveDeficit * 7 * week) / 3500);
     return projected;
   });
+  const dates = Array.from({ length: weeks + 1 }, (_, week) => addDaysToDate(anchorDate, week * 7));
   const bodyComp = weights.map(weight => estimateBodyCompAtWeight(weight, days));
   return {
     label,
     values,
     projection,
+    dates,
     bodyComp,
     data: weights.map(weight => weightValue(weight))
   };
@@ -918,7 +930,6 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
   const avgDrinks = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
   const defaults = getScenarioDefaults(days, sleep);
-  const labels = Array.from({ length: weeks + 1 }, (_, week) => week === 0 ? 'Now' : `Week ${week}`);
   const activeLabel = scenarioPreset ? scenarioPresetLabel(scenarioPreset) : 'Active scenario';
   const activeSeries = scenarioForecastSeries(activeLabel, { ...activeValues, weeks }, days, sleep);
   const currentSeries = scenarioForecastSeries('Current pace', { calories: avgCalories, weeks, sleep: avgSleep, drinks: avgDrinks }, days, sleep);
@@ -935,7 +946,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     aggressive_cut: '#c084fc'
   };
 
-  chart.data.labels = labels;
+  chart.data.labels = activeSeries.dates.map(formatShortDate);
   chart.data.datasets = [
     ...(!isCurrentEquivalent ? [{
       label: currentSeries.label,
