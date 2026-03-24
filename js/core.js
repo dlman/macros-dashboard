@@ -118,6 +118,7 @@ const { data, sleepData } = window.dashboardData;
 // Flatten all days
 const allDays = [...data.Jan, ...data.Feb, ...data.March];
 const allDates = allDays.map(d => d.date);
+const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
 const macroByDate = {};
 allDays.forEach(d => { macroByDate[d.date] = d; });
 const sleepByDate = {};
@@ -127,6 +128,15 @@ const liftDates = new Set(allDays.filter(d => d.lifting === 'Y').map(d => d.date
 
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+function defaultRangeEndIndex() {
+  if (!allDates.length) return 0;
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12);
+  const yesterdayIso = yesterday.toISOString().slice(0, 10);
+  let idx = allDates.findLastIndex(date => date <= yesterdayIso);
+  if (idx < 0) idx = allDates.length - 1;
+  return idx;
+}
 function dayLabel(d) { return d.date.slice(5); }
 function avg(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0; }
 function avgOrNull(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null; }
@@ -494,7 +504,7 @@ function generateWeeklyReport() {
 
 // Date range state
 let rangeStartIdx = 0;
-let rangeEndIdx = allDates.length - 1;
+let rangeEndIdx = defaultRangeEndIndex();
 let compareMode = persistedState.compareMode || 'equal_span';
 let eventFilter = persistedState.eventFilter || 'all';
 let activeTab = persistedState.activeTab || 'overview';

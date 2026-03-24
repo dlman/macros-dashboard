@@ -215,8 +215,8 @@ function updateRangeLabels() {
   const rsde = document.getElementById('rangeStartDate');
   const rede = document.getElementById('rangeEndDate');
   if (rsde && rede && allDates.length) {
-    rsde.value = allDates[Math.min(rangeStartIdx, allDates.length - 1)] || '';
-    rede.value = allDates[Math.min(rangeEndIdx, allDates.length - 1)] || '';
+    rsde.value = allDates[Math.min(s, allDates.length - 1)] || '';
+    rede.value = allDates[Math.min(e, allDates.length - 1)] || '';
   }
 }
 rangeStartEl.addEventListener('input', () => { updateRangeLabels(); refreshDashboard(); persistUiState(); });
@@ -247,8 +247,9 @@ eventFilterEl.addEventListener('change', () => {
 // Date picker sync
 const rangeStartDateEl = document.getElementById('rangeStartDate');
 const rangeEndDateEl = document.getElementById('rangeEndDate');
+const defaultEndIdx = defaultRangeEndIndex();
 if (rangeStartDateEl && rangeEndDateEl) {
-  rangeEndDateEl.value = allDates[allDates.length - 1] || '2026-03-24';
+  rangeEndDateEl.value = allDates[defaultEndIdx] || '2026-03-23';
   rangeStartDateEl.value = allDates[0] || '2026-01-01';
   rangeStartDateEl.min = allDates[0] || '2026-01-01';
   rangeStartDateEl.max = allDates[allDates.length - 1] || '2026-03-24';
@@ -985,7 +986,12 @@ renderAnnotations();
 syncSettingsForm();
 applyTheme(themePreference);
 if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
-if (typeof persistedState.rangeEnd === 'number') rangeEndEl.value = persistedState.rangeEnd;
+if (typeof persistedState.rangeEnd === 'number') {
+  const persistedEndDate = allDates[persistedState.rangeEnd];
+  rangeEndEl.value = persistedEndDate === LEGACY_DEFAULT_RANGE_END ? defaultEndIdx : persistedState.rangeEnd;
+} else {
+  rangeEndEl.value = defaultEndIdx;
+}
 if (typeof persistedState.compareMode === 'string') compareMode = persistedState.compareMode;
 if (typeof persistedState.eventFilter === 'string') eventFilter = persistedState.eventFilter;
 if (typeof persistedState.activeTab === 'string') activeTab = persistedState.activeTab;
