@@ -356,13 +356,17 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   allCharts.heroSleepChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
+  const totalRangeDeficit = filteredDays.reduce((sum, day) => sum + (estimatedTDEE - effectiveCalories(day)), 0);
+  const avgDailyDeficit = filteredDays.length ? totalRangeDeficit / filteredDays.length : 0;
   const weightTrend = current.weightChange == null ? 'No weigh-in trend yet' : current.weightChange < 0 ? `Weight is trending down by ${weightValue(Math.abs(current.weightChange))} ${weightUnit()} across the range.` : `Weight is trending up by ${weightValue(Math.abs(current.weightChange))} ${weightUnit()} across the range.`;
   const sleepTrend = current.avgSleepPerf != null && previous.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}% sleep vs ${Math.round(previous.avgSleepPerf)}% in ${compareModeLabel()}.` : 'Sleep direction will appear here once both periods have sleep data.';
   const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Actual scale loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} expected from the logged deficit.` : '';
   document.getElementById('heroTitle').textContent = current.weightChange != null && current.weightChange < 0 ? 'Weight Trend and Recovery' : 'Range Trend Overview';
   document.getElementById('heroSubtitle').textContent = `${weightTrend} ${sleepTrend} ${realityTrend}`.trim();
   document.getElementById('heroCalValue').textContent = current.avgCalories != null ? energyLabel(current.avgCalories) : '—';
-  document.getElementById('heroCalSub').textContent = `${Math.round(current.calorieHitRate)}% of days at or under your calorie goal`;
+  document.getElementById('heroCalSub').textContent = filteredDays.length
+    ? `${totalRangeDeficit >= 0 ? '~' + energyLabel(Math.abs(totalRangeDeficit)) + ' below' : '~' + energyLabel(Math.abs(totalRangeDeficit)) + ' above'} maintenance across the range · ${avgDailyDeficit >= 0 ? '~' + energyLabel(Math.abs(avgDailyDeficit)) + '/day deficit' : '~' + energyLabel(Math.abs(avgDailyDeficit)) + '/day surplus'}`
+    : 'No intake data in the selected range';
   document.getElementById('heroSleepValue').textContent = current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—';
   document.getElementById('heroSleepSub').textContent = current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep with ${Math.round(current.sleepHitRate)}% target hit rate` : 'No sleep entries in the selected range';
   document.getElementById('heroPulseTitle').textContent = current.drinkNights === 0 ? 'No drink nights in range' : `${current.drinkNights} drink night${current.drinkNights === 1 ? '' : 's'}`;
@@ -1874,4 +1878,3 @@ document.querySelectorAll('#heatmapTabs .mtab').forEach(btn => {
     renderHeatmap();
   });
 });
-
