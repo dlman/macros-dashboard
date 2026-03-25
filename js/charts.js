@@ -402,15 +402,16 @@ function renderWeeklyReport() {
 function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   const weightDays = filteredDays.filter(d => d.weight);
   const weightVals = weightDays.map(d => weightValue(d.weight));
-  const weightRolling = rollingAvg(weightDays.map(d => d.weight), 7).map(v => v == null ? null : weightValue(v));
-  const weightBounds = calcAxisBounds(weightVals, useMetric ? 0.8 : 2);
+  const weightTrendPoints = stateSpaceWeightTrendPoints(filteredDays);
+  const filteredTrend = weightTrendPoints.map(point => weightValue(point.trendWeight));
+  const weightBounds = calcAxisBounds([...weightVals, ...filteredTrend], useMetric ? 0.8 : 2);
   allCharts.heroWeightChart.data.labels = weightDays.map(d => d.date.slice(5));
   allCharts.heroWeightChart.data.datasets[0].data = weightVals;
-  allCharts.heroWeightChart.data.datasets[1].data = weightRolling;
+  allCharts.heroWeightChart.data.datasets[1].data = filteredTrend;
   allCharts.heroWeightChart.options.scales.y.min = Math.floor(weightBounds.min);
   allCharts.heroWeightChart.options.scales.y.max = Math.ceil(weightBounds.max);
   allCharts.heroWeightChart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
-  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => ctx.datasetIndex === 0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
+  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => ctx.datasetIndex === 0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` Filtered trend: ${ctx.parsed.y} ${weightUnit()}`;
   allCharts.heroWeightChart.update();
 
   const calVals = filteredDays.map(d => energyValue(d.calories));
@@ -433,8 +434,8 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   const weightTrend = observedLoss == null
     ? 'No weigh-in trend yet.'
     : observedLoss >= 0
-      ? `Smoothed weight trend is down ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`
-      : `Smoothed weight trend is up ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`;
+      ? `Filtered weight trend is down ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`
+      : `Filtered weight trend is up ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`;
   const sleepTrend = current.avgSleepPerf != null && previous.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}% sleep vs ${Math.round(previous.avgSleepPerf)}% in ${compareModeLabel()}.` : 'Sleep direction will appear here once both periods have sleep data.';
   const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Observed trend loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} implied by the logged deficit.` : '';
   const lagTrend = lag.drinkSleepGap != null && lag.drinkSleepGap > 0 ? `Drink-following mornings are still costing about ${lag.drinkSleepGap.toFixed(0)} sleep-performance points.` : plateau.text;
@@ -483,10 +484,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-primary">
         <div class="eyebrow">30-Day Weight Pace</div>
         <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
-          <div class="sub">If the smoothed observed trend holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
+          <div class="sub">If the filtered observed trend holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Observed weigh-ins</span></div>
           <div class="confidence-pill ${weightProjection.confidence.cls}">${weightProjection.confidence.label}</div>
-          <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days · smoothed trend line</div>
+          <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days · state-space filtered trend</div>
         </div>
       `
       : `
@@ -522,12 +523,12 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       `,
     `
       <div class="forecast-card mobile-primary">
-        <div class="eyebrow">Estimated TDEE</div>
-        <div class="value">${energyLabel(estimatedTDEE)}</div>
-        <div class="sub">Current working maintenance estimate from recency-weighted effective intake and the smoothed weight trend.</div>
-        <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance</span></div>
+        <div class="eyebrow">Working TDEE Range</div>
+        <div class="value">${energyLabel(overallTDEEEnsemble.rangeLow)}–${energyLabel(overallTDEEEnsemble.rangeHigh)}</div>
+        <div class="sub">Maintenance likely sits in this band. Instead of forcing one exact number, this blends a conservative trend estimate with broader cut-wide context.</div>
+        <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance band</span></div>
         <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
-        <div class="tiny">Weighted intake: ~${energyLabel(overallTDEEProfile.weightedIntake)} · trend pace: ${weightLabel(Math.abs(overallTDEEProfile.weeklyLoss), 2)}/wk · range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
+        <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(overallTDEEEnsemble.working)}</div>
       </div>
     `,
     sleepProjection
@@ -1078,7 +1079,7 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 // =====================================================================
 // WATERFALL DEFICIT (uses estimated TDEE based on actual weight loss)
 // =====================================================================
-// Estimate TDEE from recency-weighted effective intake plus the smoothed weight trend.
+// Estimate TDEE from recency-weighted effective intake plus the state-space filtered weight trend.
 const DIET_BREAK_START = '2026-02-27';
 const DIET_BREAK_END = '2026-03-07';
 function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
@@ -1086,12 +1087,13 @@ const cuttingDays = allDays.filter(d => !isInDietBreak(d.date));
 const breakDays = allDays.filter(d => isInDietBreak(d.date));
 const overallTDEEProfile = estimateTDEEProfile(allDays);
 const cuttingTDEEProfile = estimateTDEEProfile(cuttingDays);
+const overallTDEEEnsemble = tdeeEnsembleProfile(allDays);
 const estimatedTDEE = overallTDEEProfile.maintenance;
 const cuttingTDEE = cuttingTDEEProfile.maintenance;
 const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
 const tdeeRange = {
-  low: Math.min(overallTDEEProfile.rangeLow, cuttingTDEEProfile.rangeLow),
-  high: Math.max(overallTDEEProfile.rangeHigh, cuttingTDEEProfile.rangeHigh)
+  low: Math.min(overallTDEEEnsemble.rangeLow, cuttingTDEEProfile.rangeLow),
+  high: Math.max(overallTDEEEnsemble.rangeHigh, cuttingTDEEProfile.rangeHigh)
 };
 
 let cumDeficit = 0;
@@ -1818,13 +1820,13 @@ function renderExploreDiagnostics() {
       {
         cls: 'good',
         title: 'Observed scale trend',
-        text: `${decomp.scaleLoss >= 0 ? 'Down' : 'Up'} ${weightLabel(Math.abs(decomp.scaleLoss))} on the smoothed trend across ${decomp.weightSpan} weigh-ins over ${decomp.daySpan} days.`
+        text: `${decomp.scaleLoss >= 0 ? 'Down' : 'Up'} ${weightLabel(Math.abs(decomp.scaleLoss))} on the filtered trend across ${decomp.weightSpan} weigh-ins over ${decomp.daySpan} days.`
       },
       {
         cls: Math.abs(decomp.modelGap ?? 0) <= 1 ? 'good' : 'warn',
         title: 'Logged deficit vs scale',
         text: decomp.expectedLoss != null
-          ? `Maintenance-gap math implies ${weightLabel(Math.abs(decomp.expectedLoss))} of ${decomp.expectedLoss >= 0 ? 'loss' : 'gain'}. The smoothed trend is ${decomp.modelGap >= 0 ? 'ahead by' : 'behind by'} ${weightLabel(Math.abs(decomp.modelGap || 0))}.`
+          ? `Maintenance-gap math implies ${weightLabel(Math.abs(decomp.expectedLoss))} of ${decomp.expectedLoss >= 0 ? 'loss' : 'gain'}. The filtered trend is ${decomp.modelGap >= 0 ? 'ahead by' : 'behind by'} ${weightLabel(Math.abs(decomp.modelGap || 0))}.`
           : 'Need logged calories across the range to compare deficit math with the scale.'
       },
       {
@@ -2033,7 +2035,7 @@ function runScenarioPlanner() {
   `).join('');
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)} from recency-weighted intake plus the smoothed weight trend, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimateTDEEProfile(rangeDays).maintenance)} from recency-weighted intake plus the state-space filtered weight trend, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
 }
 
 // =====================================================================
