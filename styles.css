@@ -177,6 +177,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .trust-inline { margin-top: 8px; }
 .card-header.with-meta { align-items: flex-start; }
 .card-heading { display: flex; flex-direction: column; gap: 8px; }
+.chart-note { font-size: 11px; line-height: 1.5; color: var(--text-faint); max-width: 720px; }
 .back-to-top { position: fixed; right: 18px; bottom: 18px; z-index: 90; border: 1px solid var(--border-card-hover); background: linear-gradient(135deg, rgba(15,23,42,0.92), rgba(30,41,59,0.92)); color: var(--text-primary); border-radius: 999px; padding: 10px 14px; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 14px 36px rgba(15,23,42,0.28); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity 0.18s, transform 0.18s; }
 .back-to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
 .tab-section-hidden { display: none !important; }
@@ -401,6 +402,69 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 /* ===== OVERLAY ===== */
 #overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 99; display: none; }
 #overlay.show { display: block; }
+#chartZoomOverlay { position: fixed; inset: 0; background: rgba(5, 9, 18, 0.84); z-index: 399; display: none; backdrop-filter: blur(4px); }
+#chartZoomOverlay.show { display: block; }
+#chartZoomModal {
+  position: fixed;
+  inset: 24px;
+  z-index: 400;
+  display: none;
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  border: 1px solid var(--border-card-hover);
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 28px 60px rgba(0,0,0,0.42);
+}
+#chartZoomModal.open { display: flex; flex-direction: column; gap: 12px; }
+#chartZoomModal .close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  color: var(--text-faint);
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.chart-zoom-copy { padding-right: 44px; }
+.chart-zoom-title { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px; }
+.chart-zoom-sub { margin-top: 4px; font-size: 11px; color: var(--text-faint); }
+.chart-zoom-frame {
+  flex: 1;
+  min-height: 0;
+  border-radius: 14px;
+  background: rgba(15,23,42,0.4);
+  border: 1px solid var(--border-card);
+  overflow: auto;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 10px;
+}
+#chartZoomFrame .chart-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+#chartZoomFrame .chart-wrapper.tall,
+#chartZoomFrame .chart-wrapper.medium,
+#chartZoomFrame .chart-wrapper.short {
+  height: 100%;
+}
+#chartZoomFrame canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+#chartZoomFrame .chart-wrapper[style] {
+  height: 100% !important;
+  max-height: none !important;
+}
+.chart-wrapper.zoomed-live {
+  margin: 0;
+}
 #settingsOverlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 199; display: none; }
 #settingsOverlay.show { display: block; }
 
@@ -616,6 +680,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .mobile-control-shell { margin-bottom: 12px; }
   .mobile-control-shell > summary,
   .mobile-detail-shell > summary { padding: 13px 14px; min-height: 46px; }
+  #chartZoomModal { inset: 10px; padding: 14px 14px 12px; border-radius: 16px; }
+  .chart-zoom-title { font-size: 14px; }
+  .chart-zoom-sub { font-size: 10px; }
+  .chart-note { font-size: 10px; }
   .tab-bar { margin-bottom: 12px; }
   .tab-btn { padding: 10px 14px; min-height: 42px; }
   .tab-chrome { margin-bottom: 12px; padding: 12px 14px; }

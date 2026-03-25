@@ -39,8 +39,8 @@
     <span style="color:var(--text-faint);font-size:12px;">to</span>
     <input type="date" id="rangeEndDate" class="range-date-input">
     <span class="range-label" id="rangeStartLabel" style="display:none;">Jan 1</span>
-    <input type="range" id="rangeStart" min="0" max="76" value="0" style="display:none;">
-    <input type="range" id="rangeEnd" min="0" max="76" value="76" style="display:none;">
+    <input type="range" id="rangeStart" min="0" max="82" value="0" style="display:none;">
+    <input type="range" id="rangeEnd" min="0" max="82" value="82" style="display:none;">
     <span class="range-label" id="rangeEndLabel" style="display:none;">Mar 24</span>
   </div>
 
@@ -241,6 +241,7 @@
             <span class="trust-pill measured">Measured DXA anchor</span>
             <span class="trust-pill estimated">Estimated between weigh-ins</span>
           </div>
+          <div class="chart-note" id="bodyCompRangeNote">Latest estimated body fat range will appear here once the selected range has weigh-ins.</div>
         </div>
       </div>
       <div class="chart-wrapper medium"><canvas id="bodyCompChart"></canvas></div>
@@ -556,6 +557,16 @@
 </div>
 
 <button class="back-to-top" id="backToTopBtn" aria-label="Back to top">↑ Top</button>
+
+<div id="chartZoomOverlay"></div>
+<div id="chartZoomModal" aria-hidden="true">
+  <button class="close-btn" id="closeChartZoom" aria-label="Close enlarged chart">✕</button>
+  <div class="chart-zoom-copy">
+    <div class="chart-zoom-title" id="chartZoomTitle">Chart</div>
+    <div class="chart-zoom-sub">Double tap a chart on mobile to enlarge it. Tap outside to close.</div>
+  </div>
+  <div class="chart-zoom-frame" id="chartZoomFrame"></div>
+</div>
 
 <!-- DAY DETAIL PANEL -->
 <div id="overlay"></div>

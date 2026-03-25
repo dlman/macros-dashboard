@@ -86,6 +86,90 @@ function closePanel() {
 document.getElementById('closePanel').addEventListener('click', closePanel);
 document.getElementById('overlay').addEventListener('click', closePanel);
 
+// =====================================================================
+// MOBILE CHART ZOOM
+// =====================================================================
+let lastChartTap = { id: null, time: 0 };
+let chartZoomState = null;
+
+function openChartZoom(canvas) {
+  if (!canvas || chartZoomState) return;
+  const title = document.getElementById('chartZoomTitle');
+  const frame = document.getElementById('chartZoomFrame');
+  const card = canvas.closest('.chart-card');
+  const wrapper = canvas.closest('.chart-wrapper');
+  if (!wrapper) return;
+  const label = card?.querySelector('h3')?.textContent?.trim() || 'Chart';
+  const parent = wrapper.parentNode;
+  const placeholder = document.createComment(`chart-zoom-placeholder:${canvas.id || label}`);
+  parent.insertBefore(placeholder, wrapper);
+  frame.appendChild(wrapper);
+  wrapper.classList.add('zoomed-live');
+  title.textContent = label;
+  chartZoomState = { wrapper, parent, placeholder, canvasId: canvas.id };
+  document.getElementById('chartZoomOverlay').classList.add('show');
+  document.getElementById('chartZoomModal').classList.add('open');
+  document.getElementById('chartZoomModal').setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => {
+    const chart = Chart.getChart(canvas);
+    if (chart) {
+      chart.resize();
+      chart.update('none');
+    }
+  });
+}
+
+function closeChartZoom() {
+  if (chartZoomState) {
+    const { wrapper, parent, placeholder, canvasId } = chartZoomState;
+    if (parent && placeholder?.parentNode === parent) {
+      parent.insertBefore(wrapper, placeholder);
+      placeholder.remove();
+    }
+    wrapper.classList.remove('zoomed-live');
+    const canvas = canvasId ? document.getElementById(canvasId) : wrapper.querySelector('canvas');
+    requestAnimationFrame(() => {
+      const chart = canvas ? Chart.getChart(canvas) : null;
+      if (chart) {
+        chart.resize();
+        chart.update('none');
+      }
+    });
+  }
+  chartZoomState = null;
+  document.getElementById('chartZoomFrame').innerHTML = '';
+  document.getElementById('chartZoomOverlay').classList.remove('show');
+  document.getElementById('chartZoomModal').classList.remove('open');
+  document.getElementById('chartZoomModal').setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 900px)').matches;
+}
+
+function attachChartZoomHandlers() {
+  document.querySelectorAll('.chart-card canvas').forEach(canvas => {
+    if (canvas.dataset.zoomBound === 'true') return;
+    canvas.dataset.zoomBound = 'true';
+    canvas.addEventListener('dblclick', () => openChartZoom(canvas));
+    canvas.addEventListener('touchend', () => {
+      if (!isMobileViewport()) return;
+      const now = Date.now();
+      if (lastChartTap.id === canvas.id && now - lastChartTap.time < 320) {
+        openChartZoom(canvas);
+        lastChartTap = { id: null, time: 0 };
+      } else {
+        lastChartTap = { id: canvas.id, time: now };
+      }
+    }, { passive: true });
+  });
+}
+
+document.getElementById('closeChartZoom').addEventListener('click', closeChartZoom);
+document.getElementById('chartZoomOverlay').addEventListener('click', closeChartZoom);
+
 // Navigate prev/next
 function navigateDay(direction) {
   if (!currentPanelDate) return;
@@ -101,7 +185,7 @@ document.getElementById('nextDay').addEventListener('click', () => navigateDay(1
 
 // Keyboard navigation
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closePanel(); closeSettings(); }
+  if (e.key === 'Escape') { closePanel(); closeSettings(); closeChartZoom(); }
   if (currentPanelDate) {
     if (e.key === 'ArrowLeft') navigateDay(-1);
     if (e.key === 'ArrowRight') navigateDay(1);
@@ -661,6 +745,14 @@ function updateBodyCompChart(days) {
   chart.options.scales.y2.min = Math.floor(leanBounds.min);
   chart.options.scales.y2.max = Math.ceil(leanBounds.max);
   chart.update();
+
+  const latestEstimated = [...bodyComp].reverse().find(d => !d.measured) || [...bodyComp].reverse().find(Boolean);
+  const bodyCompRangeNote = document.getElementById('bodyCompRangeNote');
+  if (bodyCompRangeNote) {
+    bodyCompRangeNote.textContent = latestEstimated
+      ? `Latest estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
+      : 'Latest estimated body fat range will appear here once the selected range has weigh-ins.';
+  }
 }
 
 function updateCaloriesChart(months) {
@@ -1069,6 +1161,7 @@ function refreshDashboard() {
   safe(() => updateFoodFreqChart(filteredDays), 'Food Freq Chart');
   safe(() => updateSleepCharts(filteredSleep), 'Sleep Charts');
   safe(() => updateInsightCharts(filteredSleep), 'Insight Charts');
+  attachChartZoomHandlers();
   const scenarioDefaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
   if (!scenarioFormInitialized) {
     setScenarioInputs(scenarioDefaults.current);
@@ -1088,13 +1181,16 @@ function refreshDashboard() {
 // =====================================================================
 document.title = `Macros/Sleep Dashboard · Build ${BUILD_VERSION}`;
 document.getElementById('buildStamp').textContent = `Build ${BUILD_VERSION}`;
+attachChartZoomHandlers();
 renderAnnotations();
 syncSettingsForm();
 applyTheme(themePreference);
+rangeStartEl.max = Math.max(0, allDates.length - 1);
+rangeEndEl.max = Math.max(0, allDates.length - 1);
 if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
 if (typeof persistedState.rangeEnd === 'number') {
-  // Always use the later of persisted end or yesterday, so stale saved state doesn't pin the range to old data
-  rangeEndEl.value = Math.max(persistedState.rangeEnd, defaultEndIdx);
+  const persistedEndDate = allDates[persistedState.rangeEnd] || null;
+  rangeEndEl.value = persistedEndDate === LEGACY_DEFAULT_RANGE_END ? defaultEndIdx : persistedState.rangeEnd;
 } else {
   rangeEndEl.value = defaultEndIdx;
 }
