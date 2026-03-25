@@ -620,7 +620,11 @@ function updateBodyCompChart(days) {
   const fatHighVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatHigh));
   chart.data.labels = bodyComp.map(d => d.date.slice(5));
   chart.data.datasets[0].data = fatHighVals;
+  chart.data.datasets[0].pointHoverRadius = 0;
+  chart.data.datasets[0].pointHitRadius = 0;
   chart.data.datasets[1].data = fatLowVals;
+  chart.data.datasets[1].pointHoverRadius = 0;
+  chart.data.datasets[1].pointHitRadius = 0;
   chart.data.datasets[2].data = fatVals;
   chart.data.datasets[2].pointRadius = bodyComp.map(d => d.measured ? 0 : 4);
   chart.data.datasets[3].data = leanVals;
@@ -647,6 +651,7 @@ function updateBodyCompChart(days) {
       d.measured ? '' : ` Total: ${weightLabel(d.weight)}`
     ].filter(Boolean) : [];
   };
+  chart.options.interaction = { mode: 'index', intersect: false, axis: 'x' };
   chart.options.scales.y.title.text = `Fat Mass (${weightUnit()})`;
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.scales.y.min = Math.floor(fatBounds.min);

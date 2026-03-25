@@ -861,6 +861,8 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
         borderColor: 'rgba(248,113,113,0)',
         backgroundColor: 'rgba(248,113,113,0.08)',
         pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         borderWidth: 0,
         fill: false,
         yAxisID: 'y'
@@ -871,6 +873,8 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
         borderColor: 'rgba(248,113,113,0)',
         backgroundColor: 'rgba(248,113,113,0.08)',
         pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         borderWidth: 0,
         fill: '-1',
         yAxisID: 'y'
@@ -907,6 +911,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
   },
   options: {
     ...chartDefaults(),
+    interaction: { mode: 'index', intersect: false, axis: 'x' },
     plugins: { ...chartDefaults().plugins,
       legend: {
         display: true,
