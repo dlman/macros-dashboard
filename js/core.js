@@ -280,11 +280,9 @@ function monthlyProgression(filtered) {
     const drinkDelta = cur.drinkNights - prev.drinkNights;
 
     const parts = [];
-    if (Math.abs(calDelta) > 30) parts.push(`intake ${calDelta < 0 ? 'dropped' : 'rose'} by ${energyLabel(Math.abs(calDelta))}/day`);
-    if (Math.abs(proDelta) > 5) parts.push(`protein adherence ${proDelta > 0 ? 'improved' : 'slipped'} from ${prev.proteinHit}% to ${cur.proteinHit}%`);
-    if (Math.abs(liftDelta) > 0.3) parts.push(`lift frequency ${liftDelta > 0 ? 'up' : 'down'} to ${cur.liftRate}x/wk`);
-    if (drinkDelta !== 0) parts.push(`drink nights ${drinkDelta < 0 ? 'dropped' : 'increased'} by ${Math.abs(drinkDelta)}`);
-    if (cur.wChange != null) parts.push(`scale moved ${cur.wChange < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(cur.wChange), 1)}`);
+    if (cur.wChange != null) parts.push(`scale ${cur.wChange < 0 ? '↓' : '↑'} ${weightLabel(Math.abs(cur.wChange), 1)}`);
+    if (Math.abs(calDelta) > 30) parts.push(`intake ${calDelta < 0 ? '↓' : '↑'} ${energyLabel(Math.abs(calDelta))}/day`);
+    if (Math.abs(proDelta) > 5) parts.push(`protein ${proDelta > 0 ? '↑' : '↓'} ${prev.proteinHit}→${cur.proteinHit}%`);
 
     if (parts.length) {
       trends.push(`<strong>${prev.label} → ${cur.label}:</strong> ${parts.join(', ')}.`);
@@ -301,6 +299,168 @@ function consistencyScore(days, key) {
   const stdDev = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
   const cv = stdDev / mean;
   return Math.round(Math.max(0, Math.min(100, (1 - cv) * 100)));
+}
+
+function dayOfWeekMacroAverages(days) {
+  const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const buckets = [[], [], [], [], [], [], []];
+  days.forEach(d => {
+    const idx = (new Date(d.date + 'T12:00:00').getDay() + 6) % 7;
+    buckets[idx].push(d);
+  });
+  return buckets.map((group, i) => ({
+    day: DOW_LABELS[i],
+    avgCal: group.length ? Math.round(avg(group, 'calories')) : null,
+    avgPro: group.length ? Math.round(avg(group, 'protein')) : null,
+    avgCarbs: group.length ? Math.round(avg(group, 'carbs')) : null,
+    avgFat: group.length ? Math.round(avg(group, 'fat')) : null,
+    drinkPct: group.length ? Math.round(group.filter(d => d.drinks).length / group.length * 100) : null,
+    liftPct: group.length ? Math.round(group.filter(d => d.lifting === 'Y').length / group.length * 100) : null,
+    count: group.length
+  }));
+}
+
+// Carb/fat ratio → sleep quality (same-day and lag-1)
+function macroSleepCorrelations(days, sleep) {
+  const pairs = [];
+  days.forEach(d => {
+    if (!d.calories || d.calories === 0) return;
+    const s = sleepByDate[d.date];
+    if (!s || s.perf == null) return;
+    pairs.push({
+      carbPct: (d.carbs * 4) / d.calories,
+      fatPct: (d.fat * 9) / d.calories,
+      proteinPct: (d.protein * 4) / d.calories,
+      calories: d.calories,
+      perf: s.perf
+    });
+  });
+  if (pairs.length < 5) return null;
+  return {
+    carbPctVsPerf: pearson(pairs.map(p => p.carbPct), pairs.map(p => p.perf)),
+    fatPctVsPerf: pearson(pairs.map(p => p.fatPct), pairs.map(p => p.perf)),
+    proteinPctVsPerf: pearson(pairs.map(p => p.proteinPct), pairs.map(p => p.perf)),
+    caloriesVsPerf: pearson(pairs.map(p => p.calories), pairs.map(p => p.perf)),
+    sampleSize: pairs.length,
+    // Quartile analysis for carbs
+    carbQuartiles: (() => {
+      const sorted = [...pairs].sort((a, b) => a.carbPct - b.carbPct);
+      const q = Math.floor(sorted.length / 4);
+      return [
+        { label: 'Low carb', range: `${Math.round(sorted[0].carbPct * 100)}–${Math.round(sorted[q - 1]?.carbPct * 100 || 0)}%`, avgPerf: Math.round(sorted.slice(0, q).reduce((s, p) => s + p.perf, 0) / q) },
+        { label: 'High carb', range: `${Math.round(sorted[sorted.length - q]?.carbPct * 100 || 0)}–${Math.round(sorted[sorted.length - 1].carbPct * 100)}%`, avgPerf: Math.round(sorted.slice(-q).reduce((s, p) => s + p.perf, 0) / q) }
+      ];
+    })()
+  };
+}
+
+// Multi-day alcohol rebound (calorie lag at day+1, +2, +3)
+function alcoholRebound(days) {
+  const drinkDayDates = days.filter(d => d.drinks).map(d => d.date);
+  const cleanDayDates = days.filter(d => !d.drinks).map(d => d.date);
+  if (!drinkDayDates.length || !cleanDayDates.length) return null;
+
+  function lagCalories(sourceDates, lag) {
+    const vals = sourceDates.map(date => {
+      let d = date;
+      for (let i = 0; i < lag; i++) d = nextDayStr(d);
+      return macroByDate[d];
+    }).filter(Boolean).map(d => effectiveCalories(d));
+    return vals.length >= 2 ? { avg: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length), n: vals.length } : null;
+  }
+
+  function lagSleep(sourceDates, lag) {
+    const vals = sourceDates.map(date => {
+      let d = date;
+      for (let i = 0; i < lag; i++) d = nextDayStr(d);
+      return sleepByDate[d];
+    }).filter(Boolean).map(s => s.perf);
+    return vals.length >= 2 ? { avg: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length), n: vals.length } : null;
+  }
+
+  return [1, 2, 3].map(lag => {
+    const drinkLag = lagCalories(drinkDayDates, lag);
+    const cleanLag = lagCalories(cleanDayDates, lag);
+    const drinkSleepLag = lagSleep(drinkDayDates, lag);
+    const cleanSleepLag = lagSleep(cleanDayDates, lag);
+    return {
+      lag,
+      drinkNextCal: drinkLag,
+      cleanNextCal: cleanLag,
+      calDelta: drinkLag && cleanLag ? drinkLag.avg - cleanLag.avg : null,
+      drinkNextSleep: drinkSleepLag,
+      cleanNextSleep: cleanSleepLag,
+      sleepDelta: drinkSleepLag && cleanSleepLag ? drinkSleepLag.avg - cleanSleepLag.avg : null
+    };
+  });
+}
+
+// Bedtime quintile optimization
+function bedtimeQuintileAnalysis(sleep) {
+  if (sleep.length < 10) return null;
+  // Normalize so PM hours (e.g. 22 = 10 PM) sort before AM hours (e.g. 2 AM)
+  const normBedtime = h => h > 12 ? h - 24 : h; // 22→-2, 23→-1, 0→0, 1→1, 4→4
+  const sorted = [...sleep].sort((a, b) => normBedtime(a.bedtime_hour) - normBedtime(b.bedtime_hour));
+  const qSize = Math.floor(sorted.length / 4);
+  if (qSize < 2) return null;
+  const quartiles = [
+    sorted.slice(0, qSize),
+    sorted.slice(qSize, qSize * 2),
+    sorted.slice(qSize * 2, qSize * 3),
+    sorted.slice(qSize * 3)
+  ];
+  const formatHour = h => {
+    const hr24 = Math.floor(h % 24);
+    const min = Math.round((h % 1) * 60) % 60;
+    const ampm = hr24 >= 12 ? 'PM' : 'AM';
+    const hr12 = hr24 === 0 ? 12 : hr24 > 12 ? hr24 - 12 : hr24;
+    return `${hr12}:${min.toString().padStart(2, '0')} ${ampm}`;
+  };
+  return quartiles.map((group, i) => {
+    const hours = group.map(d => d.bedtime_hour > 12 ? d.bedtime_hour - 24 : d.bedtime_hour);
+    return {
+      quartile: i + 1,
+      label: ['Earliest', 'Early-mid', 'Late-mid', 'Latest'][i],
+      hourRange: `${formatHour(group[0].bedtime_hour)}–${formatHour(group[group.length - 1].bedtime_hour)}`,
+      avgPerf: Math.round(group.reduce((s, d) => s + d.perf, 0) / group.length),
+      avgHours: +(group.reduce((s, d) => s + d.hours, 0) / group.length).toFixed(1),
+      count: group.length
+    };
+  });
+}
+
+// Adherence momentum — weekly trend within months
+function adherenceMomentum(days) {
+  if (days.length < 14) return null;
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) {
+    const week = days.slice(i, i + 7);
+    if (week.length < 3) continue;
+    weeks.push({
+      weekNum: weeks.length + 1,
+      startDate: week[0].date.slice(5),
+      endDate: week[week.length - 1].date.slice(5),
+      avgCal: Math.round(avg(week, 'calories')),
+      calHitRate: Math.round(week.filter(d => d.calories <= goals.calories).length / week.length * 100),
+      proHitRate: Math.round(week.filter(hitProteinFloor).length / week.length * 100),
+      consistency: consistencyScore(week, 'calories'),
+      days: week.length
+    });
+  }
+  if (weeks.length < 2) return null;
+  const calHitSlope = weeks.length >= 3
+    ? linearRegression(weeks.map((_, i) => i), weeks.map(w => w.calHitRate)).slope
+    : weeks[weeks.length - 1].calHitRate - weeks[0].calHitRate;
+  const proHitSlope = weeks.length >= 3
+    ? linearRegression(weeks.map((_, i) => i), weeks.map(w => w.proHitRate)).slope
+    : weeks[weeks.length - 1].proHitRate - weeks[0].proHitRate;
+  return {
+    weeks,
+    calHitTrend: calHitSlope > 2 ? 'improving' : calHitSlope < -2 ? 'declining' : 'stable',
+    proHitTrend: proHitSlope > 2 ? 'improving' : proHitSlope < -2 ? 'declining' : 'stable',
+    calHitSlope: +calHitSlope.toFixed(1),
+    proHitSlope: +proHitSlope.toFixed(1)
+  };
 }
 
 function foodFrequency(days = allDays) {
@@ -1352,14 +1512,19 @@ function estimateTDEEProfile(days = allDays) {
   const spanDays = Math.max(1, Math.round(xArr[xArr.length - 1]));
   const weeklyLoss = -reg.slope * 7;
   const maintenance = Math.round(weightedIntake + ((-reg.slope) * 3500));
+  // Penalize confidence when weight noise overwhelms the actual signal
+  const noiseToSignal = Math.abs(reg.slope) > 0.001
+    ? Math.abs(fit.residualStdDev || 0) / Math.abs(reg.slope)
+    : 10;
+  const signalQuality = Math.max(0.3, Math.min(1, 1 - (noiseToSignal / 20)));
   const confidenceScore = Math.max(
     0.2,
     Math.min(
       0.96,
-      (Math.min(weightPoints.length, 14) / 14) * 0.35 +
+      ((Math.min(weightPoints.length, 14) / 14) * 0.35 +
       (Math.min(spanDays, 70) / 70) * 0.3 +
       Math.max(0, 1 - ((fit.residualStdDev || 0) / 1.8)) * 0.2 +
-      (fit.r2 || 0) * 0.15
+      (fit.r2 || 0) * 0.15) * signalQuality
     )
   );
   const uncertainty = Math.round(Math.max(95, 235 - (confidenceScore * 110) + ((fit.residualStdDev || 0) * 55)));

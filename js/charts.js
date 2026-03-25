@@ -212,6 +212,38 @@ function renderStatCards() {
   } else {
     progressionEl.style.display = 'none';
   }
+
+  // Day-of-week macro patterns + adherence momentum → compact badges
+  const dowEl = document.getElementById('dowMacroInsight');
+  if (dowEl) {
+    const dowMacros = dayOfWeekMacroAverages(allFilteredDays);
+    const validDays = dowMacros.filter(d => d.avgCal != null && d.count >= 2);
+    const momentum = adherenceMomentum(allFilteredDays);
+    const badges = [];
+
+    if (validDays.length >= 5) {
+      const highest = validDays.reduce((a, b) => (a.avgCal || 0) > (b.avgCal || 0) ? a : b);
+      const lowest = validDays.reduce((a, b) => (a.avgCal || 0) < (b.avgCal || 0) ? a : b);
+      const drinkDays = validDays.filter(d => (d.drinkPct || 0) > 30).map(d => d.day);
+      const dowTitle = validDays.map(d => `${d.day}: ${d.avgCal} cal · ${d.avgPro}g pro`).join('\n');
+      badges.push(`<div class="badge amber" title="${dowTitle}"><strong>${highest.day} ${energyLabel(highest.avgCal)} · ${lowest.day} ${energyLabel(lowest.avgCal)}</strong>Highest vs lowest intake day</div>`);
+      if (drinkDays.length) badges.push(`<div class="badge rose"><strong>${drinkDays.join(', ')}</strong>Drink nights cluster</div>`);
+    }
+
+    if (momentum) {
+      const calIcon = momentum.calHitTrend === 'improving' ? '📈' : momentum.calHitTrend === 'declining' ? '📉' : '➡️';
+      const proIcon = momentum.proHitTrend === 'improving' ? '📈' : momentum.proHitTrend === 'declining' ? '📉' : '➡️';
+      const weekTitle = momentum.weeks.map(w => `Wk${w.weekNum}: ${w.calHitRate}% cal · ${w.proHitRate}% pro`).join('\n');
+      badges.push(`<div class="badge blue" title="${weekTitle}"><strong>${calIcon} Cal ${momentum.calHitTrend} · ${proIcon} Pro ${momentum.proHitTrend}</strong>Adherence momentum (wk-over-wk)</div>`);
+    }
+
+    if (badges.length) {
+      dowEl.innerHTML = badges.join('');
+      dowEl.style.display = '';
+    } else {
+      dowEl.style.display = 'none';
+    }
+  }
 }
 
 // Highlights & Streaks
@@ -779,6 +811,55 @@ function renderSleepInsights() {
       bottleneckEl.innerHTML = `<div class="badge amber" style="max-width:100%;"><strong>Recovery Bottleneck: ${weakest.name} (avg ${weakest.avg}%)</strong>Your weakest recovery component is ${weakest.name} at ${weakest.avg}% average, while ${strongest.name} leads at ${strongest.avg}%. Focus on improving ${weakest.name} for the biggest recovery gains.</div>`;
     } else {
       bottleneckEl.innerHTML = '';
+    }
+  }
+
+  // Macro ratio → sleep correlation
+  const macroSleepEl = document.getElementById('macroSleepInsight');
+  if (macroSleepEl) {
+    const filteredDays = getFilteredDays();
+    const msc = macroSleepCorrelations(filteredDays, filteredSleep);
+    if (msc) {
+      const strongest = [
+        { label: 'Carb %', r: msc.carbPctVsPerf },
+        { label: 'Fat %', r: msc.fatPctVsPerf },
+        { label: 'Protein %', r: msc.proteinPctVsPerf },
+        { label: 'Total calories', r: msc.caloriesVsPerf }
+      ].sort((a, b) => Math.abs(b.r) - Math.abs(a.r))[0];
+      const cq = msc.carbQuartiles;
+      macroSleepEl.innerHTML = `<div class="badge blue" style="max-width:100%;"><strong>Macro → Sleep: ${strongest.label} has strongest link (r = ${strongest.r.toFixed(2)})</strong>Carb % vs sleep perf: r = ${msc.carbPctVsPerf.toFixed(2)} · Fat %: r = ${msc.fatPctVsPerf.toFixed(2)} · Protein %: r = ${msc.proteinPctVsPerf.toFixed(2)} · Total cal: r = ${msc.caloriesVsPerf.toFixed(2)}. ${cq[0].label} days (${cq[0].range}): ${cq[0].avgPerf}% avg sleep · ${cq[1].label} days (${cq[1].range}): ${cq[1].avgPerf}% avg sleep. (n=${msc.sampleSize})</div>`;
+    } else {
+      macroSleepEl.innerHTML = '';
+    }
+  }
+
+  // Multi-day alcohol rebound
+  const reboundEl = document.getElementById('alcoholReboundInsight');
+  if (reboundEl) {
+    const filteredDays = getFilteredDays();
+    const rebound = alcoholRebound(filteredDays);
+    if (rebound && rebound.some(r => r.calDelta != null)) {
+      const lines = rebound.filter(r => r.calDelta != null).map(r =>
+        `Day+${r.lag}: ${r.calDelta > 0 ? '+' : ''}${energyLabel(r.calDelta)} cal (n=${r.drinkNextCal.n}/${r.cleanNextCal.n})${r.sleepDelta != null ? ` · ${r.sleepDelta > 0 ? '+' : ''}${r.sleepDelta} pts sleep` : ''}`
+      ).join(' · ');
+      const maxLag = rebound.filter(r => r.calDelta != null).sort((a, b) => Math.abs(b.calDelta) - Math.abs(a.calDelta))[0];
+      reboundEl.innerHTML = `<div class="badge rose" style="max-width:100%;"><strong>Alcohol Rebound: biggest calorie impact at day+${maxLag.lag} (${maxLag.calDelta > 0 ? '+' : ''}${energyLabel(maxLag.calDelta)})</strong>${lines}. Positive = more calories after drink nights vs clean nights.</div>`;
+    } else {
+      reboundEl.innerHTML = '';
+    }
+  }
+
+  // Bedtime quintile optimization
+  const bedtimeQEl = document.getElementById('bedtimeQuintileInsight');
+  if (bedtimeQEl) {
+    const quartiles = bedtimeQuintileAnalysis(filteredSleep);
+    if (quartiles) {
+      const best = quartiles.reduce((a, b) => a.avgPerf > b.avgPerf ? a : b);
+      const worst = quartiles.reduce((a, b) => a.avgPerf < b.avgPerf ? a : b);
+      const qText = quartiles.map(q => `${q.label} (${q.hourRange}): ${q.avgPerf}% · ${q.avgHours}h (n=${q.count})`).join(' · ');
+      bedtimeQEl.innerHTML = `<div class="badge green" style="max-width:100%;"><strong>Optimal Bedtime: ${best.hourRange} → ${best.avgPerf}% avg sleep</strong>${qText}. Your best sleep happens in the "${best.label}" window; "${worst.label}" (${worst.hourRange}) averages only ${worst.avgPerf}%.</div>`;
+    } else {
+      bedtimeQEl.innerHTML = '';
     }
   }
 }
