@@ -463,6 +463,53 @@ function adherenceMomentum(days) {
   };
 }
 
+// Deficit-to-scale lag: cross-correlate daily deficit with weight change at lags 1–7
+function deficitToScaleLag(days) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 10) return null;
+  // Build a date→deficit map and date→weight-change map
+  const deficitByDate = {};
+  days.forEach(d => { deficitByDate[d.date] = estimatedTDEE - effectiveCalories(d); });
+  const weightChangeByDate = {};
+  for (let i = 1; i < weightDays.length; i++) {
+    weightChangeByDate[weightDays[i].date] = weightDays[i].weight - weightDays[i - 1].weight;
+  }
+  const results = [];
+  for (let lag = 1; lag <= 7; lag++) {
+    const pairs = [];
+    Object.entries(weightChangeByDate).forEach(([date, wChange]) => {
+      // Find the deficit from `lag` days before this weigh-in
+      let d = date;
+      for (let i = 0; i < lag; i++) d = prevDay(d);
+      if (deficitByDate[d] != null) {
+        pairs.push({ deficit: deficitByDate[d], wChange });
+      }
+    });
+    if (pairs.length >= 5) {
+      const r = pearson(pairs.map(p => p.deficit), pairs.map(p => p.wChange));
+      results.push({ lag, r: +r.toFixed(3), n: pairs.length });
+    }
+  }
+  if (!results.length) return null;
+  const strongest = results.reduce((a, b) => Math.abs(a.r) > Math.abs(b.r) ? a : b);
+  return { lags: results, strongest };
+}
+
+// Rolling adherence rate: 7-day rolling % of days hitting calorie target
+function rollingAdherence(days, window = 7) {
+  if (days.length < window) return null;
+  const calHit = [];
+  const proHit = [];
+  const labels = [];
+  for (let i = window - 1; i < days.length; i++) {
+    const slice = days.slice(i - window + 1, i + 1);
+    calHit.push(Math.round(slice.filter(d => d.calories <= goals.calories).length / slice.length * 100));
+    proHit.push(Math.round(slice.filter(hitProteinFloor).length / slice.length * 100));
+    labels.push(days[i].date.slice(5));
+  }
+  return { labels, calHit, proHit, window };
+}
+
 function foodFrequency(days = allDays) {
   const freq = {};
   days.forEach(d => {

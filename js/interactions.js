@@ -915,6 +915,64 @@ function updateLiftRestChart(days) {
   chart.update();
 }
 
+function updateAdherenceChart(days) {
+  const chart = allCharts.adherenceChart;
+  const adh = rollingAdherence(days);
+  if (adh) {
+    chart.data.labels = adh.labels;
+    chart.data.datasets[0].data = adh.calHit;
+    chart.data.datasets[1].data = adh.proHit;
+  } else {
+    chart.data.labels = [];
+    chart.data.datasets[0].data = [];
+    chart.data.datasets[1].data = [];
+  }
+  chart.update();
+}
+
+function renderDeficitLagInsight(days) {
+  const el = document.getElementById('deficitLagInsight');
+  if (!el) return;
+  const lag = deficitToScaleLag(days);
+  if (!lag) { el.innerHTML = ''; return; }
+  const peak = lag.strongest;
+  // Convert r to a "signal strength" 0–100 for intuition (|r| of 0.3+ is strong for noisy bio data)
+  const strength = Math.min(100, Math.round(Math.abs(peak.r) / 0.3 * 100));
+  const strengthLabel = strength >= 80 ? 'Strong' : strength >= 40 ? 'Moderate' : 'Weak';
+  const strengthColor = strength >= 80 ? 'var(--col-green)' : strength >= 40 ? 'var(--col-amber)' : 'var(--col-red)';
+
+  // Build a simple timeline visualization
+  const dotsHtml = lag.lags.map(l => {
+    const isStrongest = l.lag === peak.lag;
+    const opacity = Math.max(0.15, Math.abs(l.r) / 0.3);
+    const size = isStrongest ? 32 : 20;
+    const bg = isStrongest ? 'rgba(251,191,36,0.9)' : `rgba(100,116,139,${opacity})`;
+    const border = isStrongest ? '2px solid rgba(251,191,36,1)' : '2px solid transparent';
+    const labelColor = isStrongest ? '#fbbf24' : 'var(--text-faint)';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:${border};"></div>
+      <span style="font-size:11px;color:${labelColor};font-weight:${isStrongest ? '600' : '400'};">${l.lag}d</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="padding:14px 16px;border-radius:10px;background:var(--card-bg);font-size:13px;">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">
+        <strong>When does a deficit show on the scale?</strong>
+        <span style="color:${strengthColor};font-size:12px;">${strengthLabel} signal</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:2px;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--text-faint);margin-right:6px;">Deficit day</span>
+        <div style="flex:1;display:flex;align-items:center;justify-content:space-around;position:relative;">
+          <div style="position:absolute;top:50%;left:0;right:0;height:2px;background:var(--border);transform:translateY(-50%);z-index:0;"></div>
+          ${dotsHtml}
+        </div>
+        <span style="font-size:11px;color:var(--text-faint);margin-left:6px;">Scale</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);">Your deficit takes about <strong>${peak.lag} day${peak.lag > 1 ? 's' : ''}</strong> to show up on the scale. Don't read too much into weigh-ins sooner than that.</div>
+    </div>`;
+}
+
 function updateFoodFreqChart(days) {
   const chart = allCharts.foodFreqChart;
   const foodFreqs = foodFrequency(days).slice(0, 20);
@@ -1158,6 +1216,8 @@ function refreshDashboard() {
   safe(() => updateDonutCharts(months), 'Donut Charts');
   safe(() => updateSimpleMonthBars(months), 'Month Bars');
   safe(() => updateLiftRestChart(filteredDays), 'Lift/Rest Chart');
+  safe(() => updateAdherenceChart(filteredDays), 'Adherence Chart');
+  safe(() => renderDeficitLagInsight(filteredDays), 'Deficit Lag');
   safe(() => updateFoodFreqChart(filteredDays), 'Food Freq Chart');
   safe(() => updateSleepCharts(filteredSleep), 'Sleep Charts');
   safe(() => updateInsightCharts(filteredSleep), 'Insight Charts');

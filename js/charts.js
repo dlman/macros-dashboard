@@ -1409,6 +1409,56 @@ allCharts.liftRestChart = new Chart(document.getElementById('liftRestChart'), {
 });
 
 // =====================================================================
+// ROLLING ADHERENCE CHART
+// =====================================================================
+const initAdherence = rollingAdherence(allDays);
+allCharts.adherenceChart = new Chart(document.getElementById('adherenceChart'), {
+  type: 'line',
+  data: {
+    labels: initAdherence ? initAdherence.labels : [],
+    datasets: [
+      {
+        label: 'Calorie goal hit %',
+        data: initAdherence ? initAdherence.calHit : [],
+        borderColor: 'rgba(251,191,36,0.9)',
+        backgroundColor: 'rgba(251,191,36,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2
+      },
+      {
+        label: 'Protein floor hit %',
+        data: initAdherence ? initAdherence.proHit : [],
+        borderColor: 'rgba(52,211,153,0.9)',
+        backgroundColor: 'rgba(52,211,153,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2
+      }
+    ]
+  },
+  options: {
+    ...chartDefaults(),
+    scales: {
+      x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 12 } },
+      y: { ...chartDefaults().scales.y, min: 0, max: 100, ticks: { ...TICK(), callback: v => v + '%' } }
+    },
+    plugins: {
+      ...chartDefaults().plugins,
+      legend: { display: true, labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 } },
+      tooltip: {
+        ...chartDefaults().plugins.tooltip,
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%`
+        }
+      }
+    }
+  }
+});
+
+// =====================================================================
 // FOOD FREQUENCY CHART
 // =====================================================================
 const foodFreqs = foodFrequency().slice(0, 20);
