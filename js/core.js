@@ -200,10 +200,28 @@ function rollingAvg(arr, window) {
 // Recovery score: configurable weights
 let recoveryWeights = { sleep: 0.4, efficiency: 0.2, resp: 0.2, drink: 0.2 };
 function recoveryScore(sleepDay) {
+  if (!sleepDay || sleepDay.perf == null || sleepDay.efficiency == null) return null;
   const prev = prevDay(sleepDay.date);
   const drinkPenalty = drinkDates.has(prev) ? 0 : 100;
-  const respNorm = Math.max(0, Math.min(100, (20 - sleepDay.resp) / (20 - 13) * 100));
+  const resp = sleepDay.resp != null ? sleepDay.resp : 15;
+  const respNorm = Math.max(0, Math.min(100, (20 - resp) / (20 - 13) * 100));
   return Math.round(recoveryWeights.sleep * sleepDay.perf + recoveryWeights.efficiency * sleepDay.efficiency + recoveryWeights.resp * respNorm + recoveryWeights.drink * drinkPenalty);
+}
+
+function recoveryBottleneck(sleepDay) {
+  if (!sleepDay || sleepDay.perf == null || sleepDay.efficiency == null) return null;
+  const prev = prevDay(sleepDay.date);
+  const drinkPenalty = drinkDates.has(prev) ? 0 : 100;
+  const resp = sleepDay.resp != null ? sleepDay.resp : 15;
+  const respNorm = Math.max(0, Math.min(100, (20 - resp) / (20 - 13) * 100));
+  const components = [
+    { name: 'Sleep Perf', value: sleepDay.perf, weight: recoveryWeights.sleep, contribution: recoveryWeights.sleep * sleepDay.perf },
+    { name: 'Efficiency', value: sleepDay.efficiency, weight: recoveryWeights.efficiency, contribution: recoveryWeights.efficiency * sleepDay.efficiency },
+    { name: 'Resp Rate', value: respNorm, weight: recoveryWeights.resp, contribution: recoveryWeights.resp * respNorm },
+    { name: 'No-Drink', value: drinkPenalty, weight: recoveryWeights.drink, contribution: recoveryWeights.drink * drinkPenalty }
+  ];
+  components.sort((a, b) => a.value - b.value);
+  return components;
 }
 
 // Food parsing
@@ -233,6 +251,56 @@ function normalizeFoodItem(item) {
 
 function foodsForDay(day) {
   return [...new Set(parseFoods(day.notes).map(normalizeFoodItem).filter(Boolean))];
+}
+
+function monthlyProgression(filtered) {
+  const months = ['Jan', 'Feb', 'March'];
+  const labels = ['Jan', 'Feb', 'Mar'];
+  const summaries = months.map((mo, i) => {
+    const d = filtered[mo];
+    if (!d.length) return null;
+    const avgCal = Math.round(avg(d, 'calories'));
+    const avgPro = Math.round(avg(d, 'protein'));
+    const liftRate = +(d.filter(dd => dd.lifting === 'Y').length / Math.max(d.length / 7, 1)).toFixed(1);
+    const proteinHit = Math.round(d.filter(hitProteinFloor).length / d.length * 100);
+    const drinkNights = d.filter(dd => dd.drinks).length;
+    const wDays = d.filter(dd => dd.weight);
+    const wChange = wDays.length >= 2 ? wDays[wDays.length - 1].weight - wDays[0].weight : null;
+    const calCon = consistencyScore(d, 'calories');
+    return { label: labels[i], avgCal, avgPro, liftRate, proteinHit, drinkNights, wChange, calCon, days: d.length };
+  }).filter(Boolean);
+  if (summaries.length < 2) return null;
+
+  const trends = [];
+  for (let i = 1; i < summaries.length; i++) {
+    const prev = summaries[i - 1], cur = summaries[i];
+    const calDelta = cur.avgCal - prev.avgCal;
+    const proDelta = cur.proteinHit - prev.proteinHit;
+    const liftDelta = cur.liftRate - prev.liftRate;
+    const drinkDelta = cur.drinkNights - prev.drinkNights;
+
+    const parts = [];
+    if (Math.abs(calDelta) > 30) parts.push(`intake ${calDelta < 0 ? 'dropped' : 'rose'} by ${energyLabel(Math.abs(calDelta))}/day`);
+    if (Math.abs(proDelta) > 5) parts.push(`protein adherence ${proDelta > 0 ? 'improved' : 'slipped'} from ${prev.proteinHit}% to ${cur.proteinHit}%`);
+    if (Math.abs(liftDelta) > 0.3) parts.push(`lift frequency ${liftDelta > 0 ? 'up' : 'down'} to ${cur.liftRate}x/wk`);
+    if (drinkDelta !== 0) parts.push(`drink nights ${drinkDelta < 0 ? 'dropped' : 'increased'} by ${Math.abs(drinkDelta)}`);
+    if (cur.wChange != null) parts.push(`scale moved ${cur.wChange < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(cur.wChange), 1)}`);
+
+    if (parts.length) {
+      trends.push(`<strong>${prev.label} → ${cur.label}:</strong> ${parts.join(', ')}.`);
+    }
+  }
+  return trends.length ? trends.join(' ') : null;
+}
+
+function consistencyScore(days, key) {
+  const vals = days.map(d => d[key]).filter(v => v != null && v > 0);
+  if (vals.length < 3) return null;
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  if (!mean) return null;
+  const stdDev = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+  const cv = stdDev / mean;
+  return Math.round(Math.max(0, Math.min(100, (1 - cv) * 100)));
 }
 
 function foodFrequency(days = allDays) {
@@ -325,7 +393,7 @@ function bodyCompEstimate(days = allDays) {
 // Sleep debt
 function sleepDebt(days = sleepData) {
   let cumDebt = 0;
-  return days.map(d => {
+  return days.filter(d => d.hours != null).map(d => {
     cumDebt += (d.hours - goals.sleep);
     return { date: d.date, debt: cumDebt };
   });
@@ -500,6 +568,43 @@ function generateWeeklyReport() {
     weightChange,
     prevWeightChange
   };
+}
+
+function generateWeeklyMarkdown() {
+  const r = generateWeeklyReport();
+  if (!r.lastDays.length) return 'No data in the selected range.';
+  const current = r.currentSummary;
+  const previous = r.previousSummary;
+  const wc = r.weightChange;
+  const lines = [
+    `# Weekly Review — ${r.rangeStr}`,
+    '',
+    `## Overview`,
+    r.text,
+    '',
+    `## Key Metrics`,
+    `- Average Intake: ${energyLabel(r.avgCal)}`,
+    `- Protein Floor: ${r.hiProDays}/${r.lastDays.length} days`,
+    `- Lift Sessions: ${r.liftCount}x`,
+    `- Drink Nights: ${r.drinkCount}`,
+    `- Sleep: ${r.avgSleepPerf}% perf / ${r.avgSleepHrs}h avg`,
+    wc != null ? `- Weight Change: ${wc >= 0 ? '+' : ''}${weightLabel(wc, 1)}` : '',
+    '',
+    `## Comparison vs Prior Week`,
+    current && previous ? [
+      `- Calories: ${energyLabel(current.avgCalories)} vs ${energyLabel(previous.avgCalories)}`,
+      `- Protein Hit Rate: ${Math.round(current.proteinHitRate)}% vs ${Math.round(previous.proteinHitRate)}%`,
+      current.avgSleepPerf != null && previous.avgSleepPerf != null ? `- Sleep Perf: ${Math.round(current.avgSleepPerf)}% vs ${Math.round(previous.avgSleepPerf)}%` : '',
+    ].filter(Boolean).join('\n') : 'Not enough data for comparison.',
+    '',
+    `## Day-by-Day`,
+    ...r.lastDays.map(d => {
+      const s = sleepByDate[d.date];
+      return `- **${d.date}**: ${energyLabel(d.calories)} · ${d.protein}g pro · ${d.lifting === 'Y' ? 'Lifted' : 'Rest'}${d.drinks ? ' · 🍹 ' + d.drinks : ''}${d.weight ? ' · ' + weightLabel(d.weight) : ''}${s ? ' · ' + s.perf + '% sleep' : ''}`;
+    }),
+    ''
+  ];
+  return lines.filter(l => l !== undefined).join('\n');
 }
 
 // Date range state
@@ -1058,21 +1163,67 @@ function qualityAudit(days, sleep) {
   };
 }
 
+function linearRegression(xArr, yArr) {
+  const n = xArr.length;
+  if (n < 2) return { slope: 0, intercept: yArr[0] || 0 };
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += xArr[i]; sumY += yArr[i];
+    sumXY += xArr[i] * yArr[i]; sumX2 += xArr[i] * xArr[i];
+  }
+  const denom = n * sumX2 - sumX * sumX;
+  if (!denom) return { slope: 0, intercept: sumY / n };
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
 function observedWeightProjection(days, horizonDays = 30) {
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length < 2) return null;
   const first = weightDays[0];
   const last = weightDays[weightDays.length - 1];
-  const spanDays = Math.max(1, Math.round((new Date(last.date + 'T12:00:00') - new Date(first.date + 'T12:00:00')) / (1000 * 60 * 60 * 24)));
-  const dailySlope = (last.weight - first.weight) / spanDays;
+  const t0 = new Date(first.date + 'T12:00:00').getTime();
+  const xArr = weightDays.map(d => (new Date(d.date + 'T12:00:00').getTime() - t0) / (1000 * 60 * 60 * 24));
+  const yArr = weightDays.map(d => d.weight);
+  const { slope: dailySlope, intercept } = linearRegression(xArr, yArr);
+  const spanDays = Math.max(1, Math.round(xArr[xArr.length - 1]));
+  const latestFitted = intercept + dailySlope * xArr[xArr.length - 1];
   return {
     latestWeight: last.weight,
+    latestFitted,
     dailySlope,
     spanDays,
     sampleSize: weightDays.length,
     confidence: projectionConfidence(Math.min(1, (weightDays.length / 8) * 0.45 + (spanDays / 30) * 0.55)),
     projectedDelta: dailySlope * horizonDays,
-    projectedWeight: last.weight + (dailySlope * horizonDays)
+    projectedWeight: latestFitted + (dailySlope * horizonDays)
+  };
+}
+
+function bodyFatTargetProjection(days, targetBfPct = 18) {
+  const wp = observedWeightProjection(days, 1);
+  if (!wp || !wp.dailySlope || wp.dailySlope >= 0) return null;
+  const current = estimateBodyCompAtWeight(wp.latestWeight, days);
+  if (current.bodyFatPct <= targetBfPct) return { daysToTarget: 0, targetWeight: current.weight, currentBfPct: current.bodyFatPct, targetBfPct, confidence: wp.confidence };
+  // Binary search for the weight at which BF% hits target
+  let lo = 100, hi = wp.latestWeight;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    const est = estimateBodyCompAtWeight(mid, days);
+    if (est.bodyFatPct > targetBfPct) hi = mid; else lo = mid;
+  }
+  const targetWeight = (lo + hi) / 2;
+  const weightToDrop = wp.latestWeight - targetWeight;
+  const daysToTarget = Math.ceil(weightToDrop / Math.abs(wp.dailySlope));
+  return {
+    daysToTarget,
+    targetWeight,
+    currentBfPct: current.bodyFatPct,
+    targetBfPct,
+    currentWeight: wp.latestWeight,
+    dailySlope: wp.dailySlope,
+    confidence: wp.confidence
   };
 }
 

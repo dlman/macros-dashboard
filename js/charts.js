@@ -179,6 +179,39 @@ function renderStatCards() {
       ${['Jan', 'Feb', 'Mar'].map((mo, i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
     </div>`;
   grid.appendChild(mismatchCard);
+
+  // Consistency scores
+  const consistencyCard = document.createElement('div');
+  consistencyCard.className = 'stat-card';
+  const consistencyMetrics = [
+    { label: 'Cal', key: 'calories' },
+    { label: 'Pro', key: 'protein' }
+  ];
+  const conMonths = ['Jan', 'Feb', 'March'];
+  consistencyCard.innerHTML = `
+    <div class="label">Consistency (lower variance = higher)</div>
+    <div class="months">
+      ${conMonths.map((mo, i) => {
+        const d = filtered[mo];
+        const calCon = d.length >= 3 ? consistencyScore(d, 'calories') : null;
+        const proCon = d.length >= 3 ? consistencyScore(d, 'protein') : null;
+        const calColor = calCon == null ? 'var(--text-muted)' : calCon >= 85 ? 'var(--col-green)' : calCon >= 70 ? 'var(--col-amber)' : 'var(--col-red)';
+        const proColor = proCon == null ? 'var(--text-muted)' : proCon >= 85 ? 'var(--col-green)' : proCon >= 70 ? 'var(--col-amber)' : 'var(--col-red)';
+        return `<div class="month-val"><span class="month-name">${mo.slice(0,3)}</span><span class="val" style="font-size:13px;"><span style="color:${calColor}">${calCon != null ? calCon + '%' : '—'}</span> / <span style="color:${proColor}">${proCon != null ? proCon + '%' : '—'}</span></span></div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--text-faint);margin-top:2px;">Cal / Protein consistency</div>`;
+  grid.appendChild(consistencyCard);
+
+  // Monthly progression narrative
+  const progressionEl = document.getElementById('monthlyProgression');
+  const progression = monthlyProgression(filtered);
+  if (progression) {
+    progressionEl.innerHTML = `<strong>Month-over-month:</strong> ${progression}`;
+    progressionEl.style.display = '';
+  } else {
+    progressionEl.style.display = 'none';
+  }
 }
 
 // Highlights & Streaks
@@ -396,6 +429,9 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   if (latestDay?.drinks) flags.push('Drink');
   if (latestDay && overallOnTrack(latestDay)) flags.push('On-track');
 
+  const bfTarget = bodyFatTargetProjection(filteredDays, 18);
+  const bfTarget15 = bodyFatTargetProjection(filteredDays, 15);
+
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
       ? `
@@ -483,7 +519,28 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         </div>
         <div class="tiny">${weighInDelta ? `${weightLabel(weighInDelta.latest.weight)} (${weighInDelta.delta > 0 ? '+' : ''}${weightLabel(weighInDelta.delta)} vs prior)` : latestWeightDay ? `${weightLabel(latestWeightDay.weight)} latest weigh-in` : 'No weigh-ins in active view'}${flags.length ? ` · ${flags.join(' · ')}` : ''}${sleepCurrent ? ` · ${sleepCurrent} sleep-target nights` : ''}</div>
       </div>
-    `
+    `,
+    bfTarget
+      ? `
+        <div class="forecast-card mobile-secondary">
+          <div class="eyebrow">Time to ${bfTarget.targetBfPct}% BF</div>
+          <div class="value">${bfTarget.daysToTarget === 0 ? 'Already there!' : `~${bfTarget.daysToTarget} days`}</div>
+          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, you'd hit ${bfTarget.targetBfPct}% body fat around ${weightLabel(bfTarget.targetWeight)}. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (~${weightLabel(bfTarget15.targetWeight)})` : ''}</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
+          <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
+          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card mobile-secondary">
+          <div class="eyebrow">Time to 18% BF</div>
+          <div class="value">—</div>
+          <div class="sub">Need a downward weight trend to estimate time to body fat target.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
+          <div class="confidence-pill low">Low confidence</div>
+          <div class="tiny">Body fat projection</div>
+        </div>
+      `
   ].join('');
 }
 
@@ -677,6 +734,30 @@ function renderSleepInsights() {
     <div class="badge green"><strong>${energyLabel(avgBadSleepCals)} vs ${energyLabel(avgGoodSleepCals)}</strong>Next-day calories after bad vs good sleep</div>
     <div class="badge sky"><strong>${respStart?.toFixed(1) ?? '—'} → ${respEnd?.toFixed(1) ?? '—'} rpm</strong>Respiratory rate change across selected range</div>
   `;
+
+  // Recovery bottleneck analysis
+  const bottleneckEl = document.getElementById('recoveryBottleneckInsight');
+  if (bottleneckEl) {
+    const bottlenecks = filteredSleep.map(d => recoveryBottleneck(d)).filter(Boolean);
+    if (bottlenecks.length >= 3) {
+      const avgComponents = {};
+      bottlenecks.forEach(components => {
+        components.forEach(c => {
+          if (!avgComponents[c.name]) avgComponents[c.name] = { total: 0, count: 0 };
+          avgComponents[c.name].total += c.value;
+          avgComponents[c.name].count++;
+        });
+      });
+      const sorted = Object.entries(avgComponents)
+        .map(([name, { total, count }]) => ({ name, avg: Math.round(total / count) }))
+        .sort((a, b) => a.avg - b.avg);
+      const weakest = sorted[0];
+      const strongest = sorted[sorted.length - 1];
+      bottleneckEl.innerHTML = `<div class="badge amber" style="max-width:100%;"><strong>Recovery Bottleneck: ${weakest.name} (avg ${weakest.avg}%)</strong>Your weakest recovery component is ${weakest.name} at ${weakest.avg}% average, while ${strongest.name} leads at ${strongest.avg}%. Focus on improving ${weakest.name} for the biggest recovery gains.</div>`;
+    } else {
+      bottleneckEl.innerHTML = '';
+    }
+  }
 }
 
 // =====================================================================
@@ -735,9 +816,9 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
         { text: '▲ Drink day', fillStyle:EVENT_COLORS.drink, strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '■ Lift day', fillStyle:EVENT_COLORS.lift, strokeStyle:'transparent', fontColor:'#94a3b8' },
       ], color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ctx.datasetIndex===0 ? ` ${ctx.parsed.y} lbs` : ` 7d avg: ${ctx.parsed.y.toFixed(1)} lbs` } }
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ctx.datasetIndex===0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` 7d avg: ${ctx.parsed.y.toFixed(1)} ${weightUnit()}` } }
     },
-    scales: { x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 20 } }, y: { ...chartDefaults().scales.y, min: 160, max: 176, ticks: { ...TICK(), stepSize: 2, callback: v => v+' lbs' } } }
+    scales: { x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 20 } }, y: { ...chartDefaults().scales.y, ticks: { ...TICK(), stepSize: useMetric ? 1 : 2, callback: v => v+' '+weightUnit() } } }
   }
 });
 
@@ -790,17 +871,17 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
         title: ctx => bodyComp[ctx[0].dataIndex].date,
         label: ctx => {
           const d = bodyComp[ctx.dataIndex];
-          if (ctx.datasetIndex === 0) return ` Est. fat: ${d.fat.toFixed(1)} lbs (~${bodyCompBF[ctx.dataIndex]}% BF)`;
-          if (ctx.datasetIndex === 1) return ` Est. lean: ${d.lean.toFixed(1)} lbs`;
-          if (ctx.datasetIndex === 2) return ` Measured fat: ${d.fat.toFixed(1)} lbs (~${bodyCompBF[ctx.dataIndex]}% BF)`;
-          return ` Measured lean: ${d.lean.toFixed(1)} lbs`;
+          if (ctx.datasetIndex === 0) return ` Est. fat: ${weightLabel(d.fat)} (~${bodyCompBF[ctx.dataIndex]}% BF)`;
+          if (ctx.datasetIndex === 1) return ` Est. lean: ${weightLabel(d.lean)}`;
+          if (ctx.datasetIndex === 2) return ` Measured fat: ${weightLabel(d.fat)} (~${bodyCompBF[ctx.dataIndex]}% BF)`;
+          return ` Measured lean: ${weightLabel(d.lean)}`;
         },
         afterBody: ctx => {
           const d = bodyComp[ctx[0].dataIndex];
           return d ? [
             d.measured ? `  DXA measured point on Jan 6, 2026` : `  Estimated from the DXA baseline on Jan 6, 2026`,
-            d.measured ? `  Total: ${d.weight} lbs` : `  Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
-            d.measured ? '' : `  Total: ${d.weight} lbs`
+            d.measured ? `  Total: ${weightLabel(d.weight)}` : `  Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
+            d.measured ? '' : `  Total: ${weightLabel(d.weight)}`
           ].filter(Boolean) : [];
         }
       }}
@@ -809,17 +890,13 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
       x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:16} },
       y: {
         ...chartDefaults().scales.y, position: 'left',
-        title: { display:true, text:'Fat Mass (lbs)', color:'#f87171', font:{size:10} },
-        min: Math.floor(Math.min(...bodyComp.map(d=>d.fat)) - 2),
-        max: Math.ceil(Math.max(...bodyComp.map(d=>d.fat)) + 2),
-        ticks: { ...TICK(), callback: v => v + ' lbs' }
+        title: { display:true, text:`Fat Mass (${weightUnit()})`, color:'#f87171', font:{size:10} },
+        ticks: { ...TICK(), callback: v => v + ' ' + weightUnit() }
       },
       y2: {
         ...chartDefaults().scales.y, position: 'right',
-        title: { display:true, text:'Lean Mass (lbs)', color:'#f59e0b', font:{size:10} },
-        min: Math.floor(Math.min(...bodyComp.map(d=>d.lean)) - 1),
-        max: Math.ceil(Math.max(...bodyComp.map(d=>d.lean)) + 1),
-        ticks: { ...TICK(), callback: v => v + ' lbs' },
+        title: { display:true, text:`Lean Mass (${weightUnit()})`, color:'#f59e0b', font:{size:10} },
+        ticks: { ...TICK(), callback: v => v + ' ' + weightUnit() },
         grid: { drawOnChartArea: false }
       }
     }
@@ -855,7 +932,7 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 3) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo][el.index]) openPanel(data[mo][el.index].date); } },
-    plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString()} kcal` } } },
+    plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${energyLabel(ctx.parsed.y)}` } } },
     scales: { x: { ...chartDefaults().scales.x, title:{display:true,text:'Day of Month',color:'#64748b',font:{size:11}}, ticks:{...TICK()} }, y: { ...chartDefaults().scales.y, min: 1000, max: 3600, ticks: { ...TICK(), stepSize: 250, callback: v => v.toLocaleString()+' kcal' } } }
   }
 });
@@ -930,19 +1007,20 @@ allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), 
           if (ctx.datasetIndex === 0) {
             const cum = ctx.parsed.y;
             const lbsEquiv = (cum / 3500).toFixed(1);
-            return [` Cumulative: ${cum > 0 ? '+' : ''}${cum.toLocaleString()} kcal`, ` ≈ ${Math.abs(lbsEquiv)} lbs fat loss`];
+            const fatEquiv = weightValue(Math.abs(cum / 3500));
+            return [` Cumulative: ${cum > 0 ? '+' : ''}${energyLabel(cum)}`, ` ≈ ${fatEquiv} ${weightUnit()} fat loss`];
           } else {
             const v = ctx.parsed.y;
             const day = waterfallData[ctx.dataIndex];
-            return [` Today: ${v > 0 ? '+' : ''}${v.toLocaleString()} kcal ${v >= 0 ? 'deficit' : 'surplus'}`, ` Ate ~${day.totalCalories.toLocaleString()} incl. est. drinks vs ~${estimatedTDEE} TDEE`];
+            return [` Today: ${v > 0 ? '+' : ''}${energyLabel(v)} ${v >= 0 ? 'deficit' : 'surplus'}`, ` Ate ~${energyLabel(day.totalCalories)} incl. est. drinks vs ~${energyLabel(estimatedTDEE)} TDEE`];
           }
         }
       }}
     },
     scales: {
       x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:20} },
-      y: { ...chartDefaults().scales.y, position:'left', title:{display:true,text:'Cumulative (kcal)',color:'#64748b',font:{size:10}}, ticks:{...TICK(),callback:v=>v.toLocaleString()} },
-      y2: { ...chartDefaults().scales.y, position:'right', title:{display:true,text:'Daily (kcal)',color:'#64748b',font:{size:10}}, ticks:{...TICK(),callback:v=>(v>0?'+':'')+v}, grid:{drawOnChartArea:false} }
+      y: { ...chartDefaults().scales.y, position:'left', title:{display:true,text:`Cumulative (${energyUnit()})`,color:'#64748b',font:{size:10}}, ticks:{...TICK(),callback:v=>v.toLocaleString()} },
+      y2: { ...chartDefaults().scales.y, position:'right', title:{display:true,text:`Daily (${energyUnit()})`,color:'#64748b',font:{size:10}}, ticks:{...TICK(),callback:v=>(v>0?'+':'')+v}, grid:{drawOnChartArea:false} }
     }
   }
 });
@@ -1087,7 +1165,7 @@ function donutChart(id, month) {
       labels: [`Protein (${(pCal/total*100).toFixed(0)}%)`, `Carbs (${(cCal/total*100).toFixed(0)}%)`, `Fat (${(fCal/total*100).toFixed(0)}%)`],
       datasets: [{ data: [pCal,cCal,fCal], backgroundColor: ['#6366f1','#38bdf8','#f97316'], borderWidth:0, hoverOffset:8 }]
     },
-    options: { responsive:true, animation:{duration:400}, plugins: { legend: { display:true, position:'bottom', labels:{color:'#94a3b8',font:{size:11},padding:10} }, tooltip: { backgroundColor:'#1e2535', titleColor:'#e2e8f0', bodyColor:'#94a3b8', callbacks: { label: ctx => ` ${ctx.label}: ${Math.round(ctx.parsed)} kcal` } } }, cutout:'65%' }
+    options: { responsive:true, animation:{duration:400}, plugins: { legend: { display:true, position:'bottom', labels:{color:'#94a3b8',font:{size:11},padding:10} }, tooltip: { backgroundColor:'#1e2535', titleColor:'#e2e8f0', bodyColor:'#94a3b8', callbacks: { label: ctx => ` ${ctx.label}: ${energyLabel(ctx.parsed)}` } } }, cutout:'65%' }
   });
 }
 donutChart('donutJan','Jan');
@@ -1119,7 +1197,7 @@ function liftRestDeltaRows(days) {
   const lift = days.filter(d => d.lifting === 'Y');
   const rest = days.filter(d => d.lifting !== 'Y');
   const metrics = [
-    { key: 'calories', label: 'Calories', unit: 'kcal', valueFn: v => energyValue(v) },
+    { key: 'calories', label: 'Calories', unit: energyUnit(), valueFn: v => energyValue(v) },
     { key: 'protein', label: 'Protein', unit: 'g', valueFn: v => +(v ?? 0).toFixed(0) },
     { key: 'carbs', label: 'Carbs', unit: 'g', valueFn: v => +(v ?? 0).toFixed(0) },
     { key: 'fat', label: 'Fat', unit: 'g', valueFn: v => +(v ?? 0).toFixed(0) }

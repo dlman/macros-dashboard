@@ -59,6 +59,13 @@ function openPanel(dateStr) {
     badges.innerHTML += `<span class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b;">💪 ${ratioLabel(day.protein, day.weight)}</span>`;
   }
 
+  // Drink calorie estimate breakdown
+  const drinkCalEst = estimateDrinkCalories(day.drinks);
+  if (drinkCalEst > 0) {
+    const effectiveCal = effectiveCalories(day);
+    badges.innerHTML += `<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">🔥 ~${energyLabel(drinkCalEst)} drink cals · ~${energyLabel(effectiveCal)} effective total</span>`;
+  }
+
   // Food pills
   const foodPills = document.getElementById('panelFoodPills');
   const foods = parseFoods(day.notes);
@@ -219,10 +226,24 @@ function updateRangeLabels() {
     rede.value = allDates[Math.min(e, allDates.length - 1)] || '';
   }
 }
-rangeStartEl.addEventListener('input', () => { updateRangeLabels(); refreshDashboard(); persistUiState(); });
-rangeEndEl.addEventListener('input', () => { updateRangeLabels(); refreshDashboard(); persistUiState(); });
+let _rangeDebounce = null;
+function debouncedRangeRefresh() {
+  updateRangeLabels();
+  clearTimeout(_rangeDebounce);
+  _rangeDebounce = setTimeout(() => { refreshDashboard(); persistUiState(); }, 250);
+}
+rangeStartEl.addEventListener('input', debouncedRangeRefresh);
+rangeEndEl.addEventListener('input', debouncedRangeRefresh);
+const compareModeHints = {
+  equal_span: 'Matches the prior period length to your selected range',
+  prior_7: 'Always uses the 7 days before your range starts',
+  prior_28: 'Always uses the 28 days before your range starts',
+  prior_month: 'Same day-count from the previous calendar month'
+};
 compareModeEl.addEventListener('change', () => {
   compareMode = compareModeEl.value;
+  const hint = document.getElementById('compareModeHint');
+  if (hint) hint.textContent = compareModeHints[compareMode] || '';
   refreshDashboard();
   persistUiState();
 });
@@ -279,11 +300,17 @@ if (rangeStartDateEl && rangeEndDateEl) {
 }
 
 updateRangeLabels();
+let _exploreDirty = true;
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     activeTab = btn.dataset.tab;
     applyActiveTab();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (activeTab === 'explore' && _exploreDirty) {
+      renderCorrMatrix();
+      renderExploreDiagnostics();
+      _exploreDirty = false;
+    }
     refreshDashboard();
     persistUiState();
   });
@@ -338,6 +365,23 @@ document.getElementById('weeklyReviewExportBtn').addEventListener('click', () =>
   });
 });
 
+document.getElementById('weeklyMarkdownExportBtn').addEventListener('click', () => {
+  const md = generateWeeklyMarkdown();
+  navigator.clipboard.writeText(md).then(() => {
+    const btn = document.getElementById('weeklyMarkdownExportBtn');
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  }).catch(() => {
+    // Fallback: download as .md file
+    const blob = new Blob([generateWeeklyMarkdown()], { type: 'text/markdown' });
+    const link = document.createElement('a');
+    link.download = 'weekly_review.md';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  });
+});
+
 // =====================================================================
 // WHAT-IF CALCULATOR
 // =====================================================================
@@ -373,7 +417,24 @@ function syncSettingsForm() {
   document.getElementById('recovWtEff').value = Math.round(recoveryWeights.efficiency * 100);
   document.getElementById('recovWtResp').value = Math.round(recoveryWeights.resp * 100);
   document.getElementById('recovWtDrink').value = Math.round(recoveryWeights.drink * 100);
+  updateRecoveryWeightTotal();
 }
+
+function updateRecoveryWeightTotal() {
+  const total = ['recovWtSleep','recovWtEff','recovWtResp','recovWtDrink']
+    .reduce((sum, id) => sum + (parseInt(document.getElementById(id).value) || 0), 0);
+  const el = document.getElementById('recovWtTotal');
+  if (Math.abs(total - 100) < 2) {
+    el.textContent = `Total: ${total}%`;
+    el.style.color = 'var(--text-faint)';
+  } else {
+    el.textContent = `Total: ${total}% ⚠️ Must equal 100% to save`;
+    el.style.color = '#ef4444';
+  }
+}
+['recovWtSleep','recovWtEff','recovWtResp','recovWtDrink'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateRecoveryWeightTotal);
+});
 
 function syncControlsFromState() {
   document.getElementById('themeToggle').textContent = resolvedTheme() === 'light' ? '☀️ Theme' : '🌙 Theme';
@@ -755,6 +816,11 @@ function updateLiftRestChart(days) {
 function updateFoodFreqChart(days) {
   const chart = allCharts.foodFreqChart;
   const foodFreqs = foodFrequency(days).slice(0, 20);
+  const prevDays = getPreviousPeriodDays();
+  const prevFoodMap = {};
+  if (prevDays.length) {
+    foodFrequency(prevDays).forEach(([food, count]) => { prevFoodMap[food] = count; });
+  }
 
   // Compute average calorie day when each food appears
   const foodCalAssoc = {};
@@ -771,11 +837,36 @@ function updateFoodFreqChart(days) {
   chart.data.labels = foodFreqs.map(f => f[0].length > 30 ? f[0].slice(0, 28) + '…' : f[0]);
   chart.data.datasets[0].data = foodFreqs.map(f => f[1]);
   chart.data.datasets[0].backgroundColor = foodFreqs.map(f => isFoodProteinRich(f[0]) ? 'rgba(245,158,11,0.7)' : 'rgba(100,116,139,0.5)');
+  chart.data.datasets[0].label = 'Current Range';
+
+  // Add or update comparison dataset
+  if (prevDays.length && chart.data.datasets.length < 2) {
+    chart.data.datasets.push({
+      label: 'Prior Period',
+      data: [],
+      backgroundColor: 'rgba(148,163,184,0.3)',
+      borderColor: 'rgba(148,163,184,0.6)',
+      borderWidth: 1
+    });
+  }
+  if (prevDays.length && chart.data.datasets.length >= 2) {
+    chart.data.datasets[1].data = foodFreqs.map(([food]) => prevFoodMap[food] || 0);
+  } else if (chart.data.datasets.length >= 2) {
+    chart.data.datasets.splice(1);
+  }
+
   chart.options.plugins.tooltip.callbacks.label = ctx => {
-    const food = foodFreqs[ctx.dataIndex][0];
+    const food = foodFreqs[ctx.dataIndex]?.[0];
+    if (!food) return '';
+    if (ctx.datasetIndex === 1) {
+      const prevCount = prevFoodMap[food] || 0;
+      return ` Prior period: ${prevCount} times in ${prevDays.length} days`;
+    }
     const assoc = foodCalAssoc[food];
+    const prevCount = prevFoodMap[food] || 0;
+    const delta = prevDays.length ? ` (${ctx.parsed.x - prevCount >= 0 ? '+' : ''}${ctx.parsed.x - prevCount} vs prior)` : '';
     return [
-      ` ${ctx.parsed.x} times in ${days.length} days`,
+      ` ${ctx.parsed.x} times in ${days.length} days${delta}`,
       ` Avg cal when eaten: ${energyLabel(assoc.withAvg)}`,
       ` Avg cal otherwise: ${energyLabel(assoc.withoutAvg)}`,
       ` Δ ${assoc.withAvg - assoc.withoutAvg > 0 ? '+' : ''}${energyLabel(assoc.withAvg - assoc.withoutAvg)}`
@@ -940,29 +1031,34 @@ function refreshDashboard() {
   document.getElementById('controlSummary').textContent = usingFallback
     ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.`
     : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.`;
-  renderExecutiveSummary();
-  renderStatCards();
-  renderHighlights();
-  renderSleepStatCards();
-  renderWeeklyReport();
-  renderSleepInsights();
-  renderHeatmap();
-  renderCorrMatrix();
-  renderExploreDiagnostics();
-  updateWeightChart(filteredDays);
-  updateBodyCompChart(filteredDays);
-  updateCaloriesChart(months);
-  updateWaterfallChart(filteredDays);
+  function safe(fn, label) { try { fn(); } catch (e) { console.error(`[Dashboard] ${label} failed:`, e); } }
+  safe(() => renderExecutiveSummary(), 'Executive Summary');
+  safe(() => renderStatCards(), 'Stat Cards');
+  safe(() => renderHighlights(), 'Highlights');
+  safe(() => renderSleepStatCards(), 'Sleep Stat Cards');
+  safe(() => renderWeeklyReport(), 'Weekly Report');
+  safe(() => renderSleepInsights(), 'Sleep Insights');
+  safe(() => renderHeatmap(), 'Heatmap');
+  if (activeTab === 'explore') {
+    safe(() => renderCorrMatrix(), 'Correlation Matrix');
+    safe(() => renderExploreDiagnostics(), 'Explore Diagnostics');
+  } else {
+    _exploreDirty = true;
+  }
+  safe(() => updateWeightChart(filteredDays), 'Weight Chart');
+  safe(() => updateBodyCompChart(filteredDays), 'Body Comp Chart');
+  safe(() => updateCaloriesChart(months), 'Calories Chart');
+  safe(() => updateWaterfallChart(filteredDays), 'Waterfall Chart');
   // Update TDEE display
   document.getElementById('waterfallTitle').textContent = `Cumulative Calorie Deficit (TDEE: ~${energyLabel(estimatedTDEE)}, cutting phase: ~${energyLabel(cuttingTDEE)}, range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)})`;
-  updateMacroChart(months);
-  updateMacroStackedChart(filteredDays);
-  updateDonutCharts(months);
-  updateSimpleMonthBars(months);
-  updateLiftRestChart(filteredDays);
-  updateFoodFreqChart(filteredDays);
-  updateSleepCharts(filteredSleep);
-  updateInsightCharts(filteredSleep);
+  safe(() => updateMacroChart(months), 'Macro Chart');
+  safe(() => updateMacroStackedChart(filteredDays), 'Macro Stacked Chart');
+  safe(() => updateDonutCharts(months), 'Donut Charts');
+  safe(() => updateSimpleMonthBars(months), 'Month Bars');
+  safe(() => updateLiftRestChart(filteredDays), 'Lift/Rest Chart');
+  safe(() => updateFoodFreqChart(filteredDays), 'Food Freq Chart');
+  safe(() => updateSleepCharts(filteredSleep), 'Sleep Charts');
+  safe(() => updateInsightCharts(filteredSleep), 'Insight Charts');
   const scenarioDefaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
   if (!scenarioFormInitialized) {
     setScenarioInputs(scenarioDefaults.current);
@@ -987,8 +1083,8 @@ syncSettingsForm();
 applyTheme(themePreference);
 if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
 if (typeof persistedState.rangeEnd === 'number') {
-  const persistedEndDate = allDates[persistedState.rangeEnd];
-  rangeEndEl.value = persistedEndDate === LEGACY_DEFAULT_RANGE_END ? defaultEndIdx : persistedState.rangeEnd;
+  // Always use the later of persisted end or yesterday, so stale saved state doesn't pin the range to old data
+  rangeEndEl.value = Math.max(persistedState.rangeEnd, defaultEndIdx);
 } else {
   rangeEndEl.value = defaultEndIdx;
 }

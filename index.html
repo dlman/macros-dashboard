@@ -49,12 +49,13 @@
     <div class="control-strip">
     <div class="control-group">
       <label for="compareMode">Compare Mode</label>
-      <select id="compareMode">
-        <option value="equal_span">Previous equal span</option>
-        <option value="prior_7">Previous 7 days</option>
-        <option value="prior_28">Previous 28 days</option>
-        <option value="prior_month">Previous month, same day-count</option>
+      <select id="compareMode" title="Choose which prior period to compare against the selected range">
+        <option value="equal_span" title="Compare with the same number of days immediately before your selected range">Previous equal span</option>
+        <option value="prior_7" title="Always compare with the 7 days before your selected range starts">Previous 7 days</option>
+        <option value="prior_28" title="Always compare with the 28 days before your selected range starts">Previous 28 days</option>
+        <option value="prior_month" title="Compare with the same number of days from the previous calendar month">Previous month, same day-count</option>
       </select>
+      <div style="font-size:10px;color:var(--text-faint);margin-top:2px;" id="compareModeHint">Matches the prior period length to your selected range</div>
     </div>
     <div class="control-group">
       <label for="eventFilter">View Filter</label>
@@ -178,6 +179,7 @@
         </div>
         <div class="report-actions">
           <button class="report-btn" id="weeklyReviewExportBtn">📸 Export Weekly Review</button>
+          <button class="report-btn" id="weeklyMarkdownExportBtn">📝 Copy as Text</button>
         </div>
       </div>
       <p id="weeklyReportText">Loading...</p>
@@ -211,6 +213,8 @@
   <!-- MONTHLY AVERAGES (with trend arrows) -->
   <div class="section-title">Monthly Averages</div>
   <div class="stat-grid" id="statGrid"></div>
+
+  <div class="monthly-progression" id="monthlyProgression" style="margin:12px 0 18px;padding:12px 16px;border-radius:10px;background:var(--card-bg);font-size:13px;line-height:1.6;color:var(--text-muted);"></div>
 
   <!-- HIGHLIGHTS -->
   <div class="section-title">Highlights & Streaks</div>
@@ -406,12 +410,13 @@
   <!-- Cross insights -->
   <div class="section-title" id="sleepInsightSection" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
   <div class="badge-row" id="sleepInsightBadges"></div>
+  <div id="recoveryBottleneckInsight" style="margin-top:8px;"></div>
 
   <div class="chart-row two">
     <div class="chart-card"><div class="card-header"><h3>Sleep Performance: Previous Night Drink vs Clean</h3></div><div class="chart-wrapper medium"><canvas id="drinkSleepChart"></canvas></div></div>
     <div class="chart-card"><div class="card-header"><h3>Sleep Perf by Day of Week</h3></div><div class="chart-wrapper medium"><canvas id="dowChart"></canvas></div></div>
   </div>
-  <details class="advanced-shell" open data-tab-section="explore">
+  <details class="advanced-shell" open data-tab-section="sleep">
     <summary>More Sleep Analysis</summary>
     <div class="advanced-inner">
   <div class="chart-row two">
