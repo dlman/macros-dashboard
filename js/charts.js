@@ -314,7 +314,10 @@ function renderWeeklyReport() {
   const previous = r.previousSummary;
   const drivers = getDriverRanking(r.lastDays, r.lastSleep);
   const recommendations = recommendationList(current, previous, r.lastDays, r.lastSleep);
-  const weightDelta = compareDelta(r.weightChange, r.prevWeightChange, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
+  const energyBalance = energyBalanceSummary(r.lastDays);
+  const currentTrend = weightTrendReality(r.lastDays).actualLoss;
+  const previousTrend = weightTrendReality(r.prevWeek).actualLoss;
+  const weightDelta = compareDelta(currentTrend, previousTrend, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calorieDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
   const sleepDelta = compareDelta(current.avgSleepPerf, previous.avgSleepPerf, 'up', v => `${Math.round(v)}%`);
@@ -324,13 +327,15 @@ function renderWeeklyReport() {
   reviewGrid.innerHTML = [
     {
       label: 'Weight Trend',
-      value: r.weightChange != null ? `${r.weightChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(r.weightChange), 1)}` : '—',
+      value: currentTrend != null ? `${currentTrend >= 0 ? '−' : '+'}${weightLabel(Math.abs(currentTrend), 1)}` : '—',
       sub: weightDelta.detail
     },
     {
       label: 'Average Intake',
       value: energyLabel(current.avgCalories),
-      sub: `${Math.round(current.calorieHitRate)}% under target · ${calorieDelta.text} vs prior week`
+      sub: energyBalance
+        ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance this week · ${calorieDelta.text} vs prior week`
+        : `${calorieDelta.text} vs prior week`
     },
     {
       label: 'Protein Adherence',
@@ -389,16 +394,23 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   allCharts.heroSleepChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
-  const totalRangeDeficit = filteredDays.reduce((sum, day) => sum + (estimatedTDEE - effectiveCalories(day)), 0);
-  const avgDailyDeficit = filteredDays.length ? totalRangeDeficit / filteredDays.length : 0;
-  const weightTrend = current.weightChange == null ? 'No weigh-in trend yet' : current.weightChange < 0 ? `Weight is trending down by ${weightValue(Math.abs(current.weightChange))} ${weightUnit()} across the range.` : `Weight is trending up by ${weightValue(Math.abs(current.weightChange))} ${weightUnit()} across the range.`;
+  const energyBalance = energyBalanceSummary(filteredDays);
+  const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
+  const lag = getLagMetrics(filteredDays, filteredSleep);
+  const observedLoss = trendReality.actualLoss;
+  const weightTrend = observedLoss == null
+    ? 'No weigh-in trend yet.'
+    : observedLoss >= 0
+      ? `Smoothed weight trend is down ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`
+      : `Smoothed weight trend is up ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`;
   const sleepTrend = current.avgSleepPerf != null && previous.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}% sleep vs ${Math.round(previous.avgSleepPerf)}% in ${compareModeLabel()}.` : 'Sleep direction will appear here once both periods have sleep data.';
-  const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Actual scale loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} expected from the logged deficit.` : '';
+  const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Observed trend loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} implied by the logged deficit.` : '';
+  const lagTrend = lag.drinkSleepGap != null && lag.drinkSleepGap > 0 ? `Drink-following mornings are still costing about ${lag.drinkSleepGap.toFixed(0)} sleep-performance points.` : plateau.text;
   document.getElementById('heroTitle').textContent = current.weightChange != null && current.weightChange < 0 ? 'Weight Trend and Recovery' : 'Range Trend Overview';
-  document.getElementById('heroSubtitle').textContent = `${weightTrend} ${sleepTrend} ${realityTrend}`.trim();
+  document.getElementById('heroSubtitle').textContent = `${weightTrend} ${sleepTrend} ${realityTrend} ${lagTrend}`.trim();
   document.getElementById('heroCalValue').textContent = current.avgCalories != null ? energyLabel(current.avgCalories) : '—';
-  document.getElementById('heroCalSub').textContent = filteredDays.length
-    ? `${totalRangeDeficit >= 0 ? '~' + energyLabel(Math.abs(totalRangeDeficit)) + ' below' : '~' + energyLabel(Math.abs(totalRangeDeficit)) + ' above'} maintenance across the range · ${avgDailyDeficit >= 0 ? '~' + energyLabel(Math.abs(avgDailyDeficit)) + '/day deficit' : '~' + energyLabel(Math.abs(avgDailyDeficit)) + '/day surplus'}`
+  document.getElementById('heroCalSub').textContent = energyBalance
+    ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance across the range · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
     : 'No intake data in the selected range';
   document.getElementById('heroSleepValue').textContent = current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—';
   document.getElementById('heroSleepSub').textContent = current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep with ${Math.round(current.sleepHitRate)}% target hit rate` : 'No sleep entries in the selected range';
@@ -415,6 +427,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const weightProjection = observedWeightProjection(filteredDays, 30);
   const deficitPace = deficitProjection(filteredDays, 30);
   const sleepProjection = sleepTargetProjection(filteredSleep, 14);
+  const energyBalance = energyBalanceSummary(filteredDays);
   const latestDay = filteredDays[filteredDays.length - 1] || null;
   const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
   const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
@@ -436,12 +449,12 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     weightProjection
       ? `
         <div class="forecast-card mobile-primary">
-          <div class="eyebrow">30-Day Weight Pace</div>
-          <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
-          <div class="sub">If the observed scale slope holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
+        <div class="eyebrow">30-Day Weight Pace</div>
+        <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
+          <div class="sub">If the smoothed observed trend holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Observed weigh-ins</span></div>
           <div class="confidence-pill ${weightProjection.confidence.cls}">${weightProjection.confidence.label}</div>
-          <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days</div>
+          <div class="tiny">${weightProjection.sampleSize} weigh-ins across ${weightProjection.spanDays} days · smoothed trend line</div>
         </div>
       `
       : `
@@ -457,12 +470,12 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     deficitPace
       ? `
         <div class="forecast-card mobile-secondary">
-          <div class="eyebrow">30-Day Deficit Pace</div>
-          <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
-          <div class="sub">If intake stays near ${energyLabel(avgEffectiveCalories(filteredDays))}, the logged deficit pace implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
+        <div class="eyebrow">30-Day Deficit Pace</div>
+        <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
+          <div class="sub">If intake stays near ${energyLabel(avgEffectiveCalories(filteredDays))}, the maintenance gap implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
-          <div class="tiny">${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE (drink calories estimated in)</div>
+          <div class="tiny">${energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range · ` : ''}${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE</div>
         </div>
       `
       : `
@@ -479,9 +492,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Estimated TDEE</div>
         <div class="value">${energyLabel(estimatedTDEE)}</div>
-        <div class="sub">Current working maintenance estimate from logged intake, estimated drink calories, and observed scale movement.</div>
+        <div class="sub">Current working maintenance estimate from recency-weighted effective intake and the smoothed weight trend.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance</span></div>
-        <div class="tiny">Cutting phase: ~${energyLabel(cuttingTDEE)} · plausible range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
+        <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
+        <div class="tiny">Weighted intake: ~${energyLabel(overallTDEEProfile.weightedIntake)} · trend pace: ${weightLabel(Math.abs(overallTDEEProfile.weeklyLoss), 2)}/wk · range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
       </div>
     `,
     sleepProjection
@@ -550,14 +564,19 @@ function renderExecutiveSummary() {
   const previousBaseDays = getPreviousPeriodBaseDays();
   const previousDays = getPreviousPeriodDays();
   const previousSleep = getSleepForDays(previousBaseDays);
+  const currentTrendLoss = weightTrendReality(filteredDays).actualLoss;
+  const previousTrendLoss = weightTrendReality(previousDays).actualLoss;
   const current = summarizeRange(filteredDays, filteredSleep);
   const previous = summarizeRange(previousDays, previousSleep);
-  const weightDelta = compareDelta(current.weightChange == null ? null : -current.weightChange, previous.weightChange == null ? null : -previous.weightChange, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
+  const weightDelta = compareDelta(currentTrendLoss, previousTrendLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
   const sleepDelta = compareDelta(current.avgSleepPerf, previous.avgSleepPerf, 'up', v => `${Math.round(v)}%`);
   const drinkDelta = compareDelta(current.drinkNights, previous.drinkNights, 'down', v => `${Math.round(v)}`);
   const trendReality = weightTrendReality(filteredDays);
+  const energyBalance = energyBalanceSummary(filteredDays);
+  const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
+  const lag = getLagMetrics(filteredDays, filteredSleep);
   const recommendations = recommendationList(current, previous, filteredDays, filteredSleep);
   const drivers = getDriverRanking(filteredDays, filteredSleep);
   const outliers = getOutliers(filteredDays, filteredSleep);
@@ -570,7 +589,7 @@ function renderExecutiveSummary() {
     <div class="summary-hero">
       <div class="eyebrow">Summary Window</div>
       <div class="hero-value">${labelForDays(getComparisonCurrentBaseDays())}</div>
-      <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}.</div>
+      <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}. ${plateau.title}</div>
     </div>
     <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}</div></div>
     <div class="summary-chip"><div class="eyebrow">Calories</div><div class="value">${current.avgCalories != null ? energyLabel(current.avgCalories) : '—'}</div><div class="sub">vs prior: ${calDelta.text}</div></div>
@@ -579,8 +598,8 @@ function renderExecutiveSummary() {
   `;
 
   document.getElementById('executiveKpis').innerHTML = [
-    { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: current.weightChange != null ? `${current.weightChange < 0 ? 'Down' : 'Up'} ${weightValue(Math.abs(current.weightChange))} ${weightUnit()} in range` : 'No weigh-ins', delta: weightDelta },
-    { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: `${Math.round(current.calorieHitRate)}% of days at or under goal`, delta: calDelta },
+    { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: trendReality.actualLoss != null ? `${trendReality.actualLoss >= 0 ? 'Smoothed trend down' : 'Smoothed trend up'} ${weightValue(Math.abs(trendReality.actualLoss))} ${weightUnit()} in range` : 'No weigh-ins', delta: weightDelta },
+    { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}` : 'No intake data', delta: calDelta },
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
     { label: 'Sleep Performance', value: current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—', sub: current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep` : 'No sleep data', delta: sleepDelta },
     { label: 'Drink Nights', value: `${current.drinkNights}`, sub: `${Math.round(current.cleanRate)}% clean-day rate`, delta: drinkDelta, mobileOptional: true },
@@ -601,7 +620,7 @@ function renderExecutiveSummary() {
     { label: 'Sleep Performance', delta: sleepDelta, note: sleepDelta.detail },
     { label: 'Drink Nights', delta: drinkDelta, note: drinkDelta.detail },
     { label: 'Lift Count', delta: compareDelta(current.liftCount, previous.liftCount, 'up', v => `${Math.round(v)}`), note: `${current.liftCount} vs ${previous.liftCount}` },
-    { label: 'Expected vs Actual Loss', delta: compareDelta(trendReality.actualLoss, trendReality.expectedLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`), note: trendReality.actualLoss != null && trendReality.expectedLoss != null ? `${weightValue(trendReality.actualLoss)} ${weightUnit()} actual vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} expected` : 'Need at least two weigh-ins in view' }
+    { label: 'Expected vs Trend Loss', delta: compareDelta(trendReality.actualLoss, trendReality.expectedLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`), note: trendReality.actualLoss != null && trendReality.expectedLoss != null ? `${weightValue(trendReality.actualLoss)} ${weightUnit()} observed trend vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} deficit-implied` : 'Need at least two weigh-ins in view' }
   ].map(item => `
     <div class="compare-card">
       <div class="eyebrow">${item.label}</div>
@@ -635,7 +654,9 @@ function renderExecutiveSummary() {
   document.getElementById('patternList').innerHTML = [
     { title: 'Weekday pattern', text: getWeekdayPatternText(filteredSleep) },
     { title: 'Weekend effect', text: current.avgWeekendSleep != null && current.avgWeekdaySleep != null ? `Weekend sleep averages ${current.avgWeekendSleep.toFixed(1)}% vs ${current.avgWeekdaySleep.toFixed(1)}% on weekdays.` : 'Not enough sleep data to compare weekends vs weekdays.' },
-    { title: 'Expected vs actual trend', text: trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Logged deficit implies about ${weightValue(trendReality.expectedLoss)} ${weightUnit()} loss; the scale shows ${weightValue(trendReality.actualLoss)} ${weightUnit()}.` : 'Need at least two weigh-ins in the active view to compare expected vs actual change.' },
+    { title: 'Plateau vs noise', text: plateau.text },
+    { title: 'Drink-following mornings', text: lag.drinkSleepGap != null ? `${lag.afterDrinkAvg.toFixed(1)}% sleep after drink nights vs ${lag.afterCleanAvg.toFixed(1)}% after clean nights (gap: ${lag.drinkSleepGap.toFixed(1)} pts).` : 'Need more drink-vs-clean sleep contrast in the selected range.' },
+    { title: 'Sleep to next-day intake', text: lag.poorSleepNextDayGap != null ? `${energyLabel(lag.poorSleepNextDayAvg)} after poor sleep vs ${energyLabel(lag.goodSleepNextDayAvg)} after good sleep.` : 'Need more sleep/intake pairs to quantify the next-day intake effect.' },
     { title: 'Highest-calorie outlier', text: `${outliers.highCal.date.slice(5)} at ${energyLabel(outliers.highCal.calories)}.` },
     { title: 'Lowest sleep outlier', text: outliers.lowSleep ? `${outliers.lowSleep.date.slice(5)} at ${outliers.lowSleep.perf}% sleep performance after ${outliers.lowSleep.hours}h.` : 'No sleep entries.' },
     { title: 'Largest logged weight drop', text: outliers.biggestWeightDrop ? `${outliers.biggestWeightDrop.date.slice(5)} moved ${weightValue(Math.abs(outliers.biggestWeightDrop.delta))} ${weightUnit()} vs the previous weigh-in.` : 'Not enough weigh-ins to detect jumps.' }
@@ -721,6 +742,7 @@ function renderSleepInsights() {
   const worstDowIdx = dowAvg.indexOf(Math.min(...dowAvg.filter(v => v > 0)));
   const goodSleepCals = filteredSleep.filter(d => d.perf >= goals.sleepPerf).map(d => macroByDate[d.date]?.calories).filter(Boolean);
   const badSleepCals = filteredSleep.filter(d => d.perf < goals.sleepPerf).map(d => macroByDate[d.date]?.calories).filter(Boolean);
+  const lag = getLagMetrics(getFilteredDays(), filteredSleep);
   const avgBadSleepCals = badSleepCals.length ? Math.round(badSleepCals.reduce((a, b) => a + b, 0) / badSleepCals.length) : 0;
   const avgGoodSleepCals = goodSleepCals.length ? Math.round(goodSleepCals.reduce((a, b) => a + b, 0) / goodSleepCals.length) : 0;
   const respStart = filteredSleep[0]?.resp;
@@ -731,7 +753,8 @@ function renderSleepInsights() {
     <div class="badge rose"><strong>r = ${bedtimeCorr.toFixed(2)}</strong>Normalized bedtime vs same-night sleep quality (n=${filteredSleep.length})</div>
     <div class="badge amber"><strong>${bucketData.map(b => `${Math.round(b.value)}%`).join(' → ')}</strong>Sleep perf by bedtime bucket with explicit lag framing</div>
     <div class="badge blue"><strong>${dowLabels[bestDowIdx]} ${dowAvg[bestDowIdx].toFixed(1)}% · ${dowLabels[worstDowIdx]} ${dowAvg[worstDowIdx].toFixed(1)}%</strong>Best vs worst day of week for sleep</div>
-    <div class="badge green"><strong>${energyLabel(avgBadSleepCals)} vs ${energyLabel(avgGoodSleepCals)}</strong>Next-day calories after bad vs good sleep</div>
+    <div class="badge green"><strong>${energyLabel(lag.poorSleepNextDayAvg ?? avgBadSleepCals)} vs ${energyLabel(lag.goodSleepNextDayAvg ?? avgGoodSleepCals)}</strong>Next-day calories after poor vs good sleep (n=${lag.nextDayCalSample})</div>
+    <div class="badge sky"><strong>${lag.liftNextDayWeightGap != null ? formatSignedWeight(lag.liftNextDayWeightGap) : '—'}</strong>Next-day scale move after lift days vs rest days (lag framing)</div>
     <div class="badge sky"><strong>${respStart?.toFixed(1) ?? '—'} → ${respEnd?.toFixed(1) ?? '—'} rpm</strong>Respiratory rate change across selected range</div>
   `;
 
@@ -826,13 +849,32 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
 // BODY COMPOSITION
 // =====================================================================
 const bodyComp = bodyCompEstimate();
-const bodyCompBF = bodyComp.map(d => d.bodyFatPct.toFixed(1));
 
 allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
   type: 'line',
   data: {
     labels: bodyComp.map(d => d.date.slice(5)),
     datasets: [
+      {
+        label: 'Estimated Fat Range Upper',
+        data: bodyComp.map(d => d.measured ? null : +d.fatHigh.toFixed(1)),
+        borderColor: 'rgba(248,113,113,0)',
+        backgroundColor: 'rgba(248,113,113,0.08)',
+        pointRadius: 0,
+        borderWidth: 0,
+        fill: false,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Estimated Fat Range Lower',
+        data: bodyComp.map(d => d.measured ? null : +d.fatLow.toFixed(1)),
+        borderColor: 'rgba(248,113,113,0)',
+        backgroundColor: 'rgba(248,113,113,0.08)',
+        pointRadius: 0,
+        borderWidth: 0,
+        fill: '-1',
+        yAxisID: 'y'
+      },
       {
         label: 'Est. Fat Mass',
         data: bodyComp.map(d => +d.fat.toFixed(1)),
@@ -866,20 +908,30 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
   options: {
     ...chartDefaults(),
     plugins: { ...chartDefaults().plugins,
-      legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+      legend: {
+        display: true,
+        labels: {
+          color:'#94a3b8',
+          font:{size:11},
+          boxWidth:10,
+          padding:14,
+          filter: item => !['Estimated Fat Range Upper', 'Estimated Fat Range Lower'].includes(item.text)
+        }
+      },
+      tooltip: { ...chartDefaults().plugins.tooltip, filter: ctx => ![0, 1].includes(ctx.datasetIndex), callbacks: {
         title: ctx => bodyComp[ctx[0].dataIndex].date,
         label: ctx => {
           const d = bodyComp[ctx.dataIndex];
-          if (ctx.datasetIndex === 0) return ` Est. fat: ${weightLabel(d.fat)} (~${bodyCompBF[ctx.dataIndex]}% BF)`;
-          if (ctx.datasetIndex === 1) return ` Est. lean: ${weightLabel(d.lean)}`;
-          if (ctx.datasetIndex === 2) return ` Measured fat: ${weightLabel(d.fat)} (~${bodyCompBF[ctx.dataIndex]}% BF)`;
+          if (ctx.datasetIndex === 2) return ` Est. fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
+          if (ctx.datasetIndex === 3) return ` Est. lean: ${weightLabel(d.lean)}`;
+          if (ctx.datasetIndex === 4) return ` Measured fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
           return ` Measured lean: ${weightLabel(d.lean)}`;
         },
         afterBody: ctx => {
           const d = bodyComp[ctx[0].dataIndex];
           return d ? [
             d.measured ? `  DXA measured point on Jan 6, 2026` : `  Estimated from the DXA baseline on Jan 6, 2026`,
+            d.measured ? '' : `  Likely body-fat range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
             d.measured ? `  Total: ${weightLabel(d.weight)}` : `  Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
             d.measured ? '' : `  Total: ${weightLabel(d.weight)}`
           ].filter(Boolean) : [];
@@ -940,25 +992,21 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 // =====================================================================
 // WATERFALL DEFICIT (uses estimated TDEE based on actual weight loss)
 // =====================================================================
-// Estimate TDEE from actual weight loss with phase awareness
-const wDaysForTDEE = allDays.filter(d => d.weight);
-const totalWeightLoss = wDaysForTDEE.length >= 2 ? wDaysForTDEE[0].weight - wDaysForTDEE[wDaysForTDEE.length-1].weight : 0;
-const totalDaysSpan = allDays.length;
-const avgIntake = allDays.reduce((s,d) => s + effectiveCalories(d), 0) / totalDaysSpan;
-const estimatedTDEE = Math.round(avgIntake + (totalWeightLoss * 3500 / totalDaysSpan));
-
-// Phase-aware TDEE: separate cutting vs maintenance/diet break phases
+// Estimate TDEE from recency-weighted effective intake plus the smoothed weight trend.
 const DIET_BREAK_START = '2026-02-27';
 const DIET_BREAK_END = '2026-03-07';
 function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
 const cuttingDays = allDays.filter(d => !isInDietBreak(d.date));
 const breakDays = allDays.filter(d => isInDietBreak(d.date));
-const cuttingWeightDays = cuttingDays.filter(d => d.weight);
-const cuttingWeightLoss = cuttingWeightDays.length >= 2 ? cuttingWeightDays[0].weight - cuttingWeightDays[cuttingWeightDays.length-1].weight : totalWeightLoss;
-const cuttingAvgIntake = cuttingDays.length ? cuttingDays.reduce((s,d) => s + effectiveCalories(d), 0) / cuttingDays.length : avgIntake;
-const cuttingTDEE = cuttingDays.length ? Math.round(cuttingAvgIntake + (cuttingWeightLoss * 3500 / cuttingDays.length)) : estimatedTDEE;
+const overallTDEEProfile = estimateTDEEProfile(allDays);
+const cuttingTDEEProfile = estimateTDEEProfile(cuttingDays);
+const estimatedTDEE = overallTDEEProfile.maintenance;
+const cuttingTDEE = cuttingTDEEProfile.maintenance;
 const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
-const tdeeRange = { low: Math.min(estimatedTDEE, cuttingTDEE) - 80, high: Math.max(estimatedTDEE, cuttingTDEE) + 80 };
+const tdeeRange = {
+  low: Math.min(overallTDEEProfile.rangeLow, cuttingTDEEProfile.rangeLow),
+  high: Math.max(overallTDEEProfile.rangeHigh, cuttingTDEEProfile.rangeHigh)
+};
 
 let cumDeficit = 0;
 const waterfallData = allDays.map(d => {
@@ -1610,6 +1658,8 @@ function renderExploreDiagnostics() {
   const rangeDays = getRangeDays();
   const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
   const decomp = trendDecomposition(rangeDays);
+  const plateau = plateauNoiseAssessment(rangeDays, rangeSleep);
+  const lag = getLagMetrics(rangeDays, rangeSleep);
   const quality = qualityAudit(rangeDays, rangeSleep);
   const foodPatterns = foodPatternSummary(rangeDays);
   document.getElementById('exploreScopeNote').textContent = eventFilter === 'all'
@@ -1625,15 +1675,20 @@ function renderExploreDiagnostics() {
 
     const summary = [
       {
+        cls: plateau.cls,
+        title: plateau.title,
+        text: plateau.text
+      },
+      {
         cls: 'good',
         title: 'Observed scale trend',
-        text: `${decomp.scaleLoss >= 0 ? 'Down' : 'Up'} ${weightLabel(Math.abs(decomp.scaleLoss))} across ${decomp.weightSpan} weigh-ins over ${decomp.daySpan} days.`
+        text: `${decomp.scaleLoss >= 0 ? 'Down' : 'Up'} ${weightLabel(Math.abs(decomp.scaleLoss))} on the smoothed trend across ${decomp.weightSpan} weigh-ins over ${decomp.daySpan} days.`
       },
       {
         cls: Math.abs(decomp.modelGap ?? 0) <= 1 ? 'good' : 'warn',
         title: 'Logged deficit vs scale',
         text: decomp.expectedLoss != null
-          ? `Deficit math implies ${weightLabel(Math.abs(decomp.expectedLoss))} of ${decomp.expectedLoss >= 0 ? 'loss' : 'gain'}. The scale is ${decomp.modelGap >= 0 ? 'ahead by' : 'behind by'} ${weightLabel(Math.abs(decomp.modelGap || 0))}.`
+          ? `Maintenance-gap math implies ${weightLabel(Math.abs(decomp.expectedLoss))} of ${decomp.expectedLoss >= 0 ? 'loss' : 'gain'}. The smoothed trend is ${decomp.modelGap >= 0 ? 'ahead by' : 'behind by'} ${weightLabel(Math.abs(decomp.modelGap || 0))}.`
           : 'Need logged calories across the range to compare deficit math with the scale.'
       },
       {
@@ -1649,6 +1704,11 @@ function renderExploreDiagnostics() {
         text: decomp.residual != null
           ? `${formatSignedWeight(decomp.residual)} after backing out the modeled lean-mass change. Larger residuals usually mean water, glycogen, or logging noise is still dominating part of the scale move.`
           : 'Residual non-fat movement will appear once the body-comp model has enough weigh-ins.'
+      },
+      {
+        cls: Math.abs(lag.drinkSleepGap ?? 0) >= 10 || Math.abs(lag.liftNextDayWeightGap ?? 0) >= 0.35 ? 'warn' : 'good',
+        title: 'Lag signals still present',
+        text: `Drink-following mornings are ${lag.drinkSleepGap != null ? lag.drinkSleepGap.toFixed(1) : '—'} pts worse, and the next-day scale move after lift days is ${lag.liftNextDayWeightGap != null ? formatSignedWeight(lag.liftNextDayWeightGap) : '—'} versus rest days.`
       }
     ];
     document.getElementById('trendDecompSummary').innerHTML = summary.map(item => `
@@ -1798,12 +1858,13 @@ function runScenarioPlanner() {
   const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
   const deltaVsBaseline = parseFloat(r.weightChange) - parseFloat(baseline.weightChange);
   const dir = parseFloat(r.weightChange) >= 0 ? 'lose' : 'gain';
-  const projectedComp = estimateBodyCompAtWeight(parseFloat(r.projectedWeight), rangeDays);
+  const projectedComp = estimateBodyCompRangeAtWeight(parseFloat(r.projectedWeight), rangeDays);
 
   let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong>, the model still uses about <strong>${energyLabel(r.tdee)}</strong> as maintenance.`;
   html += `<br>That creates an effective <strong>${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong> after behavior drag.`;
   html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
-  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean estimate)`;
+  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%)`;
+  html += `<br>Projected composition: ~${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean (range: ${weightLabel(projectedComp.fatLow, 1)}–${weightLabel(projectedComp.fatHigh, 1)} fat)`;
   html += `<br>Compared with your current-range pace, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
   document.getElementById('whatifResult').innerHTML = html;
 
@@ -1822,7 +1883,7 @@ function runScenarioPlanner() {
     },
     {
       value: `~${projectedComp.bodyFatPct.toFixed(1)}%`,
-      sub: `Projected body fat from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
+      sub: `Likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}% from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
     },
     {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
@@ -1836,7 +1897,7 @@ function runScenarioPlanner() {
   `).join('');
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimatedTDEE)} from recency-weighted intake plus the smoothed weight trend, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
 }
 
 // =====================================================================

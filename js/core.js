@@ -354,6 +354,13 @@ function bodyCompModelShares(days = allDays) {
   };
 }
 
+function bodyCompConfidenceScore(days = allDays) {
+  const weightDays = days.filter(d => d.weight);
+  if (!weightDays.length) return 0.2;
+  const spanDays = Math.max(1, Math.round((new Date(weightDays[weightDays.length - 1].date + 'T12:00:00') - new Date(weightDays[0].date + 'T12:00:00')) / 86400000));
+  return Math.max(0.2, Math.min(0.95, (weightDays.length / 14) * 0.45 + (spanDays / 70) * 0.35 + 0.2));
+}
+
 function estimateBodyCompAtWeight(weight, days = allDays) {
   const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelShares(days);
   const weightDelta = weight - DXA_SCAN.totalMass;
@@ -370,13 +377,48 @@ function estimateBodyCompAtWeight(weight, days = allDays) {
   };
 }
 
+function estimateBodyCompRangeAtWeight(weight, days = allDays) {
+  const base = estimateBodyCompAtWeight(weight, days);
+  const confidenceScore = bodyCompConfidenceScore(days);
+  const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelShares(days);
+  const weightDelta = weight - DXA_SCAN.totalMass;
+  const baseShare = weightDelta < 0 ? cutFatFreeShare : gainFatFreeShare;
+  const sharePad = 0.018 + ((1 - confidenceScore) * 0.03);
+  const shareOptions = [
+    Math.max(0.02, baseShare - sharePad),
+    baseShare,
+    Math.min(0.4, baseShare + sharePad)
+  ];
+  const variants = shareOptions.map(fatFreeShare => {
+    const fatFreeMass = Math.max(DXA_FAT_FREE_MASS + (weightDelta * fatFreeShare), 0);
+    const lean = Math.max(fatFreeMass - DXA_BONE_MASS, 0);
+    const fat = Math.max(weight - fatFreeMass, 0);
+    const bodyFatPct = weight ? (fat / weight) * 100 : 0;
+    return { fatFreeShare, fatFreeMass, lean, fat, bodyFatPct };
+  });
+  const fatVals = variants.map(v => v.fat);
+  const leanVals = variants.map(v => v.lean);
+  const bfVals = variants.map(v => v.bodyFatPct);
+  return {
+    ...base,
+    fatLow: Math.min(...fatVals),
+    fatHigh: Math.max(...fatVals),
+    leanLow: Math.min(...leanVals),
+    leanHigh: Math.max(...leanVals),
+    bodyFatPctLow: Math.min(...bfVals),
+    bodyFatPctHigh: Math.max(...bfVals),
+    confidence: projectionConfidence(confidenceScore),
+    confidenceScore
+  };
+}
+
 // Body composition estimate anchored to the Jan 6, 2026 DXA scan.
 function bodyCompEstimate(days = allDays) {
   const weightDays = days.filter(d => d.weight);
   const scanDay = macroByDate[DXA_SCAN.date];
   const includeScan = isDateInRange(DXA_SCAN.date) && (!scanDay || matchesDayEvent(scanDay));
   if (!weightDays.length && !includeScan) return [];
-  const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompAtWeight(d.weight, days) }));
+  const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompRangeAtWeight(d.weight, days) }));
   if (includeScan) {
     points.push({
       date: DXA_SCAN.date,
@@ -384,6 +426,14 @@ function bodyCompEstimate(days = allDays) {
       lean: DXA_SCAN.leanMass,
       fat: DXA_FAT_MASS,
       bodyFatPct: DXA_SCAN.bodyFatPct,
+      fatLow: DXA_FAT_MASS,
+      fatHigh: DXA_FAT_MASS,
+      leanLow: DXA_SCAN.leanMass,
+      leanHigh: DXA_SCAN.leanMass,
+      bodyFatPctLow: DXA_SCAN.bodyFatPct,
+      bodyFatPctHigh: DXA_SCAN.bodyFatPct,
+      confidence: projectionConfidence(1),
+      confidenceScore: 1,
       measured: true
     });
   }
@@ -487,7 +537,7 @@ function scenarioForecastSeries(label, values, days, sleep) {
     return projected;
   });
   const dates = Array.from({ length: weeks + 1 }, (_, week) => addDaysToDate(anchorDate, week * 7));
-  const bodyComp = weights.map(weight => estimateBodyCompAtWeight(weight, days));
+  const bodyComp = weights.map(weight => estimateBodyCompRangeAtWeight(weight, days));
   return {
     label,
     values,
@@ -947,6 +997,21 @@ function projectionFreshness() {
   return { latestMacro, latestSleep, latestWeight };
 }
 
+function energyBalanceSummary(days, tdee = estimatedTDEE) {
+  if (!days.length || !Number.isFinite(tdee)) return null;
+  const totalIntake = days.reduce((sum, day) => sum + effectiveCalories(day), 0);
+  const totalMaintenance = tdee * days.length;
+  const totalDeficit = totalMaintenance - totalIntake;
+  return {
+    totalIntake,
+    totalMaintenance,
+    totalDeficit,
+    avgDailyDeficit: totalDeficit / Math.max(days.length, 1),
+    weeklyPace: (totalDeficit / Math.max(days.length, 1)) * 7,
+    fatEquivalent: totalDeficit / 3500
+  };
+}
+
 function expectedWeightLoss(days) {
   if (!days.length) return null;
   return days.reduce((sum, d) => sum + (estimatedTDEE - effectiveCalories(d)), 0) / 3500;
@@ -954,10 +1019,17 @@ function expectedWeightLoss(days) {
 
 function weightTrendReality(days) {
   const expectedLoss = expectedWeightLoss(days);
-  const actualLoss = actualWeightLoss(days);
+  const projection = observedWeightProjection(days, 0);
+  const actualLoss = projection ? (projection.startTrendWeight - projection.latestTrendWeight) : actualWeightLoss(days);
   const gap = expectedLoss != null && actualLoss != null ? actualLoss - expectedLoss : null;
   const efficiency = expectedLoss && actualLoss != null ? (actualLoss / expectedLoss) * 100 : null;
-  return { expectedLoss, actualLoss, gap, efficiency };
+  return {
+    expectedLoss,
+    actualLoss,
+    gap,
+    efficiency,
+    observedTrend: projection
+  };
 }
 
 function formatSignedWeight(v, digits = 1) {
@@ -973,7 +1045,8 @@ function formatSignedPct(v, digits = 0) {
 function trendDecomposition(days) {
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length < 2) return null;
-  const scaleLoss = weightDays[0].weight - weightDays[weightDays.length - 1].weight;
+  const observedTrend = observedWeightProjection(days, 0);
+  const scaleLoss = observedTrend ? (observedTrend.startTrendWeight - observedTrend.latestTrendWeight) : (weightDays[0].weight - weightDays[weightDays.length - 1].weight);
   const expectedLoss = expectedWeightLoss(days);
   const compPoints = bodyCompEstimate(days).filter(p => !p.measured);
   const firstComp = compPoints[0] || null;
@@ -992,7 +1065,8 @@ function trendDecomposition(days) {
     residual,
     modelGap,
     weightSpan: weightDays.length,
-    daySpan: Math.max(1, Math.round((new Date(weightDays[weightDays.length - 1].date + 'T12:00:00') - new Date(weightDays[0].date + 'T12:00:00')) / 86400000))
+    daySpan: Math.max(1, Math.round((new Date(weightDays[weightDays.length - 1].date + 'T12:00:00') - new Date(weightDays[0].date + 'T12:00:00')) / 86400000)),
+    observedTrend
   };
 }
 
@@ -1067,6 +1141,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       label: currentSeries.label,
       data: currentSeries.data,
       bodyFatPcts: currentSeries.bodyComp.map(point => point.bodyFatPct),
+      bodyFatRanges: currentSeries.bodyComp.map(point => [point.bodyFatPctLow, point.bodyFatPctHigh]),
       borderColor: colorMap.current,
       backgroundColor: 'transparent',
       borderDash: [6, 5],
@@ -1077,6 +1152,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       label: currentSeries.label,
       data: currentSeries.data,
       bodyFatPcts: currentSeries.bodyComp.map(point => point.bodyFatPct),
+      bodyFatRanges: currentSeries.bodyComp.map(point => [point.bodyFatPctLow, point.bodyFatPctHigh]),
       borderColor: colorMap.active,
       backgroundColor: 'transparent',
       pointStyle: 'circle',
@@ -1090,6 +1166,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
         label: scenarioPresetLabel(key),
         data: series.data,
         bodyFatPcts: series.bodyComp.map(point => point.bodyFatPct),
+        bodyFatRanges: series.bodyComp.map(point => [point.bodyFatPctLow, point.bodyFatPctHigh]),
         borderColor: colorMap[key],
         backgroundColor: 'transparent',
         pointRadius: 0,
@@ -1101,6 +1178,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       label: activeSeries.label,
       data: activeSeries.data,
       bodyFatPcts: activeSeries.bodyComp.map(point => point.bodyFatPct),
+      bodyFatRanges: activeSeries.bodyComp.map(point => [point.bodyFatPctLow, point.bodyFatPctHigh]),
       borderColor: colorMap.active,
       backgroundColor: 'rgba(251,191,36,0.08)',
       pointStyle: 'rectRounded',
@@ -1117,8 +1195,10 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const bfPct = ctx.dataset.bodyFatPcts?.[ctx.dataIndex];
+    const bfRange = ctx.dataset.bodyFatRanges?.[ctx.dataIndex];
     const bfText = Number.isFinite(bfPct) ? ` · ~${bfPct.toFixed(1)}% BF` : '';
-    return `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}${bfText}`;
+    const bfRangeText = Array.isArray(bfRange) && Number.isFinite(bfRange[0]) && Number.isFinite(bfRange[1]) ? ` (${bfRange[0].toFixed(1)}%–${bfRange[1].toFixed(1)}%)` : '';
+    return `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}${bfText}${bfRangeText}`;
   };
   chart.options.plugins.tooltip.callbacks.footer = items => {
     const point = items[0];
@@ -1178,26 +1258,165 @@ function linearRegression(xArr, yArr) {
   return { slope, intercept };
 }
 
+function weightedLinearRegression(xArr, yArr, weights) {
+  const n = xArr.length;
+  if (n < 2) return { slope: 0, intercept: yArr[0] || 0 };
+  const safeWeights = weights?.length === n ? weights : Array.from({ length: n }, () => 1);
+  const weightSum = safeWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const meanX = safeWeights.reduce((sum, weight, idx) => sum + (weight * xArr[idx]), 0) / weightSum;
+  const meanY = safeWeights.reduce((sum, weight, idx) => sum + (weight * yArr[idx]), 0) / weightSum;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xArr[i] - meanX;
+    num += safeWeights[i] * dx * (yArr[i] - meanY);
+    den += safeWeights[i] * dx * dx;
+  }
+  const slope = den ? num / den : 0;
+  const intercept = meanY - (slope * meanX);
+  return { slope, intercept };
+}
+
+function weightedAverage(values, weights) {
+  if (!values.length) return null;
+  const safeWeights = weights?.length === values.length ? weights : Array.from({ length: values.length }, () => 1);
+  const weightSum = safeWeights.reduce((sum, weight) => sum + weight, 0);
+  if (!weightSum) return null;
+  return values.reduce((sum, value, idx) => sum + (value * safeWeights[idx]), 0) / weightSum;
+}
+
+function recencyWeights(length, start = 0.8, end = 1.3) {
+  if (!length) return [];
+  if (length === 1) return [end];
+  return Array.from({ length }, (_, idx) => start + (((end - start) * idx) / (length - 1)));
+}
+
+function regressionFitStats(xArr, yArr, reg, weights) {
+  const safeWeights = weights?.length === xArr.length ? weights : Array.from({ length: xArr.length }, () => 1);
+  const preds = xArr.map(x => reg.intercept + (reg.slope * x));
+  const meanY = weightedAverage(yArr, safeWeights) ?? 0;
+  let ssRes = 0;
+  let ssTot = 0;
+  for (let i = 0; i < yArr.length; i++) {
+    ssRes += safeWeights[i] * ((yArr[i] - preds[i]) ** 2);
+    ssTot += safeWeights[i] * ((yArr[i] - meanY) ** 2);
+  }
+  const residualStdDev = Math.sqrt(ssRes / Math.max(1, yArr.length - 1));
+  const r2 = ssTot ? Math.max(0, 1 - (ssRes / ssTot)) : 0;
+  return { residualStdDev, r2 };
+}
+
+function smoothedWeightTrendPoints(days, window = 5) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return [];
+  const firstTime = new Date(weightDays[0].date + 'T12:00:00').getTime();
+  const smoothWindow = Math.max(2, Math.min(window, weightDays.length));
+  const smoothed = rollingAvg(weightDays.map(d => d.weight), smoothWindow);
+  return weightDays.map((day, idx) => ({
+    date: day.date,
+    rawWeight: day.weight,
+    trendWeight: smoothed[idx] ?? day.weight,
+    dayOffset: (new Date(day.date + 'T12:00:00').getTime() - firstTime) / 86400000
+  }));
+}
+
+function estimateTDEEProfile(days = allDays) {
+  const weightPoints = smoothedWeightTrendPoints(days, 5);
+  const intakeDays = days.filter(d => Number.isFinite(effectiveCalories(d)));
+  const intakeValues = intakeDays.map(day => effectiveCalories(day));
+  const intakeWeights = recencyWeights(intakeValues.length, 0.85, 1.35);
+  const weightedIntake = weightedAverage(intakeValues, intakeWeights);
+  if (weightPoints.length < 3 || weightedIntake == null) {
+    const fallback = Math.round(weightedIntake ?? goals.calories);
+    return {
+      maintenance: fallback,
+      weightedIntake: fallback,
+      dailySlope: 0,
+      weeklyLoss: 0,
+      sampleSize: weightPoints.length,
+      spanDays: 0,
+      residualStdDev: null,
+      r2: 0,
+      confidence: projectionConfidence(0.25),
+      confidenceScore: 0.25,
+      rangeLow: Math.max(0, fallback - 220),
+      rangeHigh: fallback + 220,
+      method: 'Fallback from average effective intake because the weight trend is too sparse.'
+    };
+  }
+  const xArr = weightPoints.map(point => point.dayOffset);
+  const yArr = weightPoints.map(point => point.trendWeight);
+  const weights = recencyWeights(weightPoints.length, 0.8, 1.4);
+  const reg = weightedLinearRegression(xArr, yArr, weights);
+  const fit = regressionFitStats(xArr, yArr, reg, weights);
+  const spanDays = Math.max(1, Math.round(xArr[xArr.length - 1]));
+  const weeklyLoss = -reg.slope * 7;
+  const maintenance = Math.round(weightedIntake + ((-reg.slope) * 3500));
+  const confidenceScore = Math.max(
+    0.2,
+    Math.min(
+      0.96,
+      (Math.min(weightPoints.length, 14) / 14) * 0.35 +
+      (Math.min(spanDays, 70) / 70) * 0.3 +
+      Math.max(0, 1 - ((fit.residualStdDev || 0) / 1.8)) * 0.2 +
+      (fit.r2 || 0) * 0.15
+    )
+  );
+  const uncertainty = Math.round(Math.max(95, 235 - (confidenceScore * 110) + ((fit.residualStdDev || 0) * 55)));
+  return {
+    maintenance,
+    weightedIntake,
+    dailySlope: reg.slope,
+    weeklyLoss,
+    sampleSize: weightPoints.length,
+    spanDays,
+    residualStdDev: fit.residualStdDev,
+    r2: fit.r2,
+    confidence: projectionConfidence(confidenceScore),
+    confidenceScore,
+    rangeLow: Math.max(0, maintenance - uncertainty),
+    rangeHigh: maintenance + uncertainty,
+    method: 'Estimated from recency-weighted effective intake plus a weighted regression on the smoothed weight trend.'
+  };
+}
+
 function observedWeightProjection(days, horizonDays = 30) {
   const weightDays = days.filter(d => d.weight);
-  if (weightDays.length < 2) return null;
-  const first = weightDays[0];
-  const last = weightDays[weightDays.length - 1];
-  const t0 = new Date(first.date + 'T12:00:00').getTime();
-  const xArr = weightDays.map(d => (new Date(d.date + 'T12:00:00').getTime() - t0) / (1000 * 60 * 60 * 24));
-  const yArr = weightDays.map(d => d.weight);
-  const { slope: dailySlope, intercept } = linearRegression(xArr, yArr);
+  const trendPoints = smoothedWeightTrendPoints(days, 5);
+  if (trendPoints.length < 2) return null;
+  const xArr = trendPoints.map(point => point.dayOffset);
+  const yArr = trendPoints.map(point => point.trendWeight);
+  const weights = recencyWeights(trendPoints.length, 0.8, 1.35);
+  const { slope: dailySlope, intercept } = weightedLinearRegression(xArr, yArr, weights);
+  const fit = regressionFitStats(xArr, yArr, { slope: dailySlope, intercept }, weights);
   const spanDays = Math.max(1, Math.round(xArr[xArr.length - 1]));
-  const latestFitted = intercept + dailySlope * xArr[xArr.length - 1];
+  const latest = weightDays[weightDays.length - 1];
+  const latestTrendWeight = intercept + (dailySlope * xArr[xArr.length - 1]);
+  const startTrendWeight = intercept + (dailySlope * xArr[0]);
+  const projectedWeight = latestTrendWeight + (dailySlope * horizonDays);
+  const confidenceScore = Math.max(
+    0.2,
+    Math.min(
+      0.97,
+      (Math.min(trendPoints.length, 12) / 12) * 0.35 +
+      (Math.min(spanDays, 56) / 56) * 0.3 +
+      Math.max(0, 1 - ((fit.residualStdDev || 0) / 1.8)) * 0.2 +
+      (fit.r2 || 0) * 0.15
+    )
+  );
   return {
-    latestWeight: last.weight,
-    latestFitted,
+    latestWeight: latest.weight,
+    latestFitted: latestTrendWeight,
+    latestTrendWeight,
+    startTrendWeight,
     dailySlope,
     spanDays,
-    sampleSize: weightDays.length,
-    confidence: projectionConfidence(Math.min(1, (weightDays.length / 8) * 0.45 + (spanDays / 30) * 0.55)),
+    sampleSize: trendPoints.length,
+    residualStdDev: fit.residualStdDev,
+    confidence: projectionConfidence(confidenceScore),
+    confidenceScore,
     projectedDelta: dailySlope * horizonDays,
-    projectedWeight: latestFitted + (dailySlope * horizonDays)
+    projectedWeight
   };
 }
 
@@ -1303,39 +1522,126 @@ function foodPatternSummary(days) {
   };
 }
 
-function getDriverRanking(days, sleep) {
+function getLagMetrics(days, sleep) {
   const afterDrink = [];
   const afterClean = [];
-  sleep.forEach(d => (drinkDates.has(prevDay(d.date)) ? afterDrink : afterClean).push(d.perf));
+  sleep.forEach(day => (drinkDates.has(prevDay(day.date)) ? afterDrink : afterClean).push(day.perf));
   const afterDrinkAvg = avgOrNull(afterDrink.map(v => ({ v })), 'v');
   const afterCleanAvg = avgOrNull(afterClean.map(v => ({ v })), 'v');
-  const bedtimeCorr = pearson(sleep.map(normalizedBedtimeHour), sleep.map(d => d.perf));
-  const sleepVsNextDayCalories = sleep.map(d => {
-    const nextMacro = macroByDate[nextDayStr(d.date)];
-    return nextMacro ? { x: d.perf, y: nextMacro.calories } : null;
+  const poorSleepPairs = sleep.map(day => {
+    const nextMacro = macroByDate[nextDayStr(day.date)];
+    return nextMacro ? { perf: day.perf, intake: effectiveCalories(nextMacro) } : null;
   }).filter(Boolean);
-  const nextDayCalCorr = pearson(sleepVsNextDayCalories.map(p => p.x), sleepVsNextDayCalories.map(p => p.y));
+  const poorSleepDays = poorSleepPairs.filter(pair => pair.perf < goals.sleepPerf);
+  const goodSleepDays = poorSleepPairs.filter(pair => pair.perf >= goals.sleepPerf);
+  const poorSleepNextDayAvg = avgOrNull(poorSleepDays.map(pair => ({ v: pair.intake })), 'v');
+  const goodSleepNextDayAvg = avgOrNull(goodSleepDays.map(pair => ({ v: pair.intake })), 'v');
+  const nextDayCalCorr = pearson(poorSleepPairs.map(pair => pair.perf), poorSleepPairs.map(pair => pair.intake));
+  const bedtimeCorr = pearson(sleep.map(normalizedBedtimeHour), sleep.map(day => day.perf));
+  const nextDayWeightMoves = days.map((day, idx) => {
+    if (idx >= days.length - 1 || day.weight == null || days[idx + 1].weight == null) return null;
+    return { lift: day.lifting === 'Y', delta: days[idx + 1].weight - day.weight };
+  }).filter(Boolean);
+  const liftFollowUps = nextDayWeightMoves.filter(move => move.lift).map(move => move.delta);
+  const restFollowUps = nextDayWeightMoves.filter(move => !move.lift).map(move => move.delta);
+  const liftNextDayWeightAvg = avgOrNull(liftFollowUps.map(v => ({ v })), 'v');
+  const restNextDayWeightAvg = avgOrNull(restFollowUps.map(v => ({ v })), 'v');
+  return {
+    afterDrinkCount: afterDrink.length,
+    afterCleanCount: afterClean.length,
+    afterDrinkAvg,
+    afterCleanAvg,
+    drinkSleepGap: afterDrinkAvg != null && afterCleanAvg != null ? afterCleanAvg - afterDrinkAvg : null,
+    bedtimeCorr,
+    nextDayCalCorr,
+    poorSleepNextDayAvg,
+    goodSleepNextDayAvg,
+    poorSleepNextDayGap: poorSleepNextDayAvg != null && goodSleepNextDayAvg != null ? poorSleepNextDayAvg - goodSleepNextDayAvg : null,
+    nextDayCalSample: poorSleepPairs.length,
+    liftNextDayWeightAvg,
+    restNextDayWeightAvg,
+    liftNextDayWeightGap: liftNextDayWeightAvg != null && restNextDayWeightAvg != null ? liftNextDayWeightAvg - restNextDayWeightAvg : null,
+    liftWeightSample: nextDayWeightMoves.length
+  };
+}
+
+function plateauNoiseAssessment(days, sleep) {
+  const trend = weightTrendReality(days);
+  const decomp = trendDecomposition(days);
+  const lag = getLagMetrics(days, sleep);
+  if (trend.expectedLoss == null || trend.actualLoss == null) {
+    return {
+      status: 'unclear',
+      cls: 'warn',
+      title: 'Not enough weight signal yet',
+      text: 'Need at least two weigh-ins in this range before the dashboard can separate true plateau risk from normal water noise.'
+    };
+  }
+  const expectedLoss = trend.expectedLoss;
+  const actualLoss = trend.actualLoss;
+  const residualAbs = Math.abs(decomp?.residual ?? 0);
+  const shortfall = expectedLoss - actualLoss;
+  if (expectedLoss <= 0.5) {
+    return {
+      status: 'small_signal',
+      cls: 'warn',
+      title: 'The deficit signal is still small',
+      text: `The logged deficit only implies about ${weightLabel(Math.abs(expectedLoss))} of movement in this range, so flat scale action can still be normal noise.`
+    };
+  }
+  if (actualLoss >= expectedLoss * 0.7) {
+    return {
+      status: 'on_track',
+      cls: 'good',
+      title: 'This does not look like a real plateau',
+      text: `The smoothed scale trend is showing ${weightLabel(Math.abs(actualLoss))} of loss versus ${weightLabel(Math.abs(expectedLoss))} implied by the logged deficit, which is close enough to be on-track.`
+    };
+  }
+  if (
+    residualAbs >= 0.8 ||
+    (lag.drinkSleepGap ?? 0) >= 10 ||
+    (lag.liftNextDayWeightGap ?? 0) >= 0.35
+  ) {
+    return {
+      status: 'noise',
+      cls: 'warn',
+      title: 'This looks more like noise than a true stall',
+      text: `The scale is lagging the logged deficit by ${weightLabel(Math.abs(shortfall))}, but residual non-fat movement is still ${weightLabel(residualAbs)}. Recovery and training noise are likely masking part of the fat-loss signal.`
+    };
+  }
+  return {
+    status: 'plateau',
+    cls: 'bad',
+    title: 'This may be a real plateau signal',
+    text: `The logged deficit implies about ${weightLabel(Math.abs(expectedLoss))} of loss, but the smoothed trend only shows ${weightLabel(Math.abs(actualLoss))} and there is not much residual noise left to explain the gap.`
+  };
+}
+
+function getDriverRanking(days, sleep) {
+  const lag = getLagMetrics(days, sleep);
   const liftDays = days.filter(d => d.lifting === 'Y');
   const restDays = days.filter(d => d.lifting !== 'Y');
   const liftProteinDiff = (avgOrNull(liftDays, 'protein') ?? 0) - (avgOrNull(restDays, 'protein') ?? 0);
   return [
     {
       title: 'Alcohol has the biggest direct sleep penalty',
-      score: Math.abs((afterDrinkAvg ?? 0) - (afterCleanAvg ?? 0)),
-      text: `${afterDrinkAvg?.toFixed(1) ?? '—'}% after drink nights vs ${afterCleanAvg?.toFixed(1) ?? '—'}% after clean nights`,
-      sample: `n=${afterDrink.length} drink-following mornings / ${afterClean.length} clean mornings`
+      score: Math.abs(lag.drinkSleepGap ?? 0),
+      text: `${lag.afterDrinkAvg?.toFixed(1) ?? '—'}% on drink-following mornings vs ${lag.afterCleanAvg?.toFixed(1) ?? '—'}% after clean nights`,
+      sample: `n=${lag.afterDrinkCount} drink-following mornings / ${lag.afterCleanCount} clean mornings`
     },
     {
       title: 'Later bedtimes strongly drag sleep quality',
-      score: Math.abs(bedtimeCorr),
-      text: `r=${bedtimeCorr.toFixed(2)} between normalized bedtime and same-night sleep performance`,
+      score: Math.abs(lag.bedtimeCorr),
+      text: `r=${lag.bedtimeCorr.toFixed(2)} between normalized bedtime and same-night sleep performance`,
       sample: `n=${sleep.length}`
     },
     {
       title: 'Poor sleep predicts higher next-day calories',
-      score: Math.abs(nextDayCalCorr),
-      text: `r=${nextDayCalCorr.toFixed(2)} between sleep performance and next-day calorie intake`,
-      sample: `n=${sleepVsNextDayCalories.length}`
+      score: Math.abs(lag.poorSleepNextDayGap ?? lag.nextDayCalCorr ?? 0),
+      text: lag.poorSleepNextDayGap != null
+        ? `${energyLabel(lag.poorSleepNextDayAvg)} after poor sleep vs ${energyLabel(lag.goodSleepNextDayAvg)} after good sleep`
+        : `r=${lag.nextDayCalCorr.toFixed(2)} between sleep performance and next-day calorie intake`,
+      sample: `n=${lag.nextDayCalSample}`
     },
     {
       title: 'Lift days change fueling behavior',
@@ -1368,16 +1674,17 @@ function getWeekdayPatternText(sleep) {
 
 function recommendationList(current, previous, days, sleep) {
   const recs = [];
-  const afterDrink = sleep.filter(d => drinkDates.has(prevDay(d.date))).map(d => d.perf);
-  const cleanSleep = sleep.filter(d => !drinkDates.has(prevDay(d.date))).map(d => d.perf);
-  const drinkGap = (cleanSleep.length ? avgOrNull(cleanSleep.map(v => ({ v })), 'v') : 0) - (afterDrink.length ? avgOrNull(afterDrink.map(v => ({ v })), 'v') : 0);
+  const lag = getLagMetrics(days, sleep);
+  const drinkGap = lag.drinkSleepGap ?? 0;
   const trendReality = weightTrendReality(days);
+  const plateau = plateauNoiseAssessment(days, sleep);
   if (drinkGap > 15 && current.drinkNights > 0) recs.push({ title: 'Cut drink nights first', text: `They are costing roughly ${drinkGap.toFixed(1)} sleep-performance points the next morning.` });
   if (current.bedtimeHitRate < 45) recs.push({ title: 'Move bedtime earlier', text: `Bedtime goal hit rate is only ${current.bedtimeHitRate.toFixed(0)}%, which is likely suppressing recovery more than calories are.` });
   if (current.proteinHitRate < 70) recs.push({ title: 'Protect protein before cutting calories harder', text: `Protein goal hit rate is ${current.proteinHitRate.toFixed(0)}%; fixing that will make the cut more stable.` });
   if ((current.avgCalories ?? 0) <= goals.calories && (current.weightChange ?? 0) >= 0 && previous.daysCount) recs.push({ title: 'Do not cut deeper yet', text: 'The range is light on weight signal despite decent calorie adherence. Keep the plan stable and reduce noise first.' });
   if ((current.avgSleepPerf ?? 0) < goals.sleepPerf && current.avgCalories && current.avgCalories > goals.calories) recs.push({ title: 'Treat sleep as an intake-control lever', text: 'Poor sleep and calorie creep are showing up together. Sleep is not secondary here.' });
   if ((trendReality.expectedLoss ?? 0) > 1 && (trendReality.actualLoss ?? 0) < ((trendReality.expectedLoss ?? 0) * 0.5)) recs.push({ title: 'The scale is lagging the math', text: `Expected loss is about ${weightValue(trendReality.expectedLoss)} ${weightUnit()} but the scale only shows ${weightValue(trendReality.actualLoss || 0)} ${weightUnit()}. Keep the plan stable and reduce water-weight noise.` });
+  if (plateau.status === 'plateau') recs.push({ title: 'Sanity-check maintenance and intake accuracy', text: 'The smoothed scale trend is underperforming the logged deficit without much residual noise left. This is the point to recheck maintenance and calorie logging, not just cut harder automatically.' });
   if (!recs.length) recs.push({ title: 'Stay consistent with the current setup', text: 'The range looks broadly on-track. Keep alcohol low, protein high, and bedtime steady.' });
   return recs.slice(0, 4);
 }

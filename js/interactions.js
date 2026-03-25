@@ -616,28 +616,33 @@ function updateBodyCompChart(days) {
   const bodyComp = bodyCompEstimate(days);
   const fatVals = bodyComp.map(d => weightValue(d.fat));
   const leanVals = bodyComp.map(d => weightValue(d.lean));
+  const fatLowVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatLow));
+  const fatHighVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatHigh));
   chart.data.labels = bodyComp.map(d => d.date.slice(5));
-  chart.data.datasets[0].data = fatVals;
-  chart.data.datasets[0].pointRadius = bodyComp.map(d => d.measured ? 0 : 4);
-  chart.data.datasets[1].data = leanVals;
-  chart.data.datasets[1].pointRadius = bodyComp.map(d => d.measured ? 0 : 3);
-  chart.data.datasets[2].data = bodyComp.map(d => d.measured ? weightValue(d.fat) : null);
-  chart.data.datasets[3].data = bodyComp.map(d => d.measured ? weightValue(d.lean) : null);
-  const fatBounds = calcAxisBounds(fatVals, useMetric ? 1 : 2);
+  chart.data.datasets[0].data = fatHighVals;
+  chart.data.datasets[1].data = fatLowVals;
+  chart.data.datasets[2].data = fatVals;
+  chart.data.datasets[2].pointRadius = bodyComp.map(d => d.measured ? 0 : 4);
+  chart.data.datasets[3].data = leanVals;
+  chart.data.datasets[3].pointRadius = bodyComp.map(d => d.measured ? 0 : 3);
+  chart.data.datasets[4].data = bodyComp.map(d => d.measured ? weightValue(d.fat) : null);
+  chart.data.datasets[5].data = bodyComp.map(d => d.measured ? weightValue(d.lean) : null);
+  const fatBounds = calcAxisBounds([...fatVals, ...fatHighVals.filter(v => v != null)], useMetric ? 1 : 2);
   const leanBounds = calcAxisBounds(leanVals, useMetric ? 1 : 1);
   chart.options.plugins.tooltip.callbacks.title = ctx => bodyComp[ctx[0].dataIndex]?.date || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const d = bodyComp[ctx.dataIndex];
     if (!d) return '';
-    if (ctx.datasetIndex === 0) return ` Est. fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
-    if (ctx.datasetIndex === 1) return ` Est. lean: ${weightLabel(d.lean)}`;
-    if (ctx.datasetIndex === 2) return ` Measured fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
+    if (ctx.datasetIndex === 2) return ` Est. fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
+    if (ctx.datasetIndex === 3) return ` Est. lean: ${weightLabel(d.lean)}`;
+    if (ctx.datasetIndex === 4) return ` Measured fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
     return ` Measured lean: ${weightLabel(d.lean)}`;
   };
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
     const d = bodyComp[ctx[0].dataIndex];
     return d ? [
       d.measured ? ` DXA measured point on Jan 6, 2026` : ` Estimated from the DXA baseline on Jan 6, 2026`,
+      d.measured ? '' : ` Likely body-fat range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       d.measured ? ` Total: ${weightLabel(d.weight)}` : ` Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
       d.measured ? '' : ` Total: ${weightLabel(d.weight)}`
     ].filter(Boolean) : [];
