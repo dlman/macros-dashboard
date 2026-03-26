@@ -87,8 +87,10 @@ const data = {
     {date:"2026-03-20",protein:188,carbs:135,fat:60,calories:2100,weight:162.9,lifting:null,drinks:null,notes:"Edamame snack 2x, beef sundubu, puff bar, protein chips , greek yogurt, chicken soup"},
     {date:"2026-03-21",protein:160,carbs:105,fat:52,calories:1650,weight:162.4,lifting:null,drinks:"7 drinks",notes:"chicken platter, protein chips,edamame snack, protein shake, costco chicken chunks, peeps, hot chocolate"},
     {date:"2026-03-22",protein:154,carbs:114,fat:132,calories:2500,weight:162.7,lifting:null,drinks:null,notes:"3 taco bell tacos, rolled up chicken quesadilla, hot pot, protein shake"},
-    {date:"2026-03-23",protein:214,carbs:93,fat:67,calories:2000,weight:163.9,lifting:null,drinks:null,notes:"protein shake 2x, protein chips, rotisserie chicken breast, greek yogurt 2x, edamame snack 2x, dumplings"},
-    {date:"2026-03-24",protein:153,carbs:34,fat:46,calories:1200,weight:161.7,lifting:null,drinks:null,notes:"protein shake, protein ramen with chicken, greek yogurt, edamame snack, 4 boiled eggs, protein chips"},
+    {date:"2026-03-23",protein:214,carbs:93,fat:67,calories:2000,weight:163.9,lifting:"Y",drinks:null,notes:"protein shake 2x, protein chips, rotisserie chicken breast, greek yogurt 2x, edamame snack 2x, dumplings"},
+    {date:"2026-03-24",protein:206,carbs:108,fat:72,calories:2000,weight:161.7,lifting:"Y",drinks:null,notes:"protein shake 2x, protein ramen with chicken, greek yogurt, edamame snack, 4 boiled eggs, protein chips, rice and chicken"},
+    {date:"2026-03-25",protein:156,carbs:173,fat:70,calories:2080,weight:161.9,lifting:null,drinks:null,notes:"protein shake, chinese buffet platter: chicken, chow mei fun, veggies. greek yogurt, edamame snack, protein chips, bun bo hue"},
+    {date:"2026-03-26",protein:105,carbs:70,fat:56,calories:1290,weight:null,lifting:null,drinks:null,notes:"sausage egg mcmuffin, protein shake, chicken over rice, protein chips"},
   ],
 };
 
@@ -169,7 +171,15 @@ const sleepData = [
   {date:"2026-03-15",perf:17,hours:4.65,bedtime:"05:54 AM",bedtime_hour:5.9,deep:0.62,rem:1.95,light:2.08,efficiency:70,resp:16.2},
   {date:"2026-03-16",perf:76,hours:9.52,bedtime:"10:57 PM",bedtime_hour:22.95,deep:1.73,rem:1.6,light:6.18,efficiency:94,resp:15.3},
   {date:"2026-03-17",perf:62,hours:5.25,bedtime:"01:31 AM",bedtime_hour:1.52,deep:1.55,rem:0.58,light:3.12,efficiency:80,resp:15.4},
-  {date:"2026-03-18",perf:71,hours:6.13,bedtime:"11:57 PM",bedtime_hour:23.95,deep:1.22,rem:1.05,light:3.87,efficiency:95,resp:14.8}
+  {date:"2026-03-18",perf:71,hours:6.13,bedtime:"11:57 PM",bedtime_hour:23.95,deep:1.22,rem:1.05,light:3.87,efficiency:95,resp:14.8},
+  {date:"2026-03-19",perf:51,hours:4.45,bedtime:"01:55 AM",bedtime_hour:1.92,deep:1.23,rem:1.02,light:2.2,efficiency:93,resp:14.9},
+  {date:"2026-03-20",perf:81,hours:7.4,bedtime:"12:15 AM",bedtime_hour:0.23,deep:2.48,rem:1.65,light:3.27,efficiency:96,resp:14.6},
+  {date:"2026-03-21",perf:14,hours:3.4,bedtime:"04:13 AM",bedtime_hour:4.22,deep:1.37,rem:0.42,light:1.62,efficiency:70,resp:15.5},
+  {date:"2026-03-22",perf:32,hours:5.58,bedtime:"02:52 AM",bedtime_hour:2.87,deep:1.47,rem:0.72,light:3.4,efficiency:88,resp:15.6},
+  {date:"2026-03-23",perf:62,hours:5.3,bedtime:"01:28 AM",bedtime_hour:1.47,deep:0.83,rem:0.9,light:3.57,efficiency:85,resp:15.3},
+  {date:"2026-03-24",perf:82,hours:8.77,bedtime:"12:12 AM",bedtime_hour:0.2,deep:1.35,rem:1.12,light:6.3,efficiency:93,resp:14.3},
+  {date:"2026-03-25",perf:79,hours:6.38,bedtime:"12:35 AM",bedtime_hour:0.58,deep:0.77,rem:0.92,light:4.7,efficiency:86,resp:15.0},
+  {date:"2026-03-26",perf:67,hours:5.0,bedtime:"12:42 AM",bedtime_hour:0.7,deep:1.45,rem:0.82,light:2.73,efficiency:96,resp:14.3}
 ];
 
 window.dashboardData = { data, sleepData };
