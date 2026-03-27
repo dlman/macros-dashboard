@@ -357,9 +357,9 @@ if (rangeStartDateEl && rangeEndDateEl) {
   rangeEndDateEl.value = allDates[defaultEndIdx] || '2026-03-23';
   rangeStartDateEl.value = allDates[0] || '2026-01-01';
   rangeStartDateEl.min = allDates[0] || '2026-01-01';
-  rangeStartDateEl.max = YESTERDAY_ISO;
+  rangeStartDateEl.max = analyticsCutoffDate();
   rangeEndDateEl.min = allDates[0] || '2026-01-01';
-  rangeEndDateEl.max = YESTERDAY_ISO;
+  rangeEndDateEl.max = analyticsCutoffDate();
 
   function syncDateToRange() {
     const startDate = rangeStartDateEl.value;
@@ -369,8 +369,9 @@ if (rangeStartDateEl && rangeEndDateEl) {
     if (startIdx < 0) startIdx = allDates.findIndex(d => d >= startDate);
     if (endIdx < 0) endIdx = allDates.findIndex(d => d >= endDate);
     if (startIdx < 0) startIdx = 0;
-    if (endIdx < 0) endIdx = MAX_ANALYTICS_IDX;
-    endIdx = Math.min(endIdx, MAX_ANALYTICS_IDX);
+    const maxIdx = maxAnalyticsIndex();
+    if (endIdx < 0) endIdx = maxIdx;
+    endIdx = Math.min(endIdx, maxIdx);
     if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
     rangeStartEl.value = startIdx;
     rangeEndEl.value = endIdx;
@@ -785,11 +786,12 @@ function updateCaloriesChart(months) {
 
 function updateWaterfallChart(days) {
   const chart = allCharts.waterfallChart;
+  const baseTDEE = workingTDEEProfile(getAnalyticsDays()).maintenance;
   let cum = 0;
   const view = days.map(d => {
     const totalCalories = effectiveCalories(d);
-    cum += (estimatedTDEE - totalCalories);
-    return { date: d.date, cum, delta: estimatedTDEE - totalCalories, calories: d.calories, totalCalories };
+    cum += (baseTDEE - totalCalories);
+    return { date: d.date, cum, delta: baseTDEE - totalCalories, calories: d.calories, totalCalories };
   });
   chart.data.labels = view.map(d => d.date.slice(5));
   chart.data.datasets[0].data = view.map(d => energyValue(d.cum));
@@ -806,7 +808,7 @@ function updateWaterfallChart(days) {
       const eqLbs = Math.abs(d.cum) / 3500;
       return [` Cumulative: ${energyLabel(d.cum)}`, ` ≈ ${weightValue(eqLbs)} ${weightUnit()} equivalent`];
     }
-    return [` Today: ${energyLabel(d.delta)}`, ` Ate ~${energyLabel(d.totalCalories)} incl. est. drinks vs ~${energyLabel(estimatedTDEE)} TDEE`];
+    return [` Today: ${energyLabel(d.delta)}`, ` Ate ~${energyLabel(d.totalCalories)} incl. est. drinks vs ~${energyLabel(baseTDEE)} TDEE`];
   };
   chart.options.scales.y.title.text = `Cumulative (${energyUnit()})`;
   chart.options.scales.y.ticks.callback = v => `${v.toLocaleString()} ${energyUnit()}`;
@@ -1246,8 +1248,9 @@ function renderStepsCorrelations(days) {
   // Step-adjusted TDEE note — use last day of filtered range (already ≤ yesterday)
   if (corr.avgSteps != null) {
     const lastDay = days[days.length - 1];
-    const adjustedTDEE = lastDay ? stepAdjustedTDEE(estimatedTDEE, lastDay.date) : null;
-    const delta = adjustedTDEE != null ? adjustedTDEE - estimatedTDEE : null;
+    const baseTDEE = workingTDEEProfile(getAnalyticsDays()).maintenance;
+    const adjustedTDEE = lastDay ? stepAdjustedTDEE(baseTDEE, lastDay.date) : null;
+    const delta = adjustedTDEE != null ? adjustedTDEE - baseTDEE : null;
     if (delta != null && Math.abs(delta) > 20) {
       badges.push(`<div class="insight-badge">
         <span class="badge-icon">🔥</span>
@@ -1298,7 +1301,20 @@ function refreshDashboard() {
   safe(() => updateCaloriesChart(months), 'Calories Chart');
   safe(() => updateWaterfallChart(filteredDays), 'Waterfall Chart');
   // Update TDEE display
-  document.getElementById('waterfallTitle').textContent = `Cumulative Calorie Deficit (TDEE: ~${energyLabel(estimatedTDEE)}, cutting phase: ~${energyLabel(cuttingTDEE)}, range: ${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)})`;
+  {
+    const overallProfile = workingTDEEProfile(getAnalyticsDays());
+    const cuttingProfile = workingTDEEProfile(getAnalyticsDays().filter(d => !isInDietBreak(d.date)));
+    const usingBayes = overallProfile.source === 'bayesian';
+    const activeRange = usingBayes
+      ? { low: overallProfile.rangeLow, high: overallProfile.rangeHigh }
+      : {
+          low: Math.min(overallProfile.rangeLow, cuttingProfile.rangeLow),
+          high: Math.max(overallProfile.rangeHigh, cuttingProfile.rangeHigh)
+        };
+    document.getElementById('waterfallTitle').textContent = usingBayes
+      ? `Cumulative Calorie Deficit (Bayesian TDEE: ~${energyLabel(overallProfile.maintenance)}, 68% range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)}, cutting-phase fallback: ~${energyLabel(cuttingProfile.maintenance)})`
+      : `Cumulative Calorie Deficit (TDEE: ~${energyLabel(overallProfile.maintenance)}, cutting phase: ~${energyLabel(cuttingProfile.maintenance)}, range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)})`;
+  }
   safe(() => updateMacroChart(months), 'Macro Chart');
   safe(() => updateMacroStackedChart(filteredDays), 'Macro Stacked Chart');
   safe(() => updateDonutCharts(months), 'Donut Charts');
@@ -1385,6 +1401,7 @@ function saveCustomData(cd) {
 
 function injectCustomData() {
   const cd = loadCustomData();
+  const hasCustomData = !!(cd.macro.length || cd.sleep.length);
   cd.macro.forEach(entry => {
     const month = entry.date.startsWith('2026-01') ? 'Jan' : entry.date.startsWith('2026-02') ? 'Feb' : 'March';
     if (!data[month].find(d => d.date === entry.date)) {
@@ -1399,10 +1416,10 @@ function injectCustomData() {
     }
   });
   // Rebuild derived structures
-  rebuildDerivedData();
+  rebuildDerivedData({ invalidateBayes: hasCustomData });
 }
 
-function rebuildDerivedData() {
+function rebuildDerivedData({ invalidateBayes = false } = {}) {
   allDays.length = 0;
   ['Jan', 'Feb', 'March'].forEach(m => data[m].forEach(d => allDays.push(d)));
   allDates.length = 0;
@@ -1412,12 +1429,21 @@ function rebuildDerivedData() {
   drinkDates.clear();
   liftDates.clear();
   allDays.forEach(d => { if (d.drinks) drinkDates.add(d.date); if (d.lifting === 'Y') liftDates.add(d.date); });
+  clearAnalyticsCaches();
+  if (invalidateBayes && window.dashboardData?.bayesian) delete window.dashboardData.bayesian;
+  if (invalidateBayes && allCharts.gpWeightChart) {
+    allCharts.gpWeightChart.destroy();
+    delete allCharts.gpWeightChart;
+  }
+  const gpRow = document.getElementById('gpWeightChartRow');
+  if (invalidateBayes && gpRow) gpRow.style.display = 'none';
   // Update range slider max
   const rangeStartEl = document.getElementById('rangeStart');
   const rangeEndEl = document.getElementById('rangeEnd');
-  if (rangeStartEl) rangeStartEl.max = MAX_ANALYTICS_IDX;
-  if (rangeEndEl) { rangeEndEl.max = MAX_ANALYTICS_IDX; rangeEndEl.value = MAX_ANALYTICS_IDX; }
-  rangeEndIdx = MAX_ANALYTICS_IDX;
+  const maxIdx = maxAnalyticsIndex();
+  if (rangeStartEl) rangeStartEl.max = maxIdx;
+  if (rangeEndEl) { rangeEndEl.max = maxIdx; rangeEndEl.value = maxIdx; }
+  rangeEndIdx = maxIdx;
 }
 
 function parseBedtimeHour(bedtime) {

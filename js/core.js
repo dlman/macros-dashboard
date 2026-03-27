@@ -129,15 +129,20 @@ const liftDates = new Set(allDays.filter(d => d.lifting === 'Y').map(d => d.date
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
 // Never include today — partial days skew every metric
-const _now = new Date();
-const YESTERDAY_ISO = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - 1, 12).toISOString().slice(0, 10);
-const MAX_ANALYTICS_IDX = (() => {
-  const idx = allDates.findLastIndex(d => d <= YESTERDAY_ISO);
+function analyticsCutoffDate() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12).toISOString().slice(0, 10);
+}
+const YESTERDAY_ISO = analyticsCutoffDate();
+function maxAnalyticsIndex() {
+  const cutoff = analyticsCutoffDate();
+  const idx = allDates.findLastIndex(d => d <= cutoff);
   return idx >= 0 ? idx : allDates.length - 1;
-})();
+}
+const MAX_ANALYTICS_IDX = maxAnalyticsIndex();
 
 function defaultRangeEndIndex() {
-  return MAX_ANALYTICS_IDX;
+  return maxAnalyticsIndex();
 }
 function dayLabel(d) { return d.date.slice(5); }
 function avg(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0; }
@@ -161,6 +166,11 @@ function monthBuckets(days) {
     Feb: days.filter(d => d.date.startsWith('2026-02')),
     March: days.filter(d => d.date.startsWith('2026-03'))
   };
+}
+
+function getAnalyticsDays(days = allDays) {
+  const cutoff = analyticsCutoffDate();
+  return days.filter(d => d.date <= cutoff);
 }
 
 const PROTEIN_FLOOR_RATIO = 0.9;
@@ -844,7 +854,7 @@ function addDaysToDate(dateStr, daysToAdd) {
 // What-if calculation
 function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days = allDays, sleep = sleepData) {
   const currentWeight = latestWeightForScenario(days);
-  const tdee = estimateTDEEProfile(days).maintenance;
+  const tdee = workingTDEEProfile(days).maintenance;
   const dailyDeficit = tdee - dailyCal;
   const sleepPenalty = avgSleep < 5 ? 170 : (avgSleep < 6 ? 90 : (avgSleep < 7 ? 30 : 0));
   const drinkEffect = historicalDrinkEffects(days, sleep);
@@ -1336,7 +1346,7 @@ function projectionFreshness() {
 }
 
 function energyBalanceSummary(days, tdee = estimatedTDEE) {
-  const activeTdee = Number.isFinite(tdee) ? tdee : estimateTDEEProfile(days).maintenance;
+  const activeTdee = Number.isFinite(tdee) ? tdee : workingTDEEProfile(days).maintenance;
   if (!days.length || !Number.isFinite(activeTdee)) return null;
   const totalIntake = days.reduce((sum, day) => sum + effectiveCalories(day), 0);
   const totalMaintenance = activeTdee * days.length;
@@ -1353,7 +1363,7 @@ function energyBalanceSummary(days, tdee = estimatedTDEE) {
 
 function expectedWeightLoss(days) {
   if (!days.length) return null;
-  const rangeTdee = estimateTDEEProfile(days).maintenance;
+  const rangeTdee = workingTDEEProfile(days).maintenance;
   return days.reduce((sum, d) => sum + (rangeTdee - effectiveCalories(d)), 0) / 3500;
 }
 
@@ -1430,7 +1440,7 @@ function getScenarioDefaults(days, sleep) {
   const avgCalories = avgEffectiveCalories(days) ?? goals.calories;
   const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
   const drinkPerWeek = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
-  const rangeTdee = estimateTDEEProfile(days).maintenance;
+  const rangeTdee = workingTDEEProfile(days).maintenance;
   return {
     current: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     maintain: { calories: Math.round(rangeTdee / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
@@ -1649,6 +1659,11 @@ function regressionFitStats(xArr, yArr, reg, weights) {
 
 const weightStateCache = new Map();
 const tdeeProfileCache = new Map();
+
+function clearAnalyticsCaches() {
+  weightStateCache.clear();
+  tdeeProfileCache.clear();
+}
 
 function daysSignature(days) {
   return days.map(d => d.date).join('|');
@@ -1913,6 +1928,51 @@ function tdeeEnsembleProfile(days = allDays, recentWindow = 28) {
   };
 }
 
+function latestHistoricalBayesDate() {
+  const gp = window.dashboardData?.bayesian?.gpWeightTrend;
+  if (!Array.isArray(gp) || !gp.length) return null;
+  const historical = gp.filter(point => !point.forecast);
+  return historical.length ? historical[historical.length - 1].date : null;
+}
+
+function isWholeAnalyticsRange(days = allDays) {
+  const analyticsDays = getAnalyticsDays();
+  if (!analyticsDays.length || days.length !== analyticsDays.length) return false;
+  return days[0]?.date === analyticsDays[0]?.date && days[days.length - 1]?.date === analyticsDays[analyticsDays.length - 1]?.date;
+}
+
+function freshBayesianPosterior(days = allDays) {
+  if (!isWholeAnalyticsRange(days)) return null;
+  const posterior = window.dashboardData?.bayesian?.tdeePosterior;
+  const latestBayesDate = latestHistoricalBayesDate();
+  const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
+  if (!posterior || !latestBayesDate || latestBayesDate !== latestAnalyticsDate) return null;
+  return posterior;
+}
+
+function workingTDEEProfile(days = allDays) {
+  const bayes = freshBayesianPosterior(days);
+  if (bayes) {
+    return {
+      maintenance: bayes.mean,
+      weightedIntake: null,
+      dailySlope: null,
+      weeklyLoss: null,
+      sampleSize: bayes.nObs,
+      spanDays: getAnalyticsDays(days).length,
+      confidence: projectionConfidence(0.82),
+      confidenceScore: 0.82,
+      rangeLow: bayes.ci68Low,
+      rangeHigh: bayes.ci68High,
+      method: 'Bayesian posterior from full-range weight-change intervals and step-adjusted intake.',
+      source: 'bayesian',
+      posterior: bayes
+    };
+  }
+  const endpoint = endpointTDEEProfile(days);
+  return { ...endpoint, source: 'endpoint' };
+}
+
 function observedWeightProjection(days, horizonDays = 30) {
   const weightDays = days.filter(d => d.weight);
   const trendPoints = stateSpaceWeightTrendPoints(days);
@@ -1988,7 +2048,7 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
 
 function deficitProjection(days, horizonDays = 30) {
   if (!days.length) return null;
-  const rangeTdee = estimateTDEEProfile(days).maintenance;
+  const rangeTdee = workingTDEEProfile(days).maintenance;
   const avgDeficit = avgOrNull(days.map(d => ({ v: rangeTdee - effectiveCalories(d) })), 'v');
   if (avgDeficit == null) return null;
   return {

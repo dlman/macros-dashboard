@@ -461,6 +461,14 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const deficitPace = deficitProjection(filteredDays, 30);
   const sleepProjection = sleepTargetProjection(filteredSleep, 14);
   const energyBalance = energyBalanceSummary(filteredDays);
+  const analyticsDays = getAnalyticsDays();
+  const workingProfile = workingTDEEProfile(analyticsDays);
+  const trendProfile = estimateTDEEProfile(analyticsDays);
+  const bayesPosterior = freshBayesianPosterior(analyticsDays);
+  const tdeeBand = {
+    low: Math.min(workingProfile.rangeLow, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeLow),
+    high: Math.max(workingProfile.rangeHigh, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeHigh)
+  };
   const latestDay = filteredDays[filteredDays.length - 1] || null;
   const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
   const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
@@ -508,7 +516,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="sub">If intake stays near ${energyLabel(avgEffectiveCalories(filteredDays))}, the maintenance gap implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
-          <div class="tiny">${energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range · ` : ''}${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(estimatedTDEE)} TDEE</div>
+          <div class="tiny">${energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range · ` : ''}${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(workingTDEEProfile(filteredDays).maintenance)} TDEE</div>
         </div>
       `
       : `
@@ -525,19 +533,19 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Working TDEE Range</div>
         ${(() => {
-          const bp = window.dashboardData?.bayesian?.tdeePosterior;
+          const bp = bayesPosterior;
           if (bp) {
             return `<div class="value">${energyLabel(bp.ci68Low)}–${energyLabel(bp.ci68High)}</div>
         <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval — there's a ~2-in-3 chance your true maintenance sits here.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
-        <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
-        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Endpoint estimate: ~${energyLabel(estimatedTDEE)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
+        <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
+        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Endpoint estimate: ~${energyLabel(endpointProfile.maintenance)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
           }
-          return `<div class="value">${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
+          return `<div class="value">${energyLabel(tdeeBand.low)}–${energyLabel(tdeeBand.high)}</div>
         <div class="sub">Maintenance likely sits in this band, based on your full-cut weight trend and logged intake.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance band</span></div>
-        <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
-        <div class="tiny">Trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Working midpoint: ~${energyLabel(estimatedTDEE)}</div>`;
+        <div class="confidence-pill ${workingProfile.confidence.cls}">${workingProfile.confidence.label}</div>
+        <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(workingProfile.maintenance)}</div>`;
         })()}
       </div>
     `,
@@ -944,7 +952,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
   const gpEl = document.getElementById('gpWeightChart');
   const rowEl = document.getElementById('gpWeightChartRow');
   if (!gpEl) return;
-  const gpData = window.dashboardData?.bayesian?.gpWeightTrend;
+  const gpData = freshBayesianPosterior(getAnalyticsDays()) ? window.dashboardData?.bayesian?.gpWeightTrend : null;
   if (!gpData || gpData.length === 0) {
     if (rowEl) rowEl.style.display = 'none';
     return;
@@ -1024,15 +1032,6 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
               if (ctx.datasetIndex === 2) return ` GP trend: ${ctx.parsed.y} ${weightUnit()}`;
               if (ctx.datasetIndex === 3) return ` GP forecast: ${ctx.parsed.y} ${weightUnit()}`;
               return null;
-            }
-          }
-        },
-        annotation: {
-          annotations: {
-            today: {
-              type: 'line', xMin: labels.indexOf(yesterday.slice(5)), xMax: labels.indexOf(yesterday.slice(5)),
-              borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderDash: [4, 4],
-              label: { content: 'today', display: true, position: 'start', color: '#94a3b8', font: { size: 10 } }
             }
           }
         }
@@ -1203,26 +1202,32 @@ const DIET_BREAK_START = '2026-02-27';
 const DIET_BREAK_END = '2026-03-07';
 function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
 // Exclude today from all TDEE analytics — partial days skew velocity estimates
-const analyticsDays = allDays.filter(d => d.date <= YESTERDAY_ISO);
+const analyticsDays = getAnalyticsDays();
 const cuttingDays = analyticsDays.filter(d => !isInDietBreak(d.date));
 const breakDays = analyticsDays.filter(d => isInDietBreak(d.date));
 const overallTDEEProfile = estimateTDEEProfile(analyticsDays);
-const cuttingTDEEProfile = estimateTDEEProfile(cuttingDays);
-const overallTDEEEnsemble = tdeeEnsembleProfile(cuttingDays);
+const cuttingTDEEProfile = workingTDEEProfile(cuttingDays);
+const overallWorkingTDEEProfile = workingTDEEProfile(analyticsDays);
+const overallTDEEEnsemble = tdeeEnsembleProfile(analyticsDays);
 // Endpoint method: simple (first weight → last weight) / span — more stable than Kalman velocity
 // which gets pulled high by noisy day-to-day swings and water weight loss in early cut
 const endpointProfile = endpointTDEEProfile(analyticsDays);
 // Use the endpoint estimate as the anchor — it correctly reads ~2,450 kcal from the 81-day trend
 // The Kalman-velocity method inflates this to ~2,900+ when recent weight swings are large
-const estimatedTDEE = endpointProfile.maintenance;
+const estimatedTDEE = overallWorkingTDEEProfile.maintenance;
 const cuttingTDEE = cuttingTDEEProfile.maintenance;
 const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
 // Fixed ±150 kcal range — reflects real-world calorie tracking + measurement uncertainty,
 // not model disagreement between estimation methods
-const tdeeRange = {
-  low: Math.round(estimatedTDEE - 150),
-  high: Math.round(estimatedTDEE + 150)
-};
+const tdeeRange = overallWorkingTDEEProfile.source === 'bayesian'
+  ? {
+      low: overallWorkingTDEEProfile.rangeLow,
+      high: overallWorkingTDEEProfile.rangeHigh
+    }
+  : {
+      low: Math.min(overallWorkingTDEEProfile.rangeLow, cuttingTDEEProfile.rangeLow),
+      high: Math.max(overallWorkingTDEEProfile.rangeHigh, cuttingTDEEProfile.rangeHigh)
+    };
 
 let cumDeficit = 0;
 const waterfallData = allDays.map(d => {
@@ -1617,6 +1622,18 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
         pointRadius: 0,
         tension: 0.3,
         order: 1
+      },
+      {
+        label: '8k goal',
+        type: 'line',
+        data: initSteps ? initSteps.allLabels.map(() => 8000) : [],
+        borderColor: 'rgba(148,163,184,0.35)',
+        borderDash: [4, 4],
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0,
+        order: 0
       }
     ]
   },
@@ -1629,22 +1646,14 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
     plugins: {
       ...chartDefaults().plugins,
       legend: { display: true, labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 } },
-      annotation: {
-        annotations: {
-          goalLine: {
-            type: 'line', yMin: 8000, yMax: 8000,
-            borderColor: 'rgba(148,163,184,0.35)', borderWidth: 1,
-            borderDash: [4, 4],
-            label: { display: true, content: '8k goal', color: 'rgba(148,163,184,0.7)', font: { size: 10 }, position: 'end', backgroundColor: 'transparent' }
-          }
-        }
-      },
       tooltip: {
         ...chartDefaults().plugins.tooltip,
         callbacks: {
           label: ctx => ctx.datasetIndex === 0
             ? ` ${ctx.parsed.y.toLocaleString()} steps`
-            : ` 7-day avg: ${ctx.parsed.y?.toLocaleString() ?? '–'}`
+            : ctx.datasetIndex === 1
+              ? ` 7-day avg: ${ctx.parsed.y?.toLocaleString() ?? '–'}`
+              : ` Goal: ${ctx.parsed.y?.toLocaleString() ?? '8,000'} steps`
         }
       }
     }
@@ -2226,7 +2235,7 @@ function runScenarioPlanner() {
   `).join('');
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: estimated maintenance ~${energyLabel(estimateTDEEProfile(rangeDays).maintenance)} from recency-weighted intake plus the state-space filtered weight trend, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(workingTDEEProfile(rangeDays).maintenance)} from the selected-range trend and logged intake, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
 }
 
 // =====================================================================
