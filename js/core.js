@@ -1420,6 +1420,112 @@ function trendDecomposition(days) {
   };
 }
 
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function softmaxFromLogScores(scoreMap) {
+  const entries = Object.entries(scoreMap);
+  const maxLog = Math.max(...entries.map(([, score]) => score));
+  const shifted = entries.map(([key, score]) => [key, Math.exp(score - maxLog)]);
+  const total = shifted.reduce((sum, [, value]) => sum + value, 0) || 1;
+  return Object.fromEntries(shifted.map(([key, value]) => [key, value / total]));
+}
+
+function entropyConfidence(probabilities) {
+  const vals = Object.values(probabilities).filter(v => v > 0);
+  if (!vals.length) return projectionConfidence(0.2);
+  const entropy = -vals.reduce((sum, p) => sum + (p * Math.log(p)), 0) / Math.log(vals.length);
+  const maxProb = Math.max(...vals);
+  const confidenceScore = clamp01((maxProb * 0.7) + ((1 - entropy) * 0.3));
+  return projectionConfidence(0.25 + (confidenceScore * 0.7));
+}
+
+function plateauWaterPosterior(days, sleep) {
+  const trend = weightTrendReality(days);
+  const decomp = trendDecomposition(days);
+  const lag = getLagMetrics(days, sleep);
+  if (!trend || trend.expectedLoss == null || trend.actualLoss == null || !decomp) return null;
+
+  const expectedLoss = Math.max(0, trend.expectedLoss || 0);
+  const actualLoss = trend.actualLoss || 0;
+  const shortfall = Math.max(0, expectedLoss - actualLoss);
+  const signalScale = Math.max(0.6, Math.abs(expectedLoss), Math.abs(actualLoss), Math.abs(decomp.scaleLoss || 0));
+  const shortfallRatio = shortfall / signalScale;
+  const residualRatio = Math.abs(decomp.residual ?? 0) / signalScale;
+  const modelGapRatio = Math.abs(decomp.modelGap ?? 0) / signalScale;
+  const scaleNoiseRatio = Math.min(2.5, Math.abs(trend.observedTrend?.residualStdDev ?? 0) / 1.35);
+  const drinkSignal = Math.min(2.5, Math.max(0, lag.drinkSleepGap ?? 0) / 12);
+  const liftSignal = Math.min(2.5, Math.max(0, Math.abs(lag.liftNextDayWeightGap ?? 0)) / 0.35);
+  const sleepSignal = Math.min(2.5, Math.max(0, (goals.sleepPerf - (avgOrNull(sleep, 'perf') ?? goals.sleepPerf))) / 18);
+  const weighInCoverage = clamp01((decomp.weightSpan || 0) / 8);
+  const durationCoverage = clamp01((decomp.daySpan || 0) / 21);
+  const signalStrength = Math.min(2.5, expectedLoss / 1.2);
+  const closeness = clamp01(1 - modelGapRatio);
+  const noiseDrivers = residualRatio + drinkSignal + liftSignal + scaleNoiseRatio + (sleepSignal * 0.7);
+
+  const logScores = {
+    small_signal:
+      Math.log(0.18) +
+      ((1 - signalStrength) * 1.4) +
+      ((1 - weighInCoverage) * 0.5) +
+      ((1 - durationCoverage) * 0.45),
+    on_track:
+      Math.log(0.28) +
+      (closeness * 1.7) +
+      ((1 - Math.min(2, shortfallRatio)) * 0.7) +
+      (weighInCoverage * 0.25) +
+      (durationCoverage * 0.2) -
+      (Math.max(0, residualRatio - 1) * 0.3),
+    noise:
+      Math.log(0.34) +
+      (Math.min(2.5, shortfallRatio) * 0.45) +
+      (Math.min(3, noiseDrivers) * 0.9) +
+      ((1 - closeness) * 0.2),
+    plateau:
+      Math.log(0.20) +
+      (Math.min(2.5, shortfallRatio) * 1.35) +
+      (Math.min(2.5, signalStrength) * 0.45) +
+      (weighInCoverage * 0.2) +
+      (durationCoverage * 0.15) -
+      (Math.min(2.5, residualRatio) * 1.05) -
+      (drinkSignal * 0.55) -
+      (liftSignal * 0.45) -
+      (scaleNoiseRatio * 0.35)
+  };
+
+  const probabilities = softmaxFromLogScores(logScores);
+  const sorted = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
+  const [topState, topProb] = sorted[0];
+  const secondProb = sorted[1]?.[1] ?? 0;
+  const confidence = entropyConfidence(probabilities);
+
+  return {
+    trend,
+    decomp,
+    lag,
+    expectedLoss,
+    actualLoss,
+    shortfall,
+    shortfallRatio,
+    residualAbs: Math.abs(decomp.residual ?? 0),
+    residualRatio,
+    signalStrength,
+    probabilities,
+    topState,
+    topProb,
+    margin: topProb - secondProb,
+    confidence,
+    features: {
+      scaleNoise: trend.observedTrend?.residualStdDev ?? null,
+      residual: decomp.residual ?? null,
+      drinkGap: lag.drinkSleepGap ?? null,
+      liftGap: lag.liftNextDayWeightGap ?? null,
+      shortfall
+    }
+  };
+}
+
 function historicalDrinkEffects(days, sleep) {
   const drinkDays = days.filter(d => d.drinks);
   const cleanDays = days.filter(d => !d.drinks);
@@ -2167,10 +2273,8 @@ function getLagMetrics(days, sleep) {
 }
 
 function plateauNoiseAssessment(days, sleep) {
-  const trend = weightTrendReality(days);
-  const decomp = trendDecomposition(days);
-  const lag = getLagMetrics(days, sleep);
-  if (trend.expectedLoss == null || trend.actualLoss == null) {
+  const posterior = plateauWaterPosterior(days, sleep);
+  if (!posterior) {
     return {
       status: 'unclear',
       cls: 'warn',
@@ -2178,43 +2282,45 @@ function plateauNoiseAssessment(days, sleep) {
       text: 'Need at least two weigh-ins in this range before the dashboard can separate true plateau risk from normal water noise.'
     };
   }
-  const expectedLoss = trend.expectedLoss;
-  const actualLoss = trend.actualLoss;
-  const residualAbs = Math.abs(decomp?.residual ?? 0);
-  const shortfall = expectedLoss - actualLoss;
-  if (expectedLoss <= 0.5) {
+  const { expectedLoss, actualLoss, shortfall, residualAbs, lag, probabilities, topState, confidence } = posterior;
+  const posteriorLine = `Posterior split: ${Math.round((probabilities.noise || 0) * 100)}% water/noise, ${Math.round((probabilities.plateau || 0) * 100)}% plateau, ${Math.round((probabilities.on_track || 0) * 100)}% on-track, ${Math.round((probabilities.small_signal || 0) * 100)}% weak-signal.`;
+  if (topState === 'small_signal' || expectedLoss <= 0.5) {
     return {
       status: 'small_signal',
       cls: 'warn',
       title: 'The deficit signal is still small',
-      text: `The logged deficit only implies about ${weightLabel(Math.abs(expectedLoss))} of movement in this range, so flat scale action can still be normal noise.`
+      text: `The logged deficit only implies about ${weightLabel(Math.abs(expectedLoss))} of movement in this range, so flat scale action can still be normal noise. ${posteriorLine}`,
+      confidence,
+      posterior
     };
   }
-  if (actualLoss >= expectedLoss * 0.7) {
+  if (topState === 'on_track') {
     return {
       status: 'on_track',
       cls: 'good',
       title: 'This does not look like a real plateau',
-      text: `The filtered scale trend is showing ${weightLabel(Math.abs(actualLoss))} of loss versus ${weightLabel(Math.abs(expectedLoss))} implied by the logged deficit, which is close enough to be on-track.`
+      text: `The filtered scale trend is showing ${weightLabel(Math.abs(actualLoss))} of loss versus ${weightLabel(Math.abs(expectedLoss))} implied by the logged deficit, which is close enough to be on-track. ${posteriorLine}`,
+      confidence,
+      posterior
     };
   }
-  if (
-    residualAbs >= 0.8 ||
-    (lag.drinkSleepGap ?? 0) >= 10 ||
-    (lag.liftNextDayWeightGap ?? 0) >= 0.35
-  ) {
+  if (topState === 'noise') {
     return {
       status: 'noise',
       cls: 'warn',
       title: 'This looks more like noise than a true stall',
-      text: `The scale is lagging the logged deficit by ${weightLabel(Math.abs(shortfall))}, but residual non-fat movement is still ${weightLabel(residualAbs)}. Recovery and training noise are likely masking part of the fat-loss signal.`
+      text: `The scale is lagging the logged deficit by ${weightLabel(Math.abs(shortfall))}, but residual non-fat movement is still ${weightLabel(residualAbs)}. Recovery and training noise are likely masking part of the fat-loss signal. ${posteriorLine}`,
+      confidence,
+      posterior
     };
   }
   return {
     status: 'plateau',
     cls: 'bad',
     title: 'This may be a real plateau signal',
-    text: `The logged deficit implies about ${weightLabel(Math.abs(expectedLoss))} of loss, but the filtered trend only shows ${weightLabel(Math.abs(actualLoss))} and there is not much residual noise left to explain the gap.`
+    text: `The logged deficit implies about ${weightLabel(Math.abs(expectedLoss))} of loss, but the filtered trend only shows ${weightLabel(Math.abs(actualLoss))} and there is not much residual noise left to explain the gap. ${posteriorLine}`,
+    confidence,
+    posterior
   };
 }
 

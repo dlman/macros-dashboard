@@ -438,7 +438,14 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
       : `Filtered weight trend is up ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`;
   const sleepTrend = current.avgSleepPerf != null && previous.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}% sleep vs ${Math.round(previous.avgSleepPerf)}% in ${compareModeLabel()}.` : 'Sleep direction will appear here once both periods have sleep data.';
   const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Observed trend loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} implied by the logged deficit.` : '';
-  const lagTrend = lag.drinkSleepGap != null && lag.drinkSleepGap > 0 ? `Drink-following mornings are still costing about ${lag.drinkSleepGap.toFixed(0)} sleep-performance points.` : plateau.text;
+  const plateauHeroText = plateau.status === 'plateau'
+    ? `Posterior still leans plateau over water noise in this range.`
+    : plateau.status === 'noise'
+      ? `Posterior still leans water and recovery noise over a true plateau.`
+      : plateau.status === 'small_signal'
+        ? `The current deficit signal is still too small to call this a plateau.`
+        : plateau.title;
+  const lagTrend = lag.drinkSleepGap != null && lag.drinkSleepGap > 0 ? `Drink-following mornings are still costing about ${lag.drinkSleepGap.toFixed(0)} sleep-performance points.` : plateauHeroText;
   document.getElementById('heroTitle').textContent = current.weightChange != null && current.weightChange < 0 ? 'Weight Trend and Recovery' : 'Range Trend Overview';
   document.getElementById('heroSubtitle').textContent = `${weightTrend} ${sleepTrend} ${realityTrend} ${lagTrend}`.trim();
   document.getElementById('heroCalValue').textContent = current.avgCalories != null ? energyLabel(current.avgCalories) : '—';
@@ -2005,6 +2012,7 @@ function renderExploreDiagnostics() {
     : `Explore diagnostics use the full selected date range before the "${filterLabel()}" filter so the math stays stable.`;
 
   if (decomp) {
+    const posterior = plateau.posterior;
     const values = [decomp.scaleLoss, decomp.expectedLoss, decomp.fatLoss ?? 0, decomp.nonFatShift ?? 0];
     allCharts.trendDecompChart.data.datasets[0].data = values.map(v => +(v ?? 0).toFixed(2));
     allCharts.trendDecompChart.options.plugins.tooltip.callbacks.label = ctx => `${ctx.label}: ${formatSignedWeight(ctx.parsed.x || 0)}`;
@@ -2016,6 +2024,13 @@ function renderExploreDiagnostics() {
         cls: plateau.cls,
         title: plateau.title,
         text: plateau.text
+      },
+      {
+        cls: posterior?.topState === 'plateau' ? 'bad' : posterior?.topState === 'noise' ? 'warn' : 'good',
+        title: 'Probabilistic split',
+        text: posterior
+          ? `Water/noise ${Math.round((posterior.probabilities.noise || 0) * 100)}% · Plateau ${Math.round((posterior.probabilities.plateau || 0) * 100)}% · On-track ${Math.round((posterior.probabilities.on_track || 0) * 100)}% · Weak-signal ${Math.round((posterior.probabilities.small_signal || 0) * 100)}%.`
+          : 'Need enough deficit and weigh-in signal before the posterior can separate plateau risk from water/noise.'
       },
       {
         cls: 'good',
