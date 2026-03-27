@@ -357,9 +357,9 @@ if (rangeStartDateEl && rangeEndDateEl) {
   rangeEndDateEl.value = allDates[defaultEndIdx] || '2026-03-23';
   rangeStartDateEl.value = allDates[0] || '2026-01-01';
   rangeStartDateEl.min = allDates[0] || '2026-01-01';
-  rangeStartDateEl.max = allDates[allDates.length - 1] || '2026-03-24';
+  rangeStartDateEl.max = YESTERDAY_ISO;
   rangeEndDateEl.min = allDates[0] || '2026-01-01';
-  rangeEndDateEl.max = allDates[allDates.length - 1] || '2026-03-24';
+  rangeEndDateEl.max = YESTERDAY_ISO;
 
   function syncDateToRange() {
     const startDate = rangeStartDateEl.value;
@@ -369,7 +369,8 @@ if (rangeStartDateEl && rangeEndDateEl) {
     if (startIdx < 0) startIdx = allDates.findIndex(d => d >= startDate);
     if (endIdx < 0) endIdx = allDates.findIndex(d => d >= endDate);
     if (startIdx < 0) startIdx = 0;
-    if (endIdx < 0) endIdx = allDates.length - 1;
+    if (endIdx < 0) endIdx = MAX_ANALYTICS_IDX;
+    endIdx = Math.min(endIdx, MAX_ANALYTICS_IDX);
     if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
     rangeStartEl.value = startIdx;
     rangeEndEl.value = endIdx;
@@ -1173,6 +1174,93 @@ function updateInsightCharts(days) {
   annotatedChart.update();
 }
 
+function updateStepsChart(days) {
+  const chart = allCharts.stepsChart;
+  if (!chart) return;
+  const stats = stepStats(days);
+  if (!stats) {
+    chart.data.labels = [];
+    chart.data.datasets[0].data = [];
+    chart.data.datasets[0].backgroundColor = [];
+    chart.data.datasets[1].data = [];
+    chart.update();
+    return;
+  }
+  chart.data.labels = stats.allLabels;
+  chart.data.datasets[0].data = stats.allSteps;
+  chart.data.datasets[0].backgroundColor = stats.allSteps.map(s =>
+    s >= stats.goalSteps ? 'rgba(52,211,153,0.65)' : 'rgba(100,116,139,0.45)'
+  );
+  chart.data.datasets[1].data = [...Array(6).fill(null), ...stats.rollingAvg];
+  chart.update();
+  // Update step stat cards
+  const el = document.getElementById('stepStatCards');
+  if (el) {
+    const trendArrow = stats.trendPerWeek > 200 ? '↑' : stats.trendPerWeek < -200 ? '↓' : '→';
+    const trendColor = stats.trendPerWeek > 200 ? 'var(--col-green)' : stats.trendPerWeek < -200 ? 'var(--col-red)' : 'var(--col-amber)';
+    el.innerHTML = `
+      <div class="stat-card"><div class="stat-value">${stats.avg.toLocaleString()}</div><div class="stat-label">Avg steps/day</div></div>
+      <div class="stat-card"><div class="stat-value">${stats.goalHit}%</div><div class="stat-label">Days ≥ 8k steps</div></div>
+      <div class="stat-card"><div class="stat-value">${stats.max.toLocaleString()}</div><div class="stat-label">Best day</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:${trendColor}">${trendArrow} ${Math.abs(stats.trendPerWeek).toLocaleString()}</div><div class="stat-label">Trend (steps/wk)</div></div>
+    `;
+  }
+}
+
+function renderStepsCorrelations(days) {
+  const el = document.getElementById('stepsCorrelationInsight');
+  if (!el) return;
+  const corr = stepsCorrelations(days);
+  if (!corr || corr.n_sleep < 5) { el.innerHTML = ''; return; }
+  const fmtR = r => r == null ? '—' : (r > 0 ? '+' : '') + r.toFixed(2);
+  const rColor = r => r == null ? 'var(--text-faint)' : Math.abs(r) >= 0.2 ? (r > 0 ? 'var(--col-green)' : 'var(--col-red)') : 'var(--col-amber)';
+
+  const badges = [];
+
+  // Steps ↔ sleep
+  if (corr.r_sleep != null) {
+    const dir = corr.r_sleep > 0 ? 'more steps → better sleep' : 'more steps → worse sleep';
+    const strength = Math.abs(corr.r_sleep) >= 0.3 ? 'Strong' : Math.abs(corr.r_sleep) >= 0.1 ? 'Weak' : 'No';
+    badges.push(`<div class="insight-badge" title="Pearson r = ${fmtR(corr.r_sleep)} across ${corr.n_sleep} nights">
+      <span class="badge-icon">👣</span>
+      <span><strong style="color:${rColor(corr.r_sleep)}">${strength} link: ${dir}</strong>
+      ${corr.highSleepAvg != null && corr.lowSleepAvg != null
+        ? ` — high-step days: ${corr.highSleepAvg}% sleep vs low-step: ${corr.lowSleepAvg}%`
+        : ''} <span style="color:var(--text-faint);font-size:11px;">(r = ${fmtR(corr.r_sleep)})</span>
+      </span>
+    </div>`);
+  }
+
+  // Steps ↔ next-day weight
+  if (corr.r_weight != null) {
+    const dir = corr.r_weight < 0 ? 'more steps → lower next-day weight' : 'more steps → higher next-day weight';
+    const strength = Math.abs(corr.r_weight) >= 0.2 ? 'Notable' : 'Weak';
+    badges.push(`<div class="insight-badge" title="Pearson r = ${fmtR(corr.r_weight)} across ${corr.n_weight} transitions">
+      <span class="badge-icon">⚖️</span>
+      <span><strong style="color:${rColor(corr.r_weight)}">${strength}: ${dir}</strong>
+      <span style="color:var(--text-faint);font-size:11px;">(r = ${fmtR(corr.r_weight)}, n=${corr.n_weight})</span>
+      </span>
+    </div>`);
+  }
+
+  // Step-adjusted TDEE note — use last day of filtered range (already ≤ yesterday)
+  if (corr.avgSteps != null) {
+    const lastDay = days[days.length - 1];
+    const adjustedTDEE = lastDay ? stepAdjustedTDEE(estimatedTDEE, lastDay.date) : null;
+    const delta = adjustedTDEE != null ? adjustedTDEE - estimatedTDEE : null;
+    if (delta != null && Math.abs(delta) > 20) {
+      badges.push(`<div class="insight-badge">
+        <span class="badge-icon">🔥</span>
+        <span><strong>Step-adjusted TDEE (${lastDay.date.slice(5)}): ~${energyLabel(adjustedTDEE)}</strong>
+        — ${delta > 0 ? '+' : ''}${Math.round(delta)} ${energyUnit()} vs base estimate (avg ${corr.avgSteps.toLocaleString()} steps/day)
+        </span>
+      </div>`);
+    }
+  }
+
+  el.innerHTML = badges.length ? badges.join('') : '';
+}
+
 function refreshDashboard() {
   let usingFallback = false;
   let filteredDays = getFilteredDays();
@@ -1218,6 +1306,8 @@ function refreshDashboard() {
   safe(() => updateLiftRestChart(filteredDays), 'Lift/Rest Chart');
   safe(() => updateAdherenceChart(filteredDays), 'Adherence Chart');
   safe(() => renderDeficitLagInsight(filteredDays), 'Deficit Lag');
+  safe(() => updateStepsChart(filteredDays), 'Steps Chart');
+  safe(() => renderStepsCorrelations(filteredDays), 'Steps Correlations');
   safe(() => updateFoodFreqChart(filteredDays), 'Food Freq Chart');
   safe(() => updateSleepCharts(filteredSleep), 'Sleep Charts');
   safe(() => updateInsightCharts(filteredSleep), 'Insight Charts');
@@ -1325,9 +1415,9 @@ function rebuildDerivedData() {
   // Update range slider max
   const rangeStartEl = document.getElementById('rangeStart');
   const rangeEndEl = document.getElementById('rangeEnd');
-  if (rangeStartEl) rangeStartEl.max = allDates.length - 1;
-  if (rangeEndEl) { rangeEndEl.max = allDates.length - 1; rangeEndEl.value = allDates.length - 1; }
-  rangeEndIdx = allDates.length - 1;
+  if (rangeStartEl) rangeStartEl.max = MAX_ANALYTICS_IDX;
+  if (rangeEndEl) { rangeEndEl.max = MAX_ANALYTICS_IDX; rangeEndEl.value = MAX_ANALYTICS_IDX; }
+  rangeEndIdx = MAX_ANALYTICS_IDX;
 }
 
 function parseBedtimeHour(bedtime) {

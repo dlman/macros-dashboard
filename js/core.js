@@ -108,7 +108,7 @@ function applyTheme(preference = themePreference) {
 
 // Shared dataset loaded from js/data.js
 
-const { data, sleepData } = window.dashboardData;
+const { data, sleepData, stepsData } = window.dashboardData;
 
 
 
@@ -128,14 +128,16 @@ const liftDates = new Set(allDays.filter(d => d.lifting === 'Y').map(d => d.date
 
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+// Never include today — partial days skew every metric
+const _now = new Date();
+const YESTERDAY_ISO = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - 1, 12).toISOString().slice(0, 10);
+const MAX_ANALYTICS_IDX = (() => {
+  const idx = allDates.findLastIndex(d => d <= YESTERDAY_ISO);
+  return idx >= 0 ? idx : allDates.length - 1;
+})();
+
 function defaultRangeEndIndex() {
-  if (!allDates.length) return 0;
-  const today = new Date();
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12);
-  const yesterdayIso = yesterday.toISOString().slice(0, 10);
-  let idx = allDates.findLastIndex(date => date <= yesterdayIso);
-  if (idx < 0) idx = allDates.length - 1;
-  return idx;
+  return MAX_ANALYTICS_IDX;
 }
 function dayLabel(d) { return d.date.slice(5); }
 function avg(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0; }
@@ -508,6 +510,135 @@ function rollingAdherence(days, window = 7) {
     labels.push(days[i].date.slice(5));
   }
   return { labels, calHit, proHit, window };
+}
+
+// ── STEP ANALYTICS ──────────────────────────────────────────────────────
+const KCAL_PER_STEP = 0.04; // ~40 kcal per 1,000 steps — mid-range estimate
+
+const stepsByDate = (() => {
+  const map = {};
+  if (stepsData) stepsData.forEach(s => { map[s.date] = s.steps; });
+  return map;
+})();
+
+function getStepForDate(date) {
+  return stepsByDate[date] ?? null;
+}
+
+function stepStats(days, goalSteps = 8000) {
+  const daysWithSteps = days.map(d => ({ date: d.date, steps: getStepForDate(d.date) })).filter(d => d.steps != null);
+  if (daysWithSteps.length < 3) return null;
+  const allStepVals = daysWithSteps.map(d => d.steps);
+  const avg = Math.round(allStepVals.reduce((a, b) => a + b, 0) / allStepVals.length);
+  const max = Math.max(...allStepVals);
+  const goalHit = Math.round(allStepVals.filter(s => s >= goalSteps).length / allStepVals.length * 100);
+  // 7-day rolling average
+  const rollingAvg = [];
+  const rollingLabels = [];
+  for (let i = 6; i < daysWithSteps.length; i++) {
+    const slice = daysWithSteps.slice(i - 6, i + 1);
+    rollingAvg.push(Math.round(slice.reduce((s, d) => s + d.steps, 0) / 7));
+    rollingLabels.push(daysWithSteps[i].date.slice(5));
+  }
+  // Weekly trend in steps/week
+  const reg = linearRegression(daysWithSteps.map((_, i) => i), allStepVals);
+  const trendPerWeek = Math.round(reg.slope * 7);
+  return {
+    avg, max, goalHit,
+    allSteps: allStepVals,
+    allLabels: daysWithSteps.map(d => d.date.slice(5)),
+    rollingAvg, rollingLabels,
+    trendPerWeek,
+    daysWithSteps,
+    goalSteps
+  };
+}
+
+// Step NEAT delta relative to a baseline (positive = walked more than avg → burned more)
+function stepNEATDelta(date, avgSteps) {
+  const s = getStepForDate(date);
+  if (s == null || avgSteps == null) return 0;
+  return (s - avgSteps) * KCAL_PER_STEP;
+}
+
+// Step-adjusted effective calories: normalises each day's intake to "what if you walked avgSteps"
+// Subtracting extra burn when steps > avg reduces noise in TDEE regression
+function stepAdjustedCalories(day, avgSteps) {
+  const base = effectiveCalories(day);
+  const s = getStepForDate(day.date);
+  if (s == null || avgSteps == null) return base;
+  return base - (s - avgSteps) * KCAL_PER_STEP;
+}
+
+function stepsCorrelations(days) {
+  const avgStepsVal = (() => {
+    const vals = days.map(d => getStepForDate(d.date)).filter(s => s != null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  })();
+
+  // Steps vs same-night sleep performance
+  const stepSleepPairs = [];
+  days.forEach(d => {
+    const s = getStepForDate(d.date);
+    const sl = sleepByDate[d.date];
+    if (s != null && sl?.perf != null) stepSleepPairs.push([s, sl.perf]);
+  });
+
+  // Steps vs next-day weight change (more steps → usually lower next-day weight)
+  const weightDays = days.filter(d => d.weight);
+  const stepWeightPairs = [];
+  for (let i = 0; i < weightDays.length - 1; i++) {
+    const s = getStepForDate(weightDays[i].date);
+    const wDelta = weightDays[i + 1].weight - weightDays[i].weight;
+    if (s != null) stepWeightPairs.push([s, wDelta]);
+  }
+
+  // Steps vs calorie intake (high step days → eat more or less?)
+  const stepCalPairs = [];
+  days.forEach(d => {
+    const s = getStepForDate(d.date);
+    if (s != null && d.calories) stepCalPairs.push([s, effectiveCalories(d)]);
+  });
+
+  // High-step vs low-step sleep cohort
+  const allStepVals = days.map(d => getStepForDate(d.date)).filter(s => s != null).sort((a, b) => a - b);
+  const medianSteps = allStepVals.length ? allStepVals[Math.floor(allStepVals.length / 2)] : null;
+  let highSleepAvg = null, lowSleepAvg = null;
+  if (medianSteps != null) {
+    const high = [], low = [];
+    days.forEach(d => {
+      const s = getStepForDate(d.date);
+      const sl = sleepByDate[d.date];
+      if (s != null && sl?.perf != null) {
+        if (s >= medianSteps) high.push(sl.perf); else low.push(sl.perf);
+      }
+    });
+    highSleepAvg = high.length ? Math.round(high.reduce((a, b) => a + b, 0) / high.length) : null;
+    lowSleepAvg = low.length ? Math.round(low.reduce((a, b) => a + b, 0) / low.length) : null;
+  }
+
+  const r_sleep = stepSleepPairs.length >= 5 ? +pearson(stepSleepPairs.map(p => p[0]), stepSleepPairs.map(p => p[1])).toFixed(2) : null;
+  const r_weight = stepWeightPairs.length >= 5 ? +pearson(stepWeightPairs.map(p => p[0]), stepWeightPairs.map(p => p[1])).toFixed(2) : null;
+  const r_cal = stepCalPairs.length >= 5 ? +pearson(stepCalPairs.map(p => p[0]), stepCalPairs.map(p => p[1])).toFixed(2) : null;
+
+  return {
+    r_sleep, r_weight, r_cal,
+    n_sleep: stepSleepPairs.length,
+    n_weight: stepWeightPairs.length,
+    n_cal: stepCalPairs.length,
+    medianSteps, highSleepAvg, lowSleepAvg,
+    avgSteps: avgStepsVal
+  };
+}
+
+// Step-adjusted TDEE: returns the base TDEE ± step NEAT for a specific day
+function stepAdjustedTDEE(baseTDEE, date) {
+  if (!baseTDEE) return null;
+  const s = getStepForDate(date);
+  if (s == null) return baseTDEE;
+  const allStepVals = stepsData.map(d => d.steps);
+  const avg = allStepVals.reduce((a, b) => a + b, 0) / allStepVals.length;
+  return Math.round(baseTDEE + (s - avg) * KCAL_PER_STEP);
 }
 
 function foodFrequency(days = allDays) {

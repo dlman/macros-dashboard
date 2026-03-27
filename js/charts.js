@@ -524,11 +524,21 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     `
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Working TDEE Range</div>
-        <div class="value">${energyLabel(overallTDEEEnsemble.rangeLow)}–${energyLabel(overallTDEEEnsemble.rangeHigh)}</div>
-        <div class="sub">Maintenance likely sits in this band. Instead of forcing one exact number, this blends a conservative trend estimate with broader cut-wide context.</div>
+        ${(() => {
+          const bp = window.dashboardData?.bayesian?.tdeePosterior;
+          if (bp) {
+            return `<div class="value">${energyLabel(bp.ci68Low)}–${energyLabel(bp.ci68High)}</div>
+        <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval — there's a ~2-in-3 chance your true maintenance sits here.</div>
+        <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
+        <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
+        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Endpoint estimate: ~${energyLabel(estimatedTDEE)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
+          }
+          return `<div class="value">${energyLabel(tdeeRange.low)}–${energyLabel(tdeeRange.high)}</div>
+        <div class="sub">Maintenance likely sits in this band, based on your full-cut weight trend and logged intake.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance band</span></div>
         <div class="confidence-pill ${overallTDEEProfile.confidence.cls}">${overallTDEEProfile.confidence.label}</div>
-        <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(overallTDEEEnsemble.working)}</div>
+        <div class="tiny">Trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Working midpoint: ~${energyLabel(estimatedTDEE)}</div>`;
+        })()}
       </div>
     `,
     sleepProjection
@@ -928,6 +938,115 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
 });
 
 // =====================================================================
+// GP WEIGHT FORECAST CHART
+// =====================================================================
+(() => {
+  const gpEl = document.getElementById('gpWeightChart');
+  const rowEl = document.getElementById('gpWeightChartRow');
+  if (!gpEl) return;
+  const gpData = window.dashboardData?.bayesian?.gpWeightTrend;
+  if (!gpData || gpData.length === 0) {
+    if (rowEl) rowEl.style.display = 'none';
+    return;
+  }
+  const yesterday = YESTERDAY_ISO;
+  const allGP = gpData;
+  const labels     = allGP.map(p => p.date.slice(5));
+  const means      = allGP.map(p => weightValue(p.mean));
+  const ciHighs    = allGP.map(p => weightValue(p.ci95High));
+  const ciLows     = allGP.map(p => weightValue(p.ci95Low));
+  const isForecast = allGP.map(p => p.forecast);
+
+  // Split mean into historical + forecast segments (null in other half keeps gap)
+  const histMeans  = means.map((v, i) => isForecast[i] ? null : v);
+  const fcastMeans = means.map((v, i) => isForecast[i] ? v : null);
+
+  // Restore last historical point as start of forecast segment for visual continuity
+  const lastHistIdx = isForecast.findIndex(f => f) - 1;
+  if (lastHistIdx >= 0) fcastMeans[lastHistIdx] = means[lastHistIdx];
+
+  const wBounds = calcAxisBounds([...ciHighs, ...ciLows].filter(Boolean), 2);
+
+  allCharts.gpWeightChart = new Chart(gpEl, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        // CI upper (invisible border, fills down to lower)
+        {
+          label: '95% CI upper',
+          data: ciHighs,
+          borderWidth: 0, pointRadius: 0, fill: '+1',
+          backgroundColor: 'rgba(168,85,247,0.07)',
+          tension: 0.3, order: 3
+        },
+        // CI lower
+        {
+          label: '95% CI lower',
+          data: ciLows,
+          borderWidth: 0, pointRadius: 0, fill: false,
+          backgroundColor: 'transparent',
+          tension: 0.3, order: 4
+        },
+        // Historical GP mean
+        {
+          label: 'GP trend (historical)',
+          data: histMeans,
+          borderColor: 'rgba(168,85,247,0.85)', borderWidth: 2,
+          pointRadius: 0, fill: false, tension: 0.3, order: 1
+        },
+        // Forecast GP mean
+        {
+          label: 'GP forecast',
+          data: fcastMeans,
+          borderColor: 'rgba(168,85,247,0.45)', borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0, fill: false, tension: 0.3, order: 2
+        }
+      ]
+    },
+    options: {
+      ...chartDefaults(),
+      plugins: {
+        ...chartDefaults().plugins,
+        legend: {
+          display: true,
+          labels: { generateLabels: () => [
+            { text: '— GP trend (historical)', fillStyle: 'rgba(168,85,247,0.85)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '- - GP forecast (42d)',   fillStyle: 'rgba(168,85,247,0.45)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '░ 95% credible band',     fillStyle: 'rgba(168,85,247,0.15)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+          ], color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 }
+        },
+        tooltip: {
+          ...chartDefaults().plugins.tooltip,
+          callbacks: {
+            label: ctx => {
+              if (ctx.datasetIndex === 2) return ` GP trend: ${ctx.parsed.y} ${weightUnit()}`;
+              if (ctx.datasetIndex === 3) return ` GP forecast: ${ctx.parsed.y} ${weightUnit()}`;
+              return null;
+            }
+          }
+        },
+        annotation: {
+          annotations: {
+            today: {
+              type: 'line', xMin: labels.indexOf(yesterday.slice(5)), xMax: labels.indexOf(yesterday.slice(5)),
+              borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderDash: [4, 4],
+              label: { content: 'today', display: true, position: 'start', color: '#94a3b8', font: { size: 10 } }
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 20 } },
+        y: { ...chartDefaults().scales.y, min: Math.floor(wBounds.min), max: Math.ceil(wBounds.max),
+             ticks: { ...TICK(), stepSize: useMetric ? 1 : 2, callback: v => `${v} ${weightUnit()}` } }
+      }
+    }
+  });
+})();
+
+// =====================================================================
 // BODY COMPOSITION
 // =====================================================================
 const bodyComp = bodyCompEstimate();
@@ -1083,17 +1202,26 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 const DIET_BREAK_START = '2026-02-27';
 const DIET_BREAK_END = '2026-03-07';
 function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
-const cuttingDays = allDays.filter(d => !isInDietBreak(d.date));
-const breakDays = allDays.filter(d => isInDietBreak(d.date));
-const overallTDEEProfile = estimateTDEEProfile(allDays);
+// Exclude today from all TDEE analytics — partial days skew velocity estimates
+const analyticsDays = allDays.filter(d => d.date <= YESTERDAY_ISO);
+const cuttingDays = analyticsDays.filter(d => !isInDietBreak(d.date));
+const breakDays = analyticsDays.filter(d => isInDietBreak(d.date));
+const overallTDEEProfile = estimateTDEEProfile(analyticsDays);
 const cuttingTDEEProfile = estimateTDEEProfile(cuttingDays);
-const overallTDEEEnsemble = tdeeEnsembleProfile(allDays);
-const estimatedTDEE = overallTDEEProfile.maintenance;
+const overallTDEEEnsemble = tdeeEnsembleProfile(cuttingDays);
+// Endpoint method: simple (first weight → last weight) / span — more stable than Kalman velocity
+// which gets pulled high by noisy day-to-day swings and water weight loss in early cut
+const endpointProfile = endpointTDEEProfile(analyticsDays);
+// Use the endpoint estimate as the anchor — it correctly reads ~2,450 kcal from the 81-day trend
+// The Kalman-velocity method inflates this to ~2,900+ when recent weight swings are large
+const estimatedTDEE = endpointProfile.maintenance;
 const cuttingTDEE = cuttingTDEEProfile.maintenance;
 const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
+// Fixed ±150 kcal range — reflects real-world calorie tracking + measurement uncertainty,
+// not model disagreement between estimation methods
 const tdeeRange = {
-  low: Math.min(overallTDEEEnsemble.rangeLow, cuttingTDEEProfile.rangeLow),
-  high: Math.max(overallTDEEEnsemble.rangeHigh, cuttingTDEEProfile.rangeHigh)
+  low: Math.round(estimatedTDEE - 150),
+  high: Math.round(estimatedTDEE + 150)
 };
 
 let cumDeficit = 0;
@@ -1454,6 +1582,69 @@ allCharts.adherenceChart = new Chart(document.getElementById('adherenceChart'), 
         ...chartDefaults().plugins.tooltip,
         callbacks: {
           label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%`
+        }
+      }
+    }
+  }
+});
+
+// =====================================================================
+// DAILY STEPS CHART
+// =====================================================================
+const initSteps = stepStats(allDays);
+allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
+  type: 'bar',
+  data: {
+    labels: initSteps ? initSteps.allLabels : [],
+    datasets: [
+      {
+        label: 'Daily Steps',
+        data: initSteps ? initSteps.allSteps : [],
+        backgroundColor: initSteps
+          ? initSteps.allSteps.map(s => s >= 8000 ? 'rgba(52,211,153,0.65)' : 'rgba(100,116,139,0.45)')
+          : [],
+        borderRadius: 3,
+        borderSkipped: false,
+        order: 2
+      },
+      {
+        label: '7-day avg',
+        type: 'line',
+        data: initSteps ? [...Array(6).fill(null), ...initSteps.rollingAvg] : [],
+        borderColor: 'rgba(251,191,36,0.9)',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.3,
+        order: 1
+      }
+    ]
+  },
+  options: {
+    ...chartDefaults(),
+    scales: {
+      x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 12 } },
+      y: { ...chartDefaults().scales.y, min: 0, ticks: { ...TICK(), callback: v => (v / 1000).toFixed(0) + 'k' } }
+    },
+    plugins: {
+      ...chartDefaults().plugins,
+      legend: { display: true, labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 } },
+      annotation: {
+        annotations: {
+          goalLine: {
+            type: 'line', yMin: 8000, yMax: 8000,
+            borderColor: 'rgba(148,163,184,0.35)', borderWidth: 1,
+            borderDash: [4, 4],
+            label: { display: true, content: '8k goal', color: 'rgba(148,163,184,0.7)', font: { size: 10 }, position: 'end', backgroundColor: 'transparent' }
+          }
+        }
+      },
+      tooltip: {
+        ...chartDefaults().plugins.tooltip,
+        callbacks: {
+          label: ctx => ctx.datasetIndex === 0
+            ? ` ${ctx.parsed.y.toLocaleString()} steps`
+            : ` 7-day avg: ${ctx.parsed.y?.toLocaleString() ?? '–'}`
         }
       }
     }
