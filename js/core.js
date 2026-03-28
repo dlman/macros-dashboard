@@ -662,7 +662,7 @@ function foodFrequency(days = allDays) {
 }
 
 // Protein foods detection
-const proteinKeywords = ['protein shake','protein chips','protein bar','protein popcorn','protein noodles','protein ramen','protein pretzels','greek yogurt','yogurt','chicken','steak','salmon','fish','eggs','pho','beef','pork','turkey','edamame','edamame snack'];
+const proteinKeywords = ['protein shake','protein chips','protein bar','puff bar','protein popcorn','protein noodles','protein ramen','protein pretzels','greek yogurt','yogurt','chicken','steak','salmon','fish','eggs','pho','beef','pork','turkey','edamame','edamame snack'];
 
 function isFoodProteinRich(food) {
   return proteinKeywords.some(k => food.includes(k));
@@ -2054,6 +2054,40 @@ function bayesianTimelinePointForDate(dateStr) {
     else break;
   }
   return point;
+}
+
+function tdeeStabilityProfile() {
+  const timeline = window.dashboardData?.bayesian?.tdeeTimeline;
+  const fullPosterior = window.dashboardData?.bayesian?.tdeePosterior;
+  if (!Array.isArray(timeline) || timeline.length < 3 || !fullPosterior) return null;
+  const recent = timeline.slice(-7);
+  const means = recent.map(point => point.mean).filter(Number.isFinite);
+  if (means.length < 3) return null;
+  const avg = means.reduce((sum, value) => sum + value, 0) / means.length;
+  const sd = Math.sqrt(means.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / means.length);
+  const latest = recent[recent.length - 1];
+  const drift = latest.mean - recent[0].mean;
+  const fullGap = latest.mean - fullPosterior.mean;
+  const stabilityScore = clamp01(1 - (sd / 140) - (Math.abs(fullGap) / 260));
+  const status = stabilityScore >= 0.7 ? 'stable' : stabilityScore >= 0.45 ? 'settling' : 'volatile';
+  return {
+    status,
+    score: stabilityScore,
+    confidence: projectionConfidence(0.25 + (stabilityScore * 0.7)),
+    recentSd: sd,
+    recentMean: avg,
+    drift,
+    fullGap,
+    latest,
+    points: recent.length
+  };
+}
+
+function tdeeActivityTerms(days = getAnalyticsDays()) {
+  const fullPosterior = freshBayesianPosterior(getAnalyticsDays());
+  if (fullPosterior?.activityTerms) return fullPosterior.activityTerms;
+  const timelinePoint = freshBayesianTimelinePoint(days);
+  return timelinePoint?.activityTerms || null;
 }
 
 function isWholeAnalyticsRange(days = allDays) {

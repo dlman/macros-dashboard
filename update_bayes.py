@@ -114,6 +114,100 @@ SIGMA_CAL_BIAS    = 150.0
 def is_diet_break(date_str):
     return DIET_BREAK_START <= date_str <= DIET_BREAK_END
 
+
+def daterange(start_dt, end_dt_exclusive):
+    cur = start_dt
+    while cur < end_dt_exclusive:
+        yield cur
+        cur += timedelta(days=1)
+
+
+def estimate_activity_terms(days, steps_map, end_date=None):
+    yesterday = end_date or (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    days_sorted = sorted([d for d in days if d['date'] <= yesterday], key=lambda d: d['date'])
+    if not days_sorted:
+      return None
+
+    valid_steps = [v for k, v in steps_map.items() if k <= yesterday]
+    avg_steps = float(np.mean(valid_steps)) if valid_steps else 6000.0
+    days_by_date = {d['date']: d for d in days_sorted}
+    weight_days = [d for d in days_sorted if d['weight'] is not None]
+    if len(weight_days) < 6:
+        return None
+
+    rows = []
+    for prev, cur in zip(weight_days[:-1], weight_days[1:]):
+        start_dt = datetime.strptime(prev['date'], '%Y-%m-%d')
+        end_dt = datetime.strptime(cur['date'], '%Y-%m-%d')
+        span = (end_dt - start_dt).days
+        if span < 1:
+            continue
+        segment_dates = [(start_dt + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(span)]
+        segment_days = [days_by_date.get(ds) for ds in segment_dates if days_by_date.get(ds)]
+        if not segment_days:
+            continue
+        net_cals = []
+        step_devs = []
+        lift_flags = []
+        drink_flags = []
+        for day in segment_days:
+            steps = steps_map.get(day['date'], avg_steps)
+            net_cals.append(effective_calories(day))
+            step_devs.append((steps - avg_steps) / 1000.0)
+            lift_flags.append(1.0 if day.get('lifting') == 'Y' else 0.0)
+            drink_flags.append(1.0 if day.get('drinks') else 0.0)
+        implied_tdee = float(np.mean(net_cals)) + ((prev['weight'] - cur['weight']) * 3500.0 / span)
+        rows.append({
+            'implied_tdee': implied_tdee,
+            'step_dev_k': float(np.mean(step_devs)),
+            'lift_share': float(np.mean(lift_flags)),
+            'drink_share': float(np.mean(drink_flags)),
+            'days': span
+        })
+
+    if len(rows) < 6:
+        return None
+
+    y = np.array([r['implied_tdee'] for r in rows], dtype=float)
+    X = np.column_stack([
+        np.ones(len(rows)),
+        np.array([r['step_dev_k'] for r in rows], dtype=float),
+        np.array([r['lift_share'] for r in rows], dtype=float),
+        np.array([r['drink_share'] for r in rows], dtype=float)
+    ])
+    ridge = np.diag([0.0, 0.5, 1.5, 1.5])
+    coef = np.linalg.solve(X.T @ X + ridge, X.T @ y)
+    y_hat = X @ coef
+    ss_res = float(np.sum((y - y_hat) ** 2))
+    ss_tot = float(np.sum((y - np.mean(y)) ** 2)) or 1.0
+    r2 = max(0.0, 1.0 - (ss_res / ss_tot))
+
+    raw_step = float(np.clip(coef[1], -120, 140))
+    raw_lift = float(np.clip(coef[2], -250, 250))
+    raw_drink = float(np.clip(coef[3], -250, 250))
+    trust = max(0.0, min(1.0, ((r2 - 0.03) / 0.22))) * max(0.0, min(1.0, (len(rows) - 6) / 18.0))
+    priors = {'stepPer1k': 35.0, 'liftDay': 95.0, 'drinkDay': 65.0}
+    step_per_1k = (raw_step * trust) + (priors['stepPer1k'] * (1 - trust))
+    lift_day = (raw_lift * trust) + (priors['liftDay'] * (1 - trust))
+    drink_day = (raw_drink * trust) + (priors['drinkDay'] * (1 - trust))
+    confidence = 'high' if trust >= 0.7 else 'moderate' if trust >= 0.4 else 'low'
+
+    return {
+        'baseline': round(float(coef[0])),
+        'rawStepPer1k': round(raw_step),
+        'rawLiftDay': round(raw_lift),
+        'rawDrinkDay': round(raw_drink),
+        'stepPer1k': round(step_per_1k),
+        'liftDay': round(lift_day),
+        'drinkDay': round(drink_day),
+        'intervalCount': len(rows),
+        'avgIntervalDays': round(float(np.mean([r['days'] for r in rows])), 1),
+        'r2': round(r2, 3),
+        'trust': round(trust, 3),
+        'confidence': confidence,
+        'avgSteps': round(avg_steps)
+    }
+
 def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, prior_sigma=400.0, verbose=True):
     """
     Bayesian linear regression for TDEE over a supplied day slice.
@@ -227,10 +321,14 @@ def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, pri
     # ── Add systematic calorie-logging bias in quadrature ─────────────────────
     sigma_final = float(np.sqrt(sigma_post**2 + SIGMA_CAL_BIAS**2))
 
+    activity_terms = estimate_activity_terms(all_days_sorted, steps_map, yesterday)
+
     if verbose:
         print(f"  OLS TDEE: {round(TDEE_mle)} kcal  SE={round(SE_TDEE)} kcal  resid_std={round(sigma_resid)} kcal")
         print(f"  Bayesian posterior (before bias floor): {round(mu_post)} ± {round(sigma_post)}")
         print(f"  After +{SIGMA_CAL_BIAS} kcal bias floor: ± {round(sigma_final)}")
+        if activity_terms:
+            print(f"  Activity terms: {activity_terms['stepPer1k']} kcal/1k steps, {activity_terms['liftDay']} kcal lift-day, {activity_terms['drinkDay']} kcal drink-day (R²={activity_terms['r2']})")
 
     return {
         'date':        yesterday,
@@ -246,6 +344,7 @@ def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, pri
         'windowStart': weight_days[0]['date'],
         'windowEnd':   weight_days[-1]['date'],
         'spanDays':    to_t(weight_days[-1]['date']),
+        'activityTerms': activity_terms,
         'observations': obs_details,
     }
 
@@ -291,7 +390,8 @@ def bayesian_tdee_timeline(days, steps_map, window_days=35, min_weight_obs=5, mi
             'windowStart': profile['windowStart'],
             'windowEnd': profile['windowEnd'],
             'spanDays': profile['spanDays'],
-            'windowDays': window_days
+            'windowDays': window_days,
+            'activityTerms': profile.get('activityTerms')
         })
     return timeline
 

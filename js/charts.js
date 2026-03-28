@@ -473,6 +473,8 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const trendProfile = estimateTDEEProfile(analyticsDays);
   const bayesPosterior = freshBayesianPosterior(analyticsDays);
   const bayesTimelineLatest = freshBayesianTimelinePoint(analyticsDays);
+  const tdeeStability = tdeeStabilityProfile();
+  const activityTerms = tdeeActivityTerms(analyticsDays);
   const tdeeBand = {
     low: Math.min(workingProfile.rangeLow, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeLow),
     high: Math.max(workingProfile.rangeHigh, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeHigh)
@@ -547,7 +549,9 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval — there's a ~2-in-3 chance your true maintenance sits here.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
         <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
-        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
+        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>
+        <div class="tiny">${activityTerms ? `Activity-associated deltas (${activityTerms.confidence} confidence): ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal/1k steps · ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} lift-day · ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} drink-day` : 'Activity deltas will appear once the Bayesian interval model has enough weight spans.'}</div>
+        <div class="tiny">${tdeeStability ? `Stability: ${tdeeStability.status} · 7-point rolling SD ${energyLabel(tdeeStability.recentSd)} · ${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs full-range posterior` : 'Stability score will appear once the rolling Bayesian timeline has enough points.'}</div>`;
           }
           return `<div class="value">${energyLabel(tdeeBand.low)}–${energyLabel(tdeeBand.high)}</div>
         <div class="sub">Maintenance likely sits in this band, based on your full-cut weight trend and logged intake.</div>
@@ -1029,17 +1033,29 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
           display: true,
           labels: { generateLabels: () => [
             { text: '— GP trend (historical)', fillStyle: 'rgba(168,85,247,0.85)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
-            { text: '- - GP forecast (42d)',   fillStyle: 'rgba(168,85,247,0.45)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '- - GP forecast (42d, shape-based)',   fillStyle: 'rgba(168,85,247,0.45)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
             { text: '░ 95% credible band',     fillStyle: 'rgba(168,85,247,0.15)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
           ], color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 }
         },
         tooltip: {
           ...chartDefaults().plugins.tooltip,
           callbacks: {
+            title: ctx => {
+              const point = allGP[ctx[0].dataIndex];
+              return point?.forecast ? `${point.date} · statistical curve forecast` : `${point.date} · historical GP trend`;
+            },
             label: ctx => {
               if (ctx.datasetIndex === 2) return ` GP trend: ${ctx.parsed.y} ${weightUnit()}`;
-              if (ctx.datasetIndex === 3) return ` GP forecast: ${ctx.parsed.y} ${weightUnit()}`;
+              if (ctx.datasetIndex === 3) return ` GP forecast: ${ctx.parsed.y} ${weightUnit()} (shape-based, not calorie-plan based)`;
               return null;
+            },
+            afterBody: ctx => {
+              const point = allGP[ctx[0].dataIndex];
+              if (!point?.forecast) return [];
+              return [
+                'This extrapolates the recent curve shape and uncertainty band.',
+                'Use the Scenario Planner for a deficit-based forecast.'
+              ];
             }
           }
         }
