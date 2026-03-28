@@ -114,9 +114,9 @@ SIGMA_CAL_BIAS    = 150.0
 def is_diet_break(date_str):
     return DIET_BREAK_START <= date_str <= DIET_BREAK_END
 
-def bayesian_tdee(days, steps_map):
+def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, prior_sigma=400.0, verbose=True):
     """
-    Full-trajectory Bayesian linear regression for TDEE.
+    Bayesian linear regression for TDEE over a supplied day slice.
 
     For every weight observation w[i] at calendar day t_i (days since first
     weight-in), define:
@@ -134,10 +134,10 @@ def bayesian_tdee(days, steps_map):
         Y = α + β × t + ε,   ε ~ N(0, σ_resid²)
         TDEE_MLE = −β
 
-    Bayesian update with prior TDEE ~ N(2 500, 400²),
+    Bayesian update with prior TDEE ~ N(prior_mean, prior_sigma²),
     then add SIGMA_CAL_BIAS in quadrature as an irreducible floor.
     """
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday = end_date or (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
     # Average steps (exclude today)
     valid_steps = [v for k, v in steps_map.items() if k <= yesterday]
@@ -216,8 +216,8 @@ def bayesian_tdee(days, steps_map):
     SE_TDEE  = SE_beta                           # same magnitude, sign flipped
 
     # ── Bayesian update (Normal prior on TDEE) ────────────────────────────────
-    mu_prior    = 2500.0
-    sigma_prior = 400.0
+    mu_prior    = float(prior_mean)
+    sigma_prior = float(prior_sigma)
     prec_prior  = 1.0 / sigma_prior**2
     prec_data   = 1.0 / SE_TDEE**2
 
@@ -227,11 +227,13 @@ def bayesian_tdee(days, steps_map):
     # ── Add systematic calorie-logging bias in quadrature ─────────────────────
     sigma_final = float(np.sqrt(sigma_post**2 + SIGMA_CAL_BIAS**2))
 
-    print(f"  OLS TDEE: {round(TDEE_mle)} kcal  SE={round(SE_TDEE)} kcal  resid_std={round(sigma_resid)} kcal")
-    print(f"  Bayesian posterior (before bias floor): {round(mu_post)} ± {round(sigma_post)}")
-    print(f"  After +{SIGMA_CAL_BIAS} kcal bias floor: ± {round(sigma_final)}")
+    if verbose:
+        print(f"  OLS TDEE: {round(TDEE_mle)} kcal  SE={round(SE_TDEE)} kcal  resid_std={round(sigma_resid)} kcal")
+        print(f"  Bayesian posterior (before bias floor): {round(mu_post)} ± {round(sigma_post)}")
+        print(f"  After +{SIGMA_CAL_BIAS} kcal bias floor: ± {round(sigma_final)}")
 
     return {
+        'date':        yesterday,
         'mean':        round(mu_post),
         'sigma':       round(sigma_final, 1),
         'ci95Low':     round(mu_post - 1.96 * sigma_final),
@@ -241,8 +243,57 @@ def bayesian_tdee(days, steps_map):
         'nObs':        len(obs_details),
         'avgSteps':    round(avg_steps),
         'SE_TDEE':     round(SE_TDEE),
+        'windowStart': weight_days[0]['date'],
+        'windowEnd':   weight_days[-1]['date'],
+        'spanDays':    to_t(weight_days[-1]['date']),
         'observations': obs_details,
     }
+
+
+def bayesian_tdee(days, steps_map):
+    return bayesian_tdee_profile(days, steps_map)
+
+
+def bayesian_tdee_timeline(days, steps_map, window_days=35, min_weight_obs=5, min_span_days=14):
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    all_days_sorted = sorted([d for d in days if d['date'] <= yesterday], key=lambda d: d['date'])
+    if not all_days_sorted:
+        return []
+
+    timeline = []
+    all_dates = [d['date'] for d in all_days_sorted]
+    for target_date in all_dates:
+        target_dt = datetime.strptime(target_date, '%Y-%m-%d')
+        start_dt = target_dt - timedelta(days=window_days - 1)
+        start_date = start_dt.strftime('%Y-%m-%d')
+        window_slice = [d for d in all_days_sorted if start_date <= d['date'] <= target_date]
+        weight_days = [d for d in window_slice if d['weight'] is not None]
+        if len(weight_days) < min_weight_obs:
+            continue
+        span_days = (datetime.strptime(weight_days[-1]['date'], '%Y-%m-%d') - datetime.strptime(weight_days[0]['date'], '%Y-%m-%d')).days
+        if span_days < min_span_days:
+            continue
+        try:
+            profile = bayesian_tdee_profile(window_slice, steps_map, end_date=target_date, verbose=False)
+        except Exception:
+            continue
+        timeline.append({
+            'date': profile['date'],
+            'mean': profile['mean'],
+            'sigma': profile['sigma'],
+            'ci68Low': profile['ci68Low'],
+            'ci68High': profile['ci68High'],
+            'ci95Low': profile['ci95Low'],
+            'ci95High': profile['ci95High'],
+            'nObs': profile['nObs'],
+            'avgSteps': profile['avgSteps'],
+            'SE_TDEE': profile['SE_TDEE'],
+            'windowStart': profile['windowStart'],
+            'windowEnd': profile['windowEnd'],
+            'spanDays': profile['spanDays'],
+            'windowDays': window_days
+        })
+    return timeline
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -315,7 +366,7 @@ def gp_weight_trend(days, forecast_days=42):
 BAYES_START = '// BAYES_START'
 BAYES_END   = '// BAYES_END'
 
-def update_data_js(path, src, bayes_tdee_result, gp_trend):
+def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
     # Strip old block if present
     src = re.sub(
         r'\n' + re.escape(BAYES_START) + r'.*?' + re.escape(BAYES_END) + r'\n',
@@ -328,11 +379,13 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend):
     tdee_out = {k: v for k, v in bayes_tdee_result.items() if k != 'observations'}
     tdee_json = json.dumps(tdee_out, separators=(',', ':'))
     gp_json   = json.dumps(gp_trend,  separators=(',', ':'))
+    timeline_json = json.dumps(tdee_timeline, separators=(',', ':'))
 
     block = (
         f"\n{BAYES_START}\n"
         f"window.dashboardData.bayesian = {{\n"
         f"  tdeePosterior: {tdee_json},\n"
+        f"  tdeeTimeline: {timeline_json},\n"
         f"  gpWeightTrend: {gp_json}\n"
         f"}};\n"
         f"{BAYES_END}\n"
@@ -356,6 +409,7 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend):
     print(f"  Bayesian TDEE: {bayes_tdee_result['mean']} kcal  "
           f"95% CI [{bayes_tdee_result['ci95Low']}–{bayes_tdee_result['ci95High']}]  "
           f"(σ={bayes_tdee_result['sigma']}  n={bayes_tdee_result['nObs']} intervals)")
+    print(f"  TDEE timeline: {len(tdee_timeline)} rolling points")
     print(f"  GP trend: {len(gp_trend)} points  "
           f"({sum(1 for p in gp_trend if p['forecast'])} forecast days)")
 
@@ -380,6 +434,13 @@ if __name__ == '__main__':
     for obs in bt['observations'][-5:]:
         print(f"    {obs['date']} (t={obs['t']}d): implied {obs['implied']} kcal")
 
+    print("\n── Rolling Bayesian TDEE timeline ───────────────────────")
+    timeline = bayesian_tdee_timeline(days, steps_map)
+    if timeline:
+        print(f"  Timeline points: {len(timeline)}")
+        print(f"  First point: {timeline[0]['date']}  ~{timeline[0]['mean']} kcal")
+        print(f"  Last point:  {timeline[-1]['date']}  ~{timeline[-1]['mean']} kcal")
+
     print("\n── Gaussian Process weight trend ────────────────────────")
     gp = gp_weight_trend(days)
     if gp:
@@ -390,4 +451,4 @@ if __name__ == '__main__':
         print(f"  Forecast end: {fcast[-1]}")
 
     print("\n── Writing data.js ──────────────────────────────────────")
-    update_data_js(data_js, src, bt, gp)
+    update_data_js(data_js, src, bt, gp, timeline)

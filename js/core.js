@@ -2035,10 +2035,25 @@ function tdeeEnsembleProfile(days = allDays, recentWindow = 28) {
 }
 
 function latestHistoricalBayesDate() {
+  const timeline = window.dashboardData?.bayesian?.tdeeTimeline;
+  if (Array.isArray(timeline) && timeline.length) {
+    return timeline[timeline.length - 1].date;
+  }
   const gp = window.dashboardData?.bayesian?.gpWeightTrend;
   if (!Array.isArray(gp) || !gp.length) return null;
   const historical = gp.filter(point => !point.forecast);
   return historical.length ? historical[historical.length - 1].date : null;
+}
+
+function bayesianTimelinePointForDate(dateStr) {
+  const timeline = window.dashboardData?.bayesian?.tdeeTimeline;
+  if (!Array.isArray(timeline) || !timeline.length || !dateStr) return null;
+  let point = null;
+  for (const candidate of timeline) {
+    if (candidate.date <= dateStr) point = candidate;
+    else break;
+  }
+  return point;
 }
 
 function isWholeAnalyticsRange(days = allDays) {
@@ -2054,6 +2069,16 @@ function freshBayesianPosterior(days = allDays) {
   const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
   if (!posterior || !latestBayesDate || latestBayesDate !== latestAnalyticsDate) return null;
   return posterior;
+}
+
+function freshBayesianTimelinePoint(days = allDays) {
+  const latestBayesDate = latestHistoricalBayesDate();
+  const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
+  if (!latestBayesDate || latestBayesDate !== latestAnalyticsDate || !days.length) return null;
+  const endDate = days[days.length - 1]?.date;
+  const point = bayesianTimelinePointForDate(endDate);
+  if (!point || point.date !== endDate) return null;
+  return point;
 }
 
 function workingTDEEProfile(days = allDays) {
@@ -2073,6 +2098,25 @@ function workingTDEEProfile(days = allDays) {
       method: 'Bayesian posterior from full-range weight-change intervals and step-adjusted intake.',
       source: 'bayesian',
       posterior: bayes
+    };
+  }
+  const timelinePoint = freshBayesianTimelinePoint(days);
+  if (timelinePoint && days.length >= 14 && (timelinePoint.nObs || 0) >= 5) {
+    const confidenceScore = clamp01(0.35 + Math.min(0.45, (timelinePoint.nObs || 0) / 24) + Math.max(0, 0.18 - ((timelinePoint.sigma || 180) - 150) / 700));
+    return {
+      maintenance: timelinePoint.mean,
+      weightedIntake: null,
+      dailySlope: null,
+      weeklyLoss: null,
+      sampleSize: timelinePoint.nObs,
+      spanDays: timelinePoint.spanDays ?? days.length,
+      confidence: projectionConfidence(confidenceScore),
+      confidenceScore,
+      rangeLow: timelinePoint.ci68Low,
+      rangeHigh: timelinePoint.ci68High,
+      method: `Rolling Bayesian posterior from a ${timelinePoint.windowDays || 35}-day step-aware window ending ${timelinePoint.date}.`,
+      source: 'bayesian_timeline',
+      posterior: timelinePoint
     };
   }
   const endpoint = endpointTDEEProfile(days);

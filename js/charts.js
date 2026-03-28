@@ -472,6 +472,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const workingProfile = workingTDEEProfile(analyticsDays);
   const trendProfile = estimateTDEEProfile(analyticsDays);
   const bayesPosterior = freshBayesianPosterior(analyticsDays);
+  const bayesTimelineLatest = freshBayesianTimelinePoint(analyticsDays);
   const tdeeBand = {
     low: Math.min(workingProfile.rangeLow, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeLow),
     high: Math.max(workingProfile.rangeHigh, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeHigh)
@@ -546,7 +547,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval — there's a ~2-in-3 chance your true maintenance sits here.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
         <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
-        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Endpoint estimate: ~${energyLabel(endpointProfile.maintenance)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
+        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>`;
           }
           return `<div class="value">${energyLabel(tdeeBand.low)}–${energyLabel(tdeeBand.high)}</div>
         <div class="sub">Maintenance likely sits in this band, based on your full-cut weight trend and logged intake.</div>
@@ -2250,7 +2251,13 @@ function runScenarioPlanner() {
   `).join('');
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(workingTDEEProfile(rangeDays).maintenance)} from the selected-range trend and logged intake, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
+  const scenarioTdee = workingTDEEProfile(rangeDays);
+  const scenarioSourceText = scenarioTdee.source === 'bayesian_timeline'
+    ? `a rolling Bayesian, steps-aware maintenance estimate ending ${rangeDays[rangeDays.length - 1]?.date}`
+    : scenarioTdee.source === 'bayesian'
+      ? 'the full-range Bayesian maintenance posterior'
+      : 'the selected-range trend and logged intake';
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
 }
 
 // =====================================================================
