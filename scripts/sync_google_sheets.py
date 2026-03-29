@@ -80,6 +80,11 @@ def normalize_header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
 
 
+def env_or_default(name: str, default: str) -> str:
+    value = os.environ.get(name, "").strip()
+    return value or default
+
+
 def read_credentials():
     raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     json_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
@@ -368,9 +373,9 @@ def render_data_js(
 def main():
     parser = argparse.ArgumentParser(description="Sync dashboard data from a private Google Sheet.")
     parser.add_argument("--sheet-id", default=os.environ.get("GOOGLE_SHEET_ID"))
-    parser.add_argument("--macros-tab", default=os.environ.get("GOOGLE_SHEET_MACROS_TAB", "Macros"))
-    parser.add_argument("--sleep-tab", default=os.environ.get("GOOGLE_SHEET_SLEEP_TAB", "Sleep"))
-    parser.add_argument("--steps-tab", default=os.environ.get("GOOGLE_SHEET_STEPS_TAB", "Steps"))
+    parser.add_argument("--macros-tab", default=env_or_default("GOOGLE_SHEET_MACROS_TAB", "Macros"))
+    parser.add_argument("--sleep-tab", default=env_or_default("GOOGLE_SHEET_SLEEP_TAB", "Sleep"))
+    parser.add_argument("--steps-tab", default=env_or_default("GOOGLE_SHEET_STEPS_TAB", "Steps"))
     parser.add_argument("--skip-sleep", action="store_true", help="Keep existing sleepData from js/data.js")
     parser.add_argument("--skip-steps", action="store_true", help="Keep existing stepsData from js/data.js")
     parser.add_argument("--output", default=str(DATA_JS_PATH))
