@@ -644,6 +644,20 @@ function renderExecutiveSummary() {
   const drivers = getDriverRanking(filteredDays, filteredSleep);
   const outliers = getOutliers(filteredDays, filteredSleep);
   const foodPatterns = foodPatternSummary(filteredDays);
+  const analyticsRangeDays = getAnalyticsDays();
+  const activeTdeeProfile = workingTDEEProfile(filteredDays);
+  const fullBayesTdee = freshBayesianPosterior(analyticsRangeDays);
+  const rollingBayesTdee = freshBayesianTimelinePoint(analyticsRangeDays);
+  const tdeeStability = tdeeStabilityProfile();
+  const activityTerms = tdeeActivityTerms(analyticsRangeDays);
+  const activeTdeeSource = activeTdeeProfile.source === 'bayesian'
+    ? 'full-range Bayesian posterior'
+    : activeTdeeProfile.source === 'bayesian_timeline'
+      ? `rolling Bayesian estimate ending ${formatShortDate(activeTdeeProfile.posterior?.date || filteredDays[filteredDays.length - 1]?.date)}`
+      : 'range-specific endpoint fallback';
+  const activeTdeeSummary = activeTdeeProfile.rangeLow != null && activeTdeeProfile.rangeHigh != null
+    ? `${energyLabel(activeTdeeProfile.rangeLow)}–${energyLabel(activeTdeeProfile.rangeHigh)}`
+    : `~${energyLabel(activeTdeeProfile.maintenance)}`;
 
   renderHeroStage(current, previous, filteredDays, filteredSleep);
   renderForecastStrip(filteredDays, filteredSleep);
@@ -691,6 +705,51 @@ function renderExecutiveSummary() {
       <div class="tiny">${item.note}</div>
     </div>
   `).join('');
+
+  document.getElementById('tdeeDetailPanel').innerHTML = `
+    <div class="tdee-detail-lead">
+      The active range <strong>${labelForDays(getComparisonCurrentBaseDays())}</strong> is currently using the <strong>${activeTdeeSource}</strong>, which puts working maintenance around <strong>${activeTdeeSummary}</strong>.
+      ${activeTdeeProfile.source === 'endpoint' ? 'This fallback is more sensitive to short-term noise, so use the Bayesian rows below as the steadier cross-check.' : 'The cards below show the broader full-cut anchor and the newer recent-window cross-check so it is easier to see why the number moves.'}
+    </div>
+    <div class="tdee-detail-grid">
+      <div class="tdee-detail-card">
+        <div class="eyebrow">Active Range</div>
+        <div class="value">~${energyLabel(activeTdeeProfile.maintenance)}</div>
+        <div class="sub">${activeTdeeSource}</div>
+        <div class="confidence-pill ${activeTdeeProfile.confidence.cls}">${activeTdeeProfile.confidence.label}</div>
+        <div class="tiny">${activeTdeeProfile.sampleSize || filteredDays.length} observations across ${activeTdeeProfile.spanDays || filteredDays.length} days</div>
+      </div>
+      <div class="tdee-detail-card">
+        <div class="eyebrow">Full-Range Bayes</div>
+        <div class="value">${fullBayesTdee ? `~${energyLabel(fullBayesTdee.mean)}` : '—'}</div>
+        <div class="sub">${fullBayesTdee ? `${energyLabel(fullBayesTdee.ci68Low)}–${energyLabel(fullBayesTdee.ci68High)} 68% credible interval` : 'Bayesian posterior is only available when the cached model matches the current full analytics range.'}</div>
+        ${fullBayesTdee ? '<div class="confidence-pill high">High confidence</div>' : '<div class="confidence-pill low">Low confidence</div>'}
+        <div class="tiny">${fullBayesTdee ? `${fullBayesTdee.nObs} weight-change intervals · avg steps ${Math.round(fullBayesTdee.avgSteps || 0).toLocaleString()}/day` : 'Run update_bayes.py after adding new data to restore the Bayesian full-range posterior.'}</div>
+      </div>
+      <div class="tdee-detail-card">
+        <div class="eyebrow">Recent-Window Bayes</div>
+        <div class="value">${rollingBayesTdee ? `~${energyLabel(rollingBayesTdee.mean)}` : '—'}</div>
+        <div class="sub">${rollingBayesTdee ? `${energyLabel(rollingBayesTdee.ci68Low)}–${energyLabel(rollingBayesTdee.ci68High)} from the latest ${rollingBayesTdee.windowDays || 35}-day window` : `Recent-window estimate unavailable for ${labelForDays(getComparisonCurrentBaseDays())}.`}</div>
+        <div class="confidence-pill ${rollingBayesTdee ? projectionConfidence(Math.min(0.82, 0.35 + ((rollingBayesTdee.nObs || 0) / 24))).cls : 'low'}">${rollingBayesTdee ? projectionConfidence(Math.min(0.82, 0.35 + ((rollingBayesTdee.nObs || 0) / 24))).label : 'Low confidence'}</div>
+        <div class="tiny">${rollingBayesTdee ? `Window ends ${formatShortDate(rollingBayesTdee.date)} · ${rollingBayesTdee.nObs || 0} usable intervals` : 'This cross-check appears when the rolling Bayesian timeline has a point matching the selected range end date.'}</div>
+      </div>
+      <div class="tdee-detail-card">
+        <div class="eyebrow">Stability</div>
+        <div class="value">${tdeeStability ? tdeeStability.status[0].toUpperCase() + tdeeStability.status.slice(1) : '—'}</div>
+        <div class="sub">${tdeeStability ? `${energyLabel(tdeeStability.recentSd)} rolling SD across the latest ${tdeeStability.points} Bayesian timeline points` : 'Need more rolling Bayesian points before the dashboard can say whether maintenance is stable or still moving around.'}</div>
+        <div class="confidence-pill ${tdeeStability ? tdeeStability.confidence.cls : 'low'}">${tdeeStability ? tdeeStability.confidence.label : 'Low confidence'}</div>
+        <div class="tiny">${tdeeStability ? `${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs the full-range posterior · ${tdeeStability.drift >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.drift))} drift across the recent window` : 'Stability becomes more useful once we have a longer rolling Bayesian timeline.'}</div>
+      </div>
+    </div>
+    <div class="tdee-detail-note">
+      <strong>How to read the different estimates</strong>
+      <p>The full-range Bayesian row is the broadest cut-wide anchor. The recent-window Bayesian row tracks the latest 35-day behavior more closely. The active-range value is what the current view is actually using right now, and it falls back to the simpler endpoint estimate when a Bayesian point is not available for that exact range end.</p>
+    </div>
+    <div class="tdee-detail-note">
+      <strong>Activity-associated deltas</strong>
+      <p>${activityTerms ? `The current Bayesian fit sees about ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal per 1k steps, ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} kcal on lift days, and ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} kcal on drink days. Treat these as associated deltas, not hard causal truths, especially while confidence is ${activityTerms.confidence}.` : 'These deltas appear once the Bayesian interval model has enough usable weight-change intervals to estimate how steps, lifting, and drink days relate to maintenance.'}</p>
+    </div>
+  `;
 
   document.getElementById('actionList').innerHTML = recommendations.map(rec => `
     <div class="insight-item">
