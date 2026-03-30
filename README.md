@@ -34,6 +34,7 @@ The repo now includes [scripts/sync_google_sheets.py](/Users/dickson/Desktop/mac
 Optional tab names:
 
 - `GOOGLE_SHEET_MACROS_TAB` default: `Macros`
+- `GOOGLE_SHEET_MACROS_TABS` optional comma-separated list, for example `Jan Macros,Feb Macros,March Macros`
 - `GOOGLE_SHEET_SLEEP_TAB` default: `Sleep`
 - `GOOGLE_SHEET_STEPS_TAB` default: `Steps`
 
@@ -75,5 +76,7 @@ Optional macros columns:
 - `notes`
 
 Sleep and steps tabs are also alias-based, but should at least include `date` plus the expected metric columns for whichever tab you use.
+
+If your workbook is split into monthly macro tabs like `Jan Macros`, `Feb Macros`, and `March Macros`, set `GOOGLE_SHEET_MACROS_TABS` instead of `GOOGLE_SHEET_MACROS_TAB`.
 
 One current limitation: the dashboard code is still hard-coded around `Jan`, `Feb`, and `March` 2026 buckets. If the synced sheet starts feeding newer months, the sync script will fail loudly instead of silently writing data the dashboard cannot render correctly.

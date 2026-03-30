@@ -27,12 +27,13 @@ import json
 import os
 import re
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,6 +110,16 @@ def get_values(service, spreadsheet_id: str, tab_name: str) -> list[list[str]]:
     return response.get("values", [])
 
 
+def get_optional_values(service, spreadsheet_id: str, tab_name: str, label: str) -> list[list[str]] | None:
+    try:
+        return get_values(service, spreadsheet_id, tab_name)
+    except HttpError as exc:
+        if exc.resp.status == 400:
+            print(f"{label} tab '{tab_name}' not found; keeping the existing {label.lower()} data from js/data.js.")
+            return None
+        raise
+
+
 def map_headers(header_row: list[str], aliases: dict[str, set[str]]) -> dict[str, int]:
     normalized = {normalize_header(value): idx for idx, value in enumerate(header_row)}
     mapped: dict[str, int] = {}
@@ -134,6 +145,10 @@ def parse_date(value: str | None) -> str | None:
     if not value:
         return None
     value = value.strip()
+    excel_serial = parse_float(value)
+    if excel_serial is not None and 40000 <= excel_serial <= 60000:
+        excel_epoch = datetime(1899, 12, 30)
+        return (excel_epoch + timedelta(days=excel_serial)).strftime("%Y-%m-%d")
     formats = [
         "%Y-%m-%d",
         "%m/%d/%Y",
@@ -247,15 +262,17 @@ def extract_bayes_block(path: Path) -> str:
     return src[start:end].rstrip() + "\n"
 
 
-def load_macros(rows: list[list[str]]) -> OrderedDict[str, list[OrderedDict[str, Any]]]:
+def append_macro_rows(
+    buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
+    rows: list[list[str]],
+    source_name: str,
+) -> None:
     if not rows:
-        raise SystemExit("Macros tab is empty.")
+        return
     headers = map_headers(rows[0], MACRO_ALIASES)
     missing = [field for field in ("date", "protein", "carbs", "fat", "calories") if field not in headers]
     if missing:
-        raise SystemExit(f"Macros tab is missing required headers: {', '.join(missing)}")
-
-    buckets: OrderedDict[str, list[OrderedDict[str, Any]]] = OrderedDict((name, []) for name in MONTH_BUCKETS)
+        raise SystemExit(f"{source_name} is missing required headers: {', '.join(missing)}")
     for row in rows[1:]:
         date = parse_date(cell(row, headers.get("date")))
         if not date:
@@ -278,8 +295,24 @@ def load_macros(rows: list[list[str]]) -> OrderedDict[str, list[OrderedDict[str,
             ("notes", cell(row, headers.get("notes"))),
         ]))
 
-    for items in buckets.values():
-        items.sort(key=lambda item: item["date"])
+def load_macros_from_sources(source_rows: list[tuple[str, list[list[str]]]]) -> OrderedDict[str, list[OrderedDict[str, Any]]]:
+    buckets: OrderedDict[str, list[OrderedDict[str, Any]]] = OrderedDict((name, []) for name in MONTH_BUCKETS)
+    any_rows = False
+    seen_dates: set[str] = set()
+    for source_name, rows in source_rows:
+        if rows:
+            any_rows = True
+            append_macro_rows(buckets, rows, source_name)
+    if not any_rows:
+        raise SystemExit("No macro rows were found in the configured macro tabs.")
+    for month_name, items in buckets.items():
+        deduped: list[OrderedDict[str, Any]] = []
+        for item in sorted(items, key=lambda entry: entry["date"]):
+            if item["date"] in seen_dates:
+                continue
+            seen_dates.add(item["date"])
+            deduped.append(item)
+        buckets[month_name] = deduped
     return buckets
 
 
@@ -374,6 +407,8 @@ def main():
     parser = argparse.ArgumentParser(description="Sync dashboard data from a private Google Sheet.")
     parser.add_argument("--sheet-id", default=os.environ.get("GOOGLE_SHEET_ID"))
     parser.add_argument("--macros-tab", default=env_or_default("GOOGLE_SHEET_MACROS_TAB", "Macros"))
+    parser.add_argument("--macros-tabs", default=os.environ.get("GOOGLE_SHEET_MACROS_TABS", "").strip(),
+                        help="Comma-separated macro tabs, e.g. 'Jan Macros,Feb Macros,March Macros'")
     parser.add_argument("--sleep-tab", default=env_or_default("GOOGLE_SHEET_SLEEP_TAB", "Sleep"))
     parser.add_argument("--steps-tab", default=env_or_default("GOOGLE_SHEET_STEPS_TAB", "Steps"))
     parser.add_argument("--skip-sleep", action="store_true", help="Keep existing sleepData from js/data.js")
@@ -390,11 +425,26 @@ def main():
     bayes_block = extract_bayes_block(output_path)
 
     service = sheets_service()
-    macro_rows = get_values(service, args.sheet_id, args.macros_tab)
-    sleep_rows = None if args.skip_sleep else get_values(service, args.sheet_id, args.sleep_tab)
-    steps_rows = None if args.skip_steps else get_values(service, args.sheet_id, args.steps_tab)
+    macro_source_rows: list[tuple[str, list[list[str]]]] = []
+    if args.macros_tabs:
+        macro_tabs = [tab.strip() for tab in args.macros_tabs.split(",") if tab.strip()]
+        for tab in macro_tabs:
+            macro_source_rows.append((tab, get_values(service, args.sheet_id, tab)))
+    else:
+        try:
+            macro_source_rows.append((args.macros_tab, get_values(service, args.sheet_id, args.macros_tab)))
+        except HttpError as exc:
+            fallback_tabs = ["Jan Macros", "Feb Macros", "March Macros"]
+            if args.macros_tab == "Macros" and exc.resp.status == 400:
+                print("Macros tab not found; falling back to Jan/Feb/March macro tabs.")
+                for tab in fallback_tabs:
+                    macro_source_rows.append((tab, get_values(service, args.sheet_id, tab)))
+            else:
+                raise
+    sleep_rows = None if args.skip_sleep else get_optional_values(service, args.sheet_id, args.sleep_tab, "Sleep")
+    steps_rows = None if args.skip_steps else get_optional_values(service, args.sheet_id, args.steps_tab, "Steps")
 
-    macro_buckets = load_macros(macro_rows)
+    macro_buckets = load_macros_from_sources(macro_source_rows)
     sleep_data = load_sleep(sleep_rows, existing_sleep)
     steps_data = load_steps(steps_rows, existing_steps)
 

@@ -42,6 +42,7 @@ jobs:
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SHEET_MACROS_TAB: ${{ vars.GOOGLE_SHEET_MACROS_TAB }}
+          GOOGLE_SHEET_MACROS_TABS: ${{ vars.GOOGLE_SHEET_MACROS_TABS }}
           GOOGLE_SHEET_SLEEP_TAB: ${{ vars.GOOGLE_SHEET_SLEEP_TAB }}
           GOOGLE_SHEET_STEPS_TAB: ${{ vars.GOOGLE_SHEET_STEPS_TAB }}
         run: python scripts/sync_google_sheets.py
