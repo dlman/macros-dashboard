@@ -164,7 +164,8 @@ function monthBuckets(days) {
   return {
     Jan: days.filter(d => d.date.startsWith('2026-01')),
     Feb: days.filter(d => d.date.startsWith('2026-02')),
-    March: days.filter(d => d.date.startsWith('2026-03'))
+    March: days.filter(d => d.date.startsWith('2026-03')),
+    Apr: days.filter(d => d.date.startsWith('2026-04'))
   };
 }
 

@@ -141,8 +141,8 @@ function renderStatCards() {
       return avg(d, m.key);
     });
 
-    let arrows = ['','',''];
-    for (let i = 1; i < 3; i++) {
+    let arrows = ['','','',''];
+    for (let i = 1; i < 4; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
       const delta = vals[i] - vals[i-1];
       if (Math.abs(delta) < 1) { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }
@@ -176,7 +176,7 @@ function renderStatCards() {
   mismatchCard.innerHTML = `
     <div class="label">Macro vs Logged Gap</div>
     <div class="months">
-      ${['Jan', 'Feb', 'Mar'].map((mo, i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
+      ${['Jan', 'Feb', 'Mar', 'Apr'].map((mo, i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
     </div>`;
   grid.appendChild(mismatchCard);
 
@@ -287,7 +287,7 @@ function renderHighlights() {
 function renderSleepStatCards() {
   const grid = document.getElementById('sleepStatGrid');
   const filteredSleep = getFilteredSleep();
-  const months = {Jan: filteredSleep.filter(d=>d.date.startsWith('2026-01')), Feb: filteredSleep.filter(d=>d.date.startsWith('2026-02')), Mar: filteredSleep.filter(d=>d.date.startsWith('2026-03'))};
+  const months = {Jan: filteredSleep.filter(d=>d.date.startsWith('2026-01')), Feb: filteredSleep.filter(d=>d.date.startsWith('2026-02')), Mar: filteredSleep.filter(d=>d.date.startsWith('2026-03')), Apr: filteredSleep.filter(d=>d.date.startsWith('2026-04'))};
   const metrics = [
     { label: 'Avg Sleep Performance', key: 'perf', fmt: v => Math.round(v)+'%', goodDir: 'up' },
     { label: 'Avg Sleep Duration', key: 'hours', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
@@ -301,10 +301,10 @@ function renderSleepStatCards() {
   grid.innerHTML = '';
   metrics.forEach(m => {
     const vals = m.computed
-      ? [m.computed(months.Jan), m.computed(months.Feb), m.computed(months.Mar)]
-      : [avgOrNull(months.Jan, m.key), avgOrNull(months.Feb, m.key), avgOrNull(months.Mar, m.key)];
-    let arrows = ['','',''];
-    for (let i = 1; i < 3; i++) {
+      ? [m.computed(months.Jan), m.computed(months.Feb), m.computed(months.Mar), m.computed(months.Apr)]
+      : [avgOrNull(months.Jan, m.key), avgOrNull(months.Feb, m.key), avgOrNull(months.Mar, m.key), avgOrNull(months.Apr, m.key)];
+    let arrows = ['','','',''];
+    for (let i = 1; i < 4; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
       const delta = vals[i] - vals[i-1];
       if (Math.abs(delta) < 0.5 && m.key === 'perf' || Math.abs(delta) < 0.05 && m.key !== 'perf') { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }

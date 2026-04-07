@@ -870,7 +870,7 @@ function updateMacroStackedChart(days) {
 }
 
 function updateDonutCharts(months) {
-  [['donutJan', 'Jan'], ['donutFeb', 'Feb'], ['donutMar', 'March']].forEach(([id, month]) => {
+  [['donutJan', 'Jan'], ['donutFeb', 'Feb'], ['donutMar', 'March'], ['donutApr', 'Apr']].forEach(([id, month]) => {
     const chart = Chart.getChart(document.getElementById(id));
     const days = months[month];
     const pCal = avg(days, 'protein') * 4;
