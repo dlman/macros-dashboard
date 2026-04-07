@@ -31,7 +31,7 @@ def parse_data_js(path):
         r',weight:([0-9.]+|null)'
         r',lifting:("Y"|null)'
         r',drinks:(".*?"|null)'
-        r'(?:,notes:".*?")?'
+        r'(?:,notes:(?:".*?"|null))?'
         r'\}'
     )
 

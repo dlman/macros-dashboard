@@ -44,6 +44,7 @@ MONTH_BUCKETS = OrderedDict([
     ("Jan", "2026-01"),
     ("Feb", "2026-02"),
     ("March", "2026-03"),
+    ("Apr", "2026-04"),
 ])
 
 MACRO_ALIASES = {
@@ -434,7 +435,7 @@ def main():
         try:
             macro_source_rows.append((args.macros_tab, get_values(service, args.sheet_id, args.macros_tab)))
         except HttpError as exc:
-            fallback_tabs = ["Jan Macros", "Feb Macros", "March Macros"]
+            fallback_tabs = ["Jan Macros", "Feb Macros", "March Macros", "April Macros"]
             if args.macros_tab == "Macros" and exc.resp.status == 400:
                 print("Macros tab not found; falling back to Jan/Feb/March macro tabs.")
                 for tab in fallback_tabs:

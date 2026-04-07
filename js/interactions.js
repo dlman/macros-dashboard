@@ -4,7 +4,7 @@
 let currentPanelDate = null;
 
 function findDay(dateStr) {
-  for (const m of ['Jan','Feb','March']) {
+  for (const m of ['Jan','Feb','March','Apr']) {
     const found = data[m].find(d => d.date === dateStr);
     if (found) return { day: found, month: m };
   }
@@ -759,19 +759,20 @@ function updateBodyCompChart(days) {
 
 function updateCaloriesChart(months) {
   const chart = allCharts.caloriesChart;
-  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, 1);
+  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, (months.Apr||[]).length, 1);
   chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
     { label:'Jan', data: months.Jan.map(d => energyValue(d.calories)), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'Feb', data: months.Feb.map(d => energyValue(d.calories)), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'March', data: months.March.map(d => energyValue(d.calories)), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
+    { label:'Apr', data: (months.Apr||[]).map(d => energyValue(d.calories)), borderColor: COLORS.apr, backgroundColor:'rgba(192,132,252,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:`Target (${energyLabel(goals.calories)})`, data: Array(maxLen).fill(energyValue(goals.calories)), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
   ];
   calVisibility.forEach((visible, idx) => { chart.data.datasets[idx].hidden = !visible; });
-  const visibleEnergy = [...months.Jan, ...months.Feb, ...months.March].map(d => energyValue(d.calories)).concat([energyValue(goals.calories)]);
+  const visibleEnergy = [...months.Jan, ...months.Feb, ...months.March, ...(months.Apr||[])].map(d => energyValue(d.calories)).concat([energyValue(goals.calories)]);
   const bounds = calcAxisBounds(visibleEnergy, useMetric ? 400 : 250);
   chart.options.onClick = (evt, elements) => {
-    if (!elements.length || elements[0].datasetIndex > 2) return;
+    if (!elements.length || elements[0].datasetIndex > 3) return;
     const month = monthOrder[elements[0].datasetIndex];
     const day = months[month][elements[0].index];
     if (day) openPanel(day.date);
@@ -819,13 +820,14 @@ function updateWaterfallChart(days) {
 
 function updateMacroChart(months) {
   const chart = allCharts.macroChart;
-  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, 1);
+  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, (months.Apr||[]).length, 1);
   const bounds = metricBounds[currentMetric];
   chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
     { label:'Jan', data: months.Jan.map(d => d[currentMetric]), borderColor:COLORS.jan, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
     { label:'Feb', data: months.Feb.map(d => d[currentMetric]), borderColor:COLORS.feb, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
     { label:'March', data: months.March.map(d => d[currentMetric]), borderColor:COLORS.mar, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
+    { label:'Apr', data: (months.Apr||[]).map(d => d[currentMetric]), borderColor:COLORS.apr, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
     { label:`Goal (${goals[currentMetric]}g)`, data:Array(maxLen).fill(goals[currentMetric]), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
   ];
   macroVisibility.forEach((visible, idx) => { chart.data.datasets[idx].hidden = !visible; });
@@ -833,7 +835,7 @@ function updateMacroChart(months) {
   chart.options.scales.y.max = bounds.max;
   chart.options.scales.y.ticks.stepSize = bounds.step;
   chart.options.onClick = (evt, elements) => {
-    if (!elements.length || elements[0].datasetIndex > 2) return;
+    if (!elements.length || elements[0].datasetIndex > 3) return;
     const month = monthOrder[elements[0].datasetIndex];
     const day = months[month][elements[0].index];
     if (day) openPanel(day.date);
@@ -885,8 +887,10 @@ function updateDonutCharts(months) {
 function updateSimpleMonthBars(months) {
   const liftingChart = Chart.getChart(document.getElementById('liftingChart'));
   const drinksChart = Chart.getChart(document.getElementById('drinksChart'));
-  liftingChart.data.datasets[0].data = [months.Jan.filter(d => d.lifting === 'Y').length, months.Feb.filter(d => d.lifting === 'Y').length, months.March.filter(d => d.lifting === 'Y').length];
-  drinksChart.data.datasets[0].data = [months.Jan.filter(d => d.drinks).length, months.Feb.filter(d => d.drinks).length, months.March.filter(d => d.drinks).length];
+  liftingChart.data.datasets[0].data = [months.Jan.filter(d => d.lifting === 'Y').length, months.Feb.filter(d => d.lifting === 'Y').length, months.March.filter(d => d.lifting === 'Y').length,
+      (months.Apr||[]).filter(d => d.lifting === 'Y').length];
+  drinksChart.data.datasets[0].data = [months.Jan.filter(d => d.drinks).length, months.Feb.filter(d => d.drinks).length, months.March.filter(d => d.drinks).length,
+      (months.Apr||[]).filter(d => d.drinks).length];
   liftingChart.update();
   drinksChart.update();
 }
@@ -1403,7 +1407,7 @@ function injectCustomData() {
   const cd = loadCustomData();
   const hasCustomData = !!(cd.macro.length || cd.sleep.length);
   cd.macro.forEach(entry => {
-    const month = entry.date.startsWith('2026-01') ? 'Jan' : entry.date.startsWith('2026-02') ? 'Feb' : 'March';
+    const month = entry.date.startsWith('2026-01') ? 'Jan' : entry.date.startsWith('2026-02') ? 'Feb' : entry.date.startsWith('2026-03') ? 'March' : 'Apr';
     if (!data[month].find(d => d.date === entry.date)) {
       data[month].push(entry);
       data[month].sort((a, b) => a.date.localeCompare(b.date));
@@ -1421,7 +1425,7 @@ function injectCustomData() {
 
 function rebuildDerivedData({ invalidateBayes = false } = {}) {
   allDays.length = 0;
-  ['Jan', 'Feb', 'March'].forEach(m => data[m].forEach(d => allDays.push(d)));
+  ['Jan', 'Feb', 'March', 'Apr'].forEach(m => data[m].forEach(d => allDays.push(d)));
   allDates.length = 0;
   allDays.forEach(d => allDates.push(d.date));
   Object.keys(macroByDate).forEach(k => delete macroByDate[k]);

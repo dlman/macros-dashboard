@@ -115,7 +115,7 @@ allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioFor
 // TREND ARROWS & STAT CARDS
 // =====================================================================
 function renderStatCards() {
-  const months = ['Jan','Feb','March'];
+  const months = ['Jan','Feb','March','Apr'];
   const metrics = [
     { label: 'Avg Calories', key: 'calories', fmt: v => Math.round(v).toLocaleString(), goodDir: 'down' },
     { label: 'Avg Protein (g)', key: 'protein', fmt: v => Math.round(v), goodDir: 'up' },
@@ -166,7 +166,7 @@ function renderStatCards() {
   const mismatchCard = document.createElement('div');
   mismatchCard.className = 'stat-card';
   const allFilteredDays = getFilteredDays();
-  const mismatchVals = ['Jan', 'Feb', 'March'].map(mo => {
+  const mismatchVals = ['Jan', 'Feb', 'March', 'Apr'].map(mo => {
     const mDays = filtered[mo];
     if (!mDays.length) return null;
     const avgLogged = avg(mDays, 'calories');
@@ -187,7 +187,7 @@ function renderStatCards() {
     { label: 'Cal', key: 'calories' },
     { label: 'Pro', key: 'protein' }
   ];
-  const conMonths = ['Jan', 'Feb', 'March'];
+  const conMonths = ['Jan', 'Feb', 'March', 'Apr'];
   consistencyCard.innerHTML = `
     <div class="label">Consistency (lower variance = higher)</div>
     <div class="months">
@@ -315,7 +315,7 @@ function renderSleepStatCards() {
     }
     const card = document.createElement('div');
     card.className = 'stat-card';
-    const mos = ['Jan','Feb','Mar'];
+    const mos = ['Jan','Feb','Mar','Apr'];
     card.innerHTML = `<div class="label">${m.label}</div><div class="months">${mos.map((mo,i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val col-${mo.toLowerCase()}">${vals[i] == null ? '—' : m.fmt(vals[i])}${arrows[i]}</span></div>`).join('')}</div>`;
     grid.appendChild(card);
   });
@@ -958,7 +958,7 @@ function renderSleepInsights() {
 // WEIGHT CHART (enhanced: rolling avg + drink/lift markers + goal annotation)
 // =====================================================================
 const weightPoints = [];
-['Jan','Feb','March'].forEach(m => {
+['Jan','Feb','March','Apr'].forEach(m => {
   data[m].filter(d=>d.weight).forEach(d => weightPoints.push({ x: d.date.slice(5)+' ('+m.slice(0,3)+')', y: d.weight, date: d.date }));
 });
 const weightVals = weightPoints.map(p => p.y);
@@ -1246,17 +1246,18 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
 // =====================================================================
 // CALORIES CHART (enhanced: goal line + rolling avg)
 // =====================================================================
-const monthOrder = ['Jan','Feb','March'];
-let calVisibility = Array.isArray(persistedState.calVisibility) && persistedState.calVisibility.length === 3 ? persistedState.calVisibility : [true, true, true];
+const monthOrder = ['Jan','Feb','March','Apr'];
+let calVisibility = Array.isArray(persistedState.calVisibility) && persistedState.calVisibility.length === 4 ? persistedState.calVisibility : [true, true, true, true];
 
 function makeCalDatasets() {
   const ds = [
     { label:'Jan', data: data.Jan.map(d=>d.calories), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'Feb', data: data.Feb.map(d=>d.calories), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
     { label:'March', data: data.March.map(d=>d.calories), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
+    { label:'Apr', data: (data.Apr||[]).map(d=>d.calories), borderColor: COLORS.apr, backgroundColor:'rgba(192,132,252,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
   ];
   // Goal line (only for longest month)
-  const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length);
+  const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
   ds.push({
     label: `Target (${goals.calories})`,
     data: Array(maxLen).fill(goals.calories),
@@ -1265,13 +1266,13 @@ function makeCalDatasets() {
   return ds;
 }
 
-const maxLabels = Math.max(data.Jan.length, data.Feb.length, data.March.length);
+const maxLabels = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
 allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
   type: 'line',
   data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: makeCalDatasets() },
   options: {
     ...chartDefaults(),
-    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 3) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo][el.index]) openPanel(data[mo][el.index].date); } },
+    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 4) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
     plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${energyLabel(ctx.parsed.y)}` } } },
     scales: { x: { ...chartDefaults().scales.x, title:{display:true,text:'Day of Month',color:'#64748b',font:{size:11}}, ticks:{...TICK()} }, y: { ...chartDefaults().scales.y, min: 1000, max: 3600, ticks: { ...TICK(), stepSize: 250, callback: v => v.toLocaleString()+' kcal' } } }
   }
@@ -1381,19 +1382,20 @@ allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), 
 // COMBINED MACRO CHART (enhanced)
 // =====================================================================
 let currentMetric = persistedState.currentMetric || 'protein';
-let macroVisibility = Array.isArray(persistedState.macroVisibility) && persistedState.macroVisibility.length === 3 ? persistedState.macroVisibility : [true, true, true];
+let macroVisibility = Array.isArray(persistedState.macroVisibility) && persistedState.macroVisibility.length === 4 ? persistedState.macroVisibility : [true, true, true, true];
 const metricBounds = { protein:{min:80,max:250,step:20}, carbs:{min:40,max:310,step:30}, fat:{min:10,max:160,step:15} };
 
 const macroDatasets = () => {
   const ds = [
     { label:'Jan', data: data.Jan.map(d=>d[currentMetric]), borderColor:COLORS.jan, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
     { label:'Feb', data: data.Feb.map(d=>d[currentMetric]), borderColor:COLORS.feb, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'March', data: data.March.map(d=>d[currentMetric]), borderColor:COLORS.mar, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 }
+    { label:'March', data: data.March.map(d=>d[currentMetric]), borderColor:COLORS.mar, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
+    { label:'Apr', data: (data.Apr||[]).map(d=>d[currentMetric]), borderColor:COLORS.apr, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 }
   ];
   // Goal line
   const goalVal = goals[currentMetric];
   if (goalVal) {
-    const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length);
+    const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
     ds.push({ label:`Goal (${goalVal}g)`, data:Array(maxLen).fill(goalVal), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 });
   }
   return ds;
@@ -1404,7 +1406,7 @@ allCharts.macroChart = new Chart(document.getElementById('macroChart'), {
   data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: macroDatasets() },
   options: {
     ...chartDefaults(),
-    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 3) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if(data[mo][el.index]) openPanel(data[mo][el.index].date); } },
+    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 4) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if(data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
     plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:16 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}g` } } },
     scales: { x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:10} }, y: { ...chartDefaults().scales.y, min: metricBounds.protein.min, max: metricBounds.protein.max, ticks:{...TICK(), stepSize: metricBounds.protein.step, callback:v=>v+'g'} } }
   }
@@ -1523,21 +1525,22 @@ function donutChart(id, month) {
 donutChart('donutJan','Jan');
 donutChart('donutFeb','Feb');
 donutChart('donutMar','March');
+donutChart('donutApr','Apr');
 
 // =====================================================================
 // LIFTING & DRINKS CHARTS
 // =====================================================================
-const liftingCounts = { Jan: data.Jan.filter(d=>d.lifting==='Y').length, Feb: data.Feb.filter(d=>d.lifting==='Y').length, March: data.March.filter(d=>d.lifting==='Y').length };
+const liftingCounts = { Jan: data.Jan.filter(d=>d.lifting==='Y').length, Feb: data.Feb.filter(d=>d.lifting==='Y').length, March: data.March.filter(d=>d.lifting==='Y').length, Apr: (data.Apr||[]).filter(d=>d.lifting==='Y').length };
 new Chart(document.getElementById('liftingChart'), {
   type: 'bar',
-  data: { labels: ['January','February','March (so far)'], datasets: [{ data: [liftingCounts.Jan, liftingCounts.Feb, liftingCounts.March], backgroundColor: [COLORS.jan, COLORS.feb, COLORS.mar], borderRadius:6, borderSkipped:false }] },
+  data: { labels: ['January','February','March','April'], datasets: [{ data: [liftingCounts.Jan, liftingCounts.Feb, liftingCounts.March, liftingCounts.Apr], backgroundColor: [COLORS.jan, COLORS.feb, COLORS.mar, COLORS.apr], borderRadius:6, borderSkipped:false }] },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} lifting sessions` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:2} } } }
 });
 
-const drinksCounts = { Jan: data.Jan.filter(d=>d.drinks).length, Feb: data.Feb.filter(d=>d.drinks).length, March: data.March.filter(d=>d.drinks).length };
+const drinksCounts = { Jan: data.Jan.filter(d=>d.drinks).length, Feb: data.Feb.filter(d=>d.drinks).length, March: data.March.filter(d=>d.drinks).length, Apr: (data.Apr||[]).filter(d=>d.drinks).length };
 new Chart(document.getElementById('drinksChart'), {
   type: 'bar',
-  data: { labels: ['January','February','March (so far)'], datasets: [{ data: [drinksCounts.Jan, drinksCounts.Feb, drinksCounts.March], backgroundColor: ['rgba(245,158,11,0.6)','rgba(56,189,248,0.6)','rgba(52,211,153,0.6)'], borderRadius:6, borderSkipped:false }] },
+  data: { labels: ['January','February','March','April'], datasets: [{ data: [drinksCounts.Jan, drinksCounts.Feb, drinksCounts.March, drinksCounts.Apr], backgroundColor: ['rgba(245,158,11,0.6)','rgba(56,189,248,0.6)','rgba(52,211,153,0.6)','rgba(192,132,252,0.6)'], borderRadius:6, borderSkipped:false }] },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} drink days` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:1} } } }
 });
 
@@ -2349,7 +2352,8 @@ function renderHeatmap() {
   const months = [
     { label: 'Jan', days: data.Jan },
     { label: 'Feb', days: data.Feb },
-    { label: 'Mar', days: data.March }
+    { label: 'Mar', days: data.March },
+    { label: 'Apr', days: (data.Apr||[]) }
   ];
 
   // Ranges for color scaling

@@ -1,7 +1,7 @@
 // =====================================================================
 // DATA LAYER
 // =====================================================================
-const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399' };
+const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399', apr: '#c084fc' };
 const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4' };
 const GRID = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || 'rgba(255,255,255,0.05)' });
 const TICK = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--tick-color').trim() || '#64748b', font: { size: 11 } });
@@ -116,7 +116,7 @@ const { data, sleepData, stepsData } = window.dashboardData;
 // COMPUTED DATA & HELPERS
 // =====================================================================
 // Flatten all days
-const allDays = [...data.Jan, ...data.Feb, ...data.March];
+const allDays = [...data.Jan, ...data.Feb, ...data.March, ...(data.Apr||[])];
 const allDates = allDays.map(d => d.date);
 const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
 const macroByDate = {};
@@ -266,8 +266,8 @@ function foodsForDay(day) {
 }
 
 function monthlyProgression(filtered) {
-  const months = ['Jan', 'Feb', 'March'];
-  const labels = ['Jan', 'Feb', 'Mar'];
+  const months = ['Jan', 'Feb', 'March', 'Apr'];
+  const labels = ['Jan', 'Feb', 'Mar', 'Apr'];
   const summaries = months.map((mo, i) => {
     const d = filtered[mo];
     if (!d.length) return null;
