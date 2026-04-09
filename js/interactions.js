@@ -731,7 +731,7 @@ function updateBodyCompChart(days) {
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
     const d = bodyComp[ctx[0].dataIndex];
     return d ? [
-      d.measured ? ` DXA measured point on Jan 6, 2026` : ` Estimated from the DXA baseline on Jan 6, 2026`,
+      d.measured ? ` DXA measured point on ${d.scanLabel || 'Apr 8, 2026'}` : ` Estimated from the DXA baseline (Apr 8, 2026)`,
       d.measured ? '' : ` Likely body-fat range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       d.measured ? ` Total: ${weightLabel(d.weight)}` : ` Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
       d.measured ? '' : ` Total: ${weightLabel(d.weight)}`

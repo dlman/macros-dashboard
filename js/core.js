@@ -683,16 +683,26 @@ function pearson(x, y) {
   return dx && dy ? num / Math.sqrt(dx*dy) : 0;
 }
 
-const DXA_SCAN = {
+// Jan 6, 2026 baseline scan
+const DXA_SCAN_PREV = {
   date: '2026-01-06',
-  totalMass: 174,
+  totalMass: 173.5,
   bodyFatPct: 25.1,
-  leanMass: 124
+  leanMass: 123.8
+};
+
+// Apr 8, 2026 scan — current anchor for body comp model
+const DXA_SCAN = {
+  date: '2026-04-08',
+  totalMass: 160.6,
+  bodyFatPct: 21.2,
+  leanMass: 120.6
 };
 
 const DXA_FAT_MASS = DXA_SCAN.totalMass * (DXA_SCAN.bodyFatPct / 100);
 const DXA_BONE_MASS = Math.max(DXA_SCAN.totalMass - DXA_SCAN.leanMass - DXA_FAT_MASS, 0);
 const DXA_FAT_FREE_MASS = DXA_SCAN.leanMass + DXA_BONE_MASS;
+const DXA_PREV_FAT_MASS = DXA_SCAN_PREV.totalMass * (DXA_SCAN_PREV.bodyFatPct / 100);
 
 function bodyCompModelShares(days = allDays) {
   const liftPerWeek = days.filter(d => d.lifting === 'Y').length / Math.max(days.length / 7, 1);
@@ -761,12 +771,19 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays) {
   };
 }
 
-// Body composition estimate anchored to the Jan 6, 2026 DXA scan.
+// Body composition estimate anchored to the Apr 8, 2026 DXA scan.
 function bodyCompEstimate(days = allDays) {
   const weightDays = days.filter(d => d.weight);
-  const scanDay = macroByDate[DXA_SCAN.date];
-  const includeScan = isDateInRange(DXA_SCAN.date) && (!scanDay || matchesDayEvent(scanDay));
-  if (!weightDays.length && !includeScan) return [];
+  // DXA scan points are ground-truth measurements — show them whenever their date
+  // falls within the selected range window, regardless of analytics cutoff or
+  // whether a macro entry exists for that day.
+  const { start, end } = getRangeState();
+  const rangeStart = allDates[start] || '2026-01-01';
+  const rangeEnd = allDates[end] || YESTERDAY_ISO;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const includeScan = DXA_SCAN.date >= rangeStart && DXA_SCAN.date <= todayISO;
+  const includePrevScan = DXA_SCAN_PREV.date >= rangeStart && DXA_SCAN_PREV.date <= rangeEnd;
+  if (!weightDays.length && !includeScan && !includePrevScan) return [];
   const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompRangeAtWeight(d.weight, days) }));
   if (includeScan) {
     points.push({
@@ -783,7 +800,27 @@ function bodyCompEstimate(days = allDays) {
       bodyFatPctHigh: DXA_SCAN.bodyFatPct,
       confidence: projectionConfidence(1),
       confidenceScore: 1,
-      measured: true
+      measured: true,
+      scanLabel: 'Apr 8, 2026'
+    });
+  }
+  if (includePrevScan) {
+    points.push({
+      date: DXA_SCAN_PREV.date,
+      weight: DXA_SCAN_PREV.totalMass,
+      lean: DXA_SCAN_PREV.leanMass,
+      fat: DXA_PREV_FAT_MASS,
+      bodyFatPct: DXA_SCAN_PREV.bodyFatPct,
+      fatLow: DXA_PREV_FAT_MASS,
+      fatHigh: DXA_PREV_FAT_MASS,
+      leanLow: DXA_SCAN_PREV.leanMass,
+      leanHigh: DXA_SCAN_PREV.leanMass,
+      bodyFatPctLow: DXA_SCAN_PREV.bodyFatPct,
+      bodyFatPctHigh: DXA_SCAN_PREV.bodyFatPct,
+      confidence: projectionConfidence(1),
+      confidenceScore: 1,
+      measured: true,
+      scanLabel: 'Jan 6, 2026'
     });
   }
   return points.sort((a, b) => a.date.localeCompare(b.date));

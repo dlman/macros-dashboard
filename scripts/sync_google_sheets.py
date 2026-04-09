@@ -1,80 +1,63 @@
 #!/usr/bin/env python3
 """
-Sync private Google Sheets data into js/data.js.
+Sync published Google Sheets CSV tabs into js/data.js.
 
-Designed for GitHub Actions or local use with a Google service account.
+No credentials or secrets required — just publish each macro tab via
+File → Share → Publish to web → CSV, then paste the URL below.
 
-Required:
-  - GOOGLE_SHEET_ID
-  - GOOGLE_SERVICE_ACCOUNT_JSON   (raw JSON secret), or
-  - GOOGLE_SERVICE_ACCOUNT_FILE   (path to credentials JSON)
+Add a new entry to PUBLISHED_CSV_URLS whenever you start a new month.
+Sleep and steps data are preserved from the existing js/data.js (update
+those manually via WHOOP/Health exports as usual).
 
-Optional:
-  - GOOGLE_SHEET_MACROS_TAB   (default: Macros)
-  - GOOGLE_SHEET_SLEEP_TAB    (default: Sleep)
-  - GOOGLE_SHEET_STEPS_TAB    (default: Steps)
-
-This script rewrites the raw dashboard datasets and preserves any existing
-Bayesian block between // BAYES_START and // BAYES_END. The workflow should run
-update_bayes.py immediately afterward so the derived Bayesian artifacts match
-the newly synced raw data.
+Usage:
+  python scripts/sync_google_sheets.py
+  python scripts/sync_google_sheets.py --output js/data.js
+  python scripts/sync_google_sheets.py --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
-import os
 import re
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
+import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_JS_PATH = ROOT / "js" / "data.js"
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+# ─── Published CSV URLs ────────────────────────────────────────────────────────
+# Add a new entry here whenever you publish a new month's macro tab.
+# File → Share → Publish to web → select the sheet tab → CSV → Copy link
+PUBLISHED_CSV_URLS: dict[str, str] = {
+    "Apr": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
+    # "May": "https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv",
+}
+# ──────────────────────────────────────────────────────────────────────────────
 
 MONTH_BUCKETS = OrderedDict([
-    ("Jan", "2026-01"),
-    ("Feb", "2026-02"),
+    ("Jan",   "2026-01"),
+    ("Feb",   "2026-02"),
     ("March", "2026-03"),
-    ("Apr", "2026-04"),
+    ("Apr",   "2026-04"),
 ])
 
 MACRO_ALIASES = {
-    "date": {"date", "day", "datestr", "daydate"},
-    "protein": {"protein", "proteing", "proteingrams", "proteingram", "p"},
-    "carbs": {"carbs", "carb", "carbsg", "carbsgrams", "c"},
-    "fat": {"fat", "fatg", "fatgrams", "f"},
+    "date":     {"date", "day", "datestr", "daydate"},
+    "protein":  {"protein", "proteing", "proteingrams", "proteingram", "p"},
+    "carbs":    {"carbs", "carb", "carbsg", "carbsgrams", "c"},
+    "fat":      {"fat", "fatg", "fatgrams", "f"},
     "calories": {"calories", "calorie", "cals", "kcal", "energy"},
-    "weight": {"weight", "bodyweight", "scaleweight", "bw"},
-    "lifting": {"lifting", "lift", "lifted", "training", "workout"},
-    "drinks": {"drinks", "drink", "alcohol", "alcoholnotes"},
-    "notes": {"notes", "foodnotes", "food", "meals", "mealnotes"},
-}
-
-SLEEP_ALIASES = {
-    "date": {"date", "day", "datestr"},
-    "perf": {"perf", "sleepperf", "sleepperformance", "recovery", "score"},
-    "hours": {"hours", "sleephours", "totalsleephours", "sleepduration"},
-    "bedtime": {"bedtime", "bedtimeclock", "timeinbed"},
-    "bedtime_hour": {"bedtimehour", "bedtimehours", "bedtimehr"},
-    "deep": {"deep", "deepsleep", "deep_hours"},
-    "rem": {"rem", "remsleep", "rem_hours"},
-    "light": {"light", "lightsleep", "light_hours"},
-    "efficiency": {"efficiency", "sleepefficiency"},
-    "resp": {"resp", "respiratory", "respiratoryrate", "breathingrate"},
-}
-
-STEPS_ALIASES = {
-    "date": {"date", "day", "datestr"},
-    "steps": {"steps", "stepcount", "dailysteps"},
+    "weight":   {"weight", "bodyweight", "scaleweight", "bw"},
+    "lifting":  {"lifting", "lift", "lifted", "training", "workout"},
+    "drinks":   {"drinks", "drink", "alcohol", "alcoholnotes"},
+    "notes":    {"notes", "foodnotes", "food", "meals", "mealnotes"},
 }
 
 
@@ -82,47 +65,19 @@ def normalize_header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
 
 
-def env_or_default(name: str, default: str) -> str:
-    value = os.environ.get(name, "").strip()
-    return value or default
-
-
-def read_credentials():
-    raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    json_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
-    if raw_json:
-        info = json.loads(raw_json)
-        return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    if json_path:
-        return service_account.Credentials.from_service_account_file(json_path, scopes=SCOPES)
-    raise SystemExit("Missing GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE.")
-
-
-def sheets_service():
-    creds = read_credentials()
-    return build("sheets", "v4", credentials=creds, cache_discovery=False)
-
-
-def get_values(service, spreadsheet_id: str, tab_name: str) -> list[list[str]]:
-    response = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=tab_name
-    ).execute()
-    return response.get("values", [])
-
-
-def get_optional_values(service, spreadsheet_id: str, tab_name: str, label: str) -> list[list[str]] | None:
-    try:
-        return get_values(service, spreadsheet_id, tab_name)
-    except HttpError as exc:
-        if exc.resp.status == 400:
-            print(f"{label} tab '{tab_name}' not found; keeping the existing {label.lower()} data from js/data.js.")
-            return None
-        raise
+def fetch_csv(url: str, label: str) -> list[list[str]]:
+    """Fetch a published Google Sheets CSV and return rows as list[list[str]]."""
+    print(f"  Fetching {label} …")
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    reader = csv.reader(io.StringIO(response.text))
+    rows = [row for row in reader if any(cell.strip() for cell in row)]
+    print(f"  {label}: {len(rows) - 1} data rows")
+    return rows
 
 
 def map_headers(header_row: list[str], aliases: dict[str, set[str]]) -> dict[str, int]:
-    normalized = {normalize_header(value): idx for idx, value in enumerate(header_row)}
+    normalized = {normalize_header(v): idx for idx, v in enumerate(header_row)}
     mapped: dict[str, int] = {}
     for canonical, candidates in aliases.items():
         for candidate in candidates:
@@ -135,10 +90,7 @@ def map_headers(header_row: list[str], aliases: dict[str, set[str]]) -> dict[str
 def cell(row: list[str], idx: int | None) -> str | None:
     if idx is None or idx >= len(row):
         return None
-    value = row[idx]
-    if value is None:
-        return None
-    value = str(value).strip()
+    value = str(row[idx]).strip()
     return value or None
 
 
@@ -148,17 +100,8 @@ def parse_date(value: str | None) -> str | None:
     value = value.strip()
     excel_serial = parse_float(value)
     if excel_serial is not None and 40000 <= excel_serial <= 60000:
-        excel_epoch = datetime(1899, 12, 30)
-        return (excel_epoch + timedelta(days=excel_serial)).strftime("%Y-%m-%d")
-    formats = [
-        "%Y-%m-%d",
-        "%m/%d/%Y",
-        "%m/%d/%y",
-        "%Y/%m/%d",
-        "%b %d, %Y",
-        "%B %d, %Y",
-    ]
-    for fmt in formats:
+        return (datetime(1899, 12, 30) + timedelta(days=excel_serial)).strftime("%Y-%m-%d")
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y/%m/%d", "%b %d, %Y", "%B %d, %Y"):
         try:
             return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
         except ValueError:
@@ -172,24 +115,21 @@ def parse_date(value: str | None) -> str | None:
 def parse_float(value: str | None) -> float | None:
     if value in (None, "", "-", "—"):
         return None
-    cleaned = str(value).strip().replace(",", "")
-    cleaned = cleaned.replace("%", "")
     try:
-        return float(cleaned)
+        return float(str(value).strip().replace(",", "").replace("%", ""))
     except ValueError:
         return None
 
 
 def parse_int(value: str | None) -> int | None:
-    number = parse_float(value)
-    return None if number is None else int(round(number))
+    n = parse_float(value)
+    return None if n is None else int(round(n))
 
 
 def parse_lifting(value: str | None) -> str | None:
     if not value:
         return None
-    normalized = value.strip().lower()
-    if normalized in {"y", "yes", "true", "1", "lift", "lifting", "workout", "trained"}:
+    if value.strip().lower() in {"y", "yes", "true", "1", "lift", "lifting", "workout", "trained"}:
         return "Y"
     return None
 
@@ -213,12 +153,55 @@ def js_string(value: str | None) -> str:
 def serialize_object(obj: OrderedDict[str, Any]) -> str:
     parts = []
     for key, value in obj.items():
-        if isinstance(value, str) or value is None:
-            rendered = js_string(value)
-        else:
-            rendered = format_number(value)
+        rendered = js_string(value) if (isinstance(value, str) or value is None) else format_number(value)
         parts.append(f"{key}:{rendered}")
     return "{" + ",".join(parts) + "}"
+
+
+def parse_existing_macro_data(path: Path) -> OrderedDict[str, list[OrderedDict[str, Any]]]:
+    """Read the existing data.js macro buckets so unchanged months are preserved."""
+    src = path.read_text(encoding="utf-8")
+    day_re = re.compile(
+        r'\{date:"(\d{4}-\d{2}-\d{2})"'
+        r',protein:(\d+|null),carbs:(\d+|null),fat:(\d+|null),calories:(\d+|null)'
+        r',weight:([0-9.]+|null),lifting:("Y"|null),drinks:(".*?"|null)'
+        r'(?:,notes:(?:".*?"|null))?\}'
+    )
+    buckets: OrderedDict[str, list[OrderedDict[str, Any]]] = OrderedDict(
+        (name, []) for name in MONTH_BUCKETS
+    )
+    for m in day_re.finditer(src):
+        date = m.group(1)
+        prefix = date[:7]
+        month = next((name for name, p in MONTH_BUCKETS.items() if p == prefix), None)
+        if month is None:
+            continue
+
+        def maybe_int(s: str) -> int | None:
+            return None if s == "null" else int(s)
+
+        def maybe_float(s: str) -> float | None:
+            return None if s == "null" else float(s)
+
+        def maybe_str(s: str) -> str | None:
+            return None if s == "null" else s.strip('"')
+
+        # Re-extract notes separately since the regex above doesn't capture it
+        notes_match = re.search(r'\{date:"' + date + r'"[^}]+,notes:(".*?"|null)\}', src)
+        notes = maybe_str(notes_match.group(1)) if notes_match else None
+
+        buckets[month].append(OrderedDict([
+            ("date",     date),
+            ("protein",  maybe_int(m.group(2))),
+            ("carbs",    maybe_int(m.group(3))),
+            ("fat",      maybe_int(m.group(4))),
+            ("calories", maybe_int(m.group(5))),
+            ("weight",   maybe_float(m.group(6))),
+            ("lifting",  maybe_str(m.group(7))),
+            ("drinks",   maybe_str(m.group(8))),
+            ("notes",    notes),
+        ]))
+    return buckets
 
 
 def parse_existing_sleep_data(path: Path) -> list[dict[str, Any]]:
@@ -228,21 +211,16 @@ def parse_existing_sleep_data(path: Path) -> list[dict[str, Any]]:
         r'bedtime:"(?P<bedtime>[^"]+)",bedtime_hour:(?P<bedtime_hour>[0-9.]+),deep:(?P<deep>[0-9.]+),'
         r'rem:(?P<rem>[0-9.]+),light:(?P<light>[0-9.]+),efficiency:(?P<efficiency>[0-9.]+),resp:(?P<resp>[0-9.]+)\}'
     )
-    rows = []
-    for match in pattern.finditer(src):
-        rows.append({
-            "date": match.group("date"),
-            "perf": float(match.group("perf")),
-            "hours": float(match.group("hours")),
-            "bedtime": match.group("bedtime"),
-            "bedtime_hour": float(match.group("bedtime_hour")),
-            "deep": float(match.group("deep")),
-            "rem": float(match.group("rem")),
-            "light": float(match.group("light")),
-            "efficiency": int(round(float(match.group("efficiency")))),
-            "resp": float(match.group("resp")),
-        })
-    return rows
+    return [
+        {
+            "date": m.group("date"), "perf": float(m.group("perf")),
+            "hours": float(m.group("hours")), "bedtime": m.group("bedtime"),
+            "bedtime_hour": float(m.group("bedtime_hour")), "deep": float(m.group("deep")),
+            "rem": float(m.group("rem")), "light": float(m.group("light")),
+            "efficiency": int(round(float(m.group("efficiency")))), "resp": float(m.group("resp")),
+        }
+        for m in pattern.finditer(src)
+    ]
 
 
 def parse_existing_steps_data(path: Path) -> list[dict[str, Any]]:
@@ -263,202 +241,102 @@ def extract_bayes_block(path: Path) -> str:
     return src[start:end].rstrip() + "\n"
 
 
-def append_macro_rows(
+def apply_csv_to_bucket(
     buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
     rows: list[list[str]],
-    source_name: str,
+    month_name: str,
 ) -> None:
-    if not rows:
-        return
+    """Overwrite a single month bucket with rows from a CSV fetch."""
     headers = map_headers(rows[0], MACRO_ALIASES)
-    missing = [field for field in ("date", "protein", "carbs", "fat", "calories") if field not in headers]
+    missing = [f for f in ("date", "protein", "carbs", "fat", "calories") if f not in headers]
     if missing:
-        raise SystemExit(f"{source_name} is missing required headers: {', '.join(missing)}")
+        raise SystemExit(f"{month_name} CSV is missing required columns: {', '.join(missing)}")
+
+    new_rows: list[OrderedDict[str, Any]] = []
     for row in rows[1:]:
         date = parse_date(cell(row, headers.get("date")))
         if not date:
             continue
-        month_prefix = date[:7]
-        bucket_name = next((name for name, prefix in MONTH_BUCKETS.items() if prefix == month_prefix), None)
-        if bucket_name is None:
-            raise SystemExit(
-                f"Found unsupported date {date}. The current dashboard code is still hard-coded to Jan/Feb/March 2026."
-            )
-        buckets[bucket_name].append(OrderedDict([
-            ("date", date),
-            ("protein", parse_int(cell(row, headers.get("protein")))),
-            ("carbs", parse_int(cell(row, headers.get("carbs")))),
-            ("fat", parse_int(cell(row, headers.get("fat")))),
+        protein = parse_int(cell(row, headers.get("protein")))
+        if protein is None:
+            continue  # skip empty/future rows
+        new_rows.append(OrderedDict([
+            ("date",     date),
+            ("protein",  protein),
+            ("carbs",    parse_int(cell(row, headers.get("carbs")))),
+            ("fat",      parse_int(cell(row, headers.get("fat")))),
             ("calories", parse_int(cell(row, headers.get("calories")))),
-            ("weight", parse_float(cell(row, headers.get("weight")))),
-            ("lifting", parse_lifting(cell(row, headers.get("lifting")))),
-            ("drinks", cell(row, headers.get("drinks"))),
-            ("notes", cell(row, headers.get("notes"))),
+            ("weight",   parse_float(cell(row, headers.get("weight")))),
+            ("lifting",  parse_lifting(cell(row, headers.get("lifting")))),
+            ("drinks",   cell(row, headers.get("drinks"))),
+            ("notes",    cell(row, headers.get("notes"))),
         ]))
 
-def load_macros_from_sources(source_rows: list[tuple[str, list[list[str]]]]) -> OrderedDict[str, list[OrderedDict[str, Any]]]:
-    buckets: OrderedDict[str, list[OrderedDict[str, Any]]] = OrderedDict((name, []) for name in MONTH_BUCKETS)
-    any_rows = False
-    seen_dates: set[str] = set()
-    for source_name, rows in source_rows:
-        if rows:
-            any_rows = True
-            append_macro_rows(buckets, rows, source_name)
-    if not any_rows:
-        raise SystemExit("No macro rows were found in the configured macro tabs.")
-    for month_name, items in buckets.items():
-        deduped: list[OrderedDict[str, Any]] = []
-        for item in sorted(items, key=lambda entry: entry["date"]):
-            if item["date"] in seen_dates:
-                continue
-            seen_dates.add(item["date"])
-            deduped.append(item)
-        buckets[month_name] = deduped
-    return buckets
-
-
-def load_sleep(rows: list[list[str]] | None, existing: list[dict[str, Any]]) -> list[OrderedDict[str, Any]]:
-    if not rows:
-        return [OrderedDict(item) for item in existing]
-    headers = map_headers(rows[0], SLEEP_ALIASES)
-    missing = [field for field in ("date", "perf", "hours", "bedtime") if field not in headers]
-    if missing:
-        raise SystemExit(f"Sleep tab is missing required headers: {', '.join(missing)}")
-
-    result: list[OrderedDict[str, Any]] = []
-    for row in rows[1:]:
-        date = parse_date(cell(row, headers.get("date")))
-        if not date:
-            continue
-        bedtime = cell(row, headers.get("bedtime"))
-        result.append(OrderedDict([
-            ("date", date),
-            ("perf", parse_int(cell(row, headers.get("perf")))),
-            ("hours", parse_float(cell(row, headers.get("hours")))),
-            ("bedtime", bedtime),
-            ("bedtime_hour", parse_float(cell(row, headers.get("bedtime_hour")))),
-            ("deep", parse_float(cell(row, headers.get("deep")))),
-            ("rem", parse_float(cell(row, headers.get("rem")))),
-            ("light", parse_float(cell(row, headers.get("light")))),
-            ("efficiency", parse_int(cell(row, headers.get("efficiency")))),
-            ("resp", parse_float(cell(row, headers.get("resp")))),
-        ]))
-    result.sort(key=lambda item: item["date"])
-    return result
-
-
-def load_steps(rows: list[list[str]] | None, existing: list[dict[str, Any]]) -> list[OrderedDict[str, Any]]:
-    if not rows:
-        return [OrderedDict(item) for item in existing]
-    headers = map_headers(rows[0], STEPS_ALIASES)
-    missing = [field for field in ("date", "steps") if field not in headers]
-    if missing:
-        raise SystemExit(f"Steps tab is missing required headers: {', '.join(missing)}")
-
-    result: list[OrderedDict[str, Any]] = []
-    for row in rows[1:]:
-        date = parse_date(cell(row, headers.get("date")))
-        if not date:
-            continue
-        steps = parse_int(cell(row, headers.get("steps")))
-        if steps is None:
-            continue
-        result.append(OrderedDict([
-            ("date", date),
-            ("steps", steps),
-        ]))
-    result.sort(key=lambda item: item["date"])
-    return result
+    new_rows.sort(key=lambda r: r["date"])
+    buckets[month_name] = new_rows
+    print(f"  {month_name}: {len(new_rows)} rows loaded from CSV")
 
 
 def render_data_js(
     macro_buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
-    sleep_rows: list[OrderedDict[str, Any]],
-    steps_rows: list[OrderedDict[str, Any]],
+    sleep_rows: list[Any],
+    steps_rows: list[Any],
     bayes_block: str,
 ) -> str:
     macro_lines = []
-    for idx, (month, entries) in enumerate(macro_buckets.items()):
-        serialized = ",\n    ".join(serialize_object(entry) for entry in entries)
+    for month, entries in macro_buckets.items():
+        serialized = ",\n    ".join(serialize_object(e) for e in entries)
         macro_lines.append(
             f"  {month}: [\n    {serialized}\n  ]" if serialized else f"  {month}: []"
         )
-    sleep_serialized = ",\n  ".join(serialize_object(entry) for entry in sleep_rows)
-    steps_serialized = ",\n  ".join(serialize_object(entry) for entry in steps_rows)
+    sleep_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
+    steps_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
 
     return (
-        "(() => {\n"
-        "// Raw data\n"
-        "const data = {\n"
+        "(() => {\n// Raw data\nconst data = {\n"
         + ",\n".join(macro_lines)
-        + "\n};\n\n"
-        + "const sleepData = [\n  "
-        + sleep_serialized
-        + "\n];\n\n"
-        + "const stepsData = [\n  "
-        + steps_serialized
-        + "\n];\n\n"
+        + "\n};\n\nconst sleepData = [\n  " + sleep_ser + "\n];\n\n"
+        + "const stepsData = [\n  " + steps_ser + "\n];\n\n"
         + "window.dashboardData = { data, sleepData, stepsData };\n"
         + (bayes_block if bayes_block else "")
         + "\n})();\n"
     )
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Sync dashboard data from a private Google Sheet.")
-    parser.add_argument("--sheet-id", default=os.environ.get("GOOGLE_SHEET_ID"))
-    parser.add_argument("--macros-tab", default=env_or_default("GOOGLE_SHEET_MACROS_TAB", "Macros"))
-    parser.add_argument("--macros-tabs", default=os.environ.get("GOOGLE_SHEET_MACROS_TABS", "").strip(),
-                        help="Comma-separated macro tabs, e.g. 'Jan Macros,Feb Macros,March Macros'")
-    parser.add_argument("--sleep-tab", default=env_or_default("GOOGLE_SHEET_SLEEP_TAB", "Sleep"))
-    parser.add_argument("--steps-tab", default=env_or_default("GOOGLE_SHEET_STEPS_TAB", "Steps"))
-    parser.add_argument("--skip-sleep", action="store_true", help="Keep existing sleepData from js/data.js")
-    parser.add_argument("--skip-steps", action="store_true", help="Keep existing stepsData from js/data.js")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Sync published Google Sheets CSVs into js/data.js.")
     parser.add_argument("--output", default=str(DATA_JS_PATH))
+    parser.add_argument("--dry-run", action="store_true", help="Print what would change without writing")
     args = parser.parse_args()
 
-    if not args.sheet_id:
-        raise SystemExit("Missing --sheet-id or GOOGLE_SHEET_ID.")
-
     output_path = Path(args.output).resolve()
+
+    print("Reading existing data.js …")
+    macro_buckets = parse_existing_macro_data(output_path)
     existing_sleep = parse_existing_sleep_data(output_path)
     existing_steps = parse_existing_steps_data(output_path)
     bayes_block = extract_bayes_block(output_path)
 
-    service = sheets_service()
-    macro_source_rows: list[tuple[str, list[list[str]]]] = []
-    if args.macros_tabs:
-        macro_tabs = [tab.strip() for tab in args.macros_tabs.split(",") if tab.strip()]
-        for tab in macro_tabs:
-            macro_source_rows.append((tab, get_values(service, args.sheet_id, tab)))
-    else:
-        try:
-            macro_source_rows.append((args.macros_tab, get_values(service, args.sheet_id, args.macros_tab)))
-        except HttpError as exc:
-            fallback_tabs = ["Jan Macros", "Feb Macros", "March Macros", "April Macros"]
-            if args.macros_tab == "Macros" and exc.resp.status == 400:
-                print("Macros tab not found; falling back to Jan/Feb/March macro tabs.")
-                for tab in fallback_tabs:
-                    macro_source_rows.append((tab, get_values(service, args.sheet_id, tab)))
-            else:
-                raise
-    sleep_rows = None if args.skip_sleep else get_optional_values(service, args.sheet_id, args.sleep_tab, "Sleep")
-    steps_rows = None if args.skip_steps else get_optional_values(service, args.sheet_id, args.steps_tab, "Steps")
+    print(f"\nFetching {len(PUBLISHED_CSV_URLS)} published CSV tab(s) …")
+    for month_name, url in PUBLISHED_CSV_URLS.items():
+        if month_name not in MONTH_BUCKETS:
+            print(f"  WARNING: '{month_name}' not in MONTH_BUCKETS — skipping")
+            continue
+        rows = fetch_csv(url, f"{month_name} Macros")
+        apply_csv_to_bucket(macro_buckets, rows, month_name)
 
-    macro_buckets = load_macros_from_sources(macro_source_rows)
-    sleep_data = load_sleep(sleep_rows, existing_sleep)
-    steps_data = load_steps(steps_rows, existing_steps)
+    output = render_data_js(macro_buckets, existing_sleep, existing_steps, bayes_block)
 
-    output = render_data_js(macro_buckets, sleep_data, steps_data, bayes_block)
+    if args.dry_run:
+        print("\n--- DRY RUN: would write ---")
+        print(output[:500] + "\n…")
+        return
+
     output_path.write_text(output, encoding="utf-8")
-
-    macro_count = sum(len(items) for items in macro_buckets.values())
-    print(f"Synced {macro_count} macro rows, {len(sleep_data)} sleep rows, and {len(steps_data)} step rows into {output_path}.")
-    if args.skip_sleep:
-        print("Kept existing sleepData because --skip-sleep was used.")
-    if args.skip_steps:
-        print("Kept existing stepsData because --skip-steps was used.")
-    print("Next step: run update_bayes.py so the Bayesian artifacts match the newly synced raw data.")
+    macro_count = sum(len(v) for v in macro_buckets.values())
+    print(f"\n✓ Wrote {macro_count} macro rows, {len(existing_sleep)} sleep rows, "
+          f"{len(existing_steps)} step rows → {output_path}")
+    print("Next: run  python update_bayes.py js/data.js  to refresh Bayesian estimates.")
 
 
 if __name__ == "__main__":
