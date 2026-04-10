@@ -33,6 +33,7 @@ function openPanel(dateStr) {
   const sleep = sleepByDate[dateStr];
   const sleepStats = document.getElementById('panelSleepStats');
   if (sleep) {
+    const whoop = whoopRecoveryForDate(dateStr);
     sleepStats.innerHTML = `
       <div class="mini-stat"><div class="ms-label">Sleep Perf</div><div class="ms-val" style="color:${perfColor(sleep.perf)}">${sleep.perf}%</div></div>
       <div class="mini-stat"><div class="ms-label">Hours</div><div class="ms-val" style="color:#f59e0b">${sleep.hours}h</div></div>
@@ -42,6 +43,9 @@ function openPanel(dateStr) {
     // Recovery score
     const rec = recoveryScore(sleep);
     sleepStats.innerHTML += `<div class="mini-stat"><div class="ms-label">Recovery</div><div class="ms-val" style="color:${perfColor(rec)}">${rec}</div></div>`;
+    if (whoop?.recovery != null) {
+      sleepStats.innerHTML += `<div class="mini-stat"><div class="ms-label">WHOOP Rec</div><div class="ms-val" style="color:${perfColor(whoop.recovery)}">${whoop.recovery}</div></div>`;
+    }
   } else {
     sleepStats.innerHTML = '<div class="mini-stat"><div class="ms-label">Sleep</div><div class="ms-val" style="color:#64748b">No data</div></div>';
   }
@@ -1163,18 +1167,37 @@ function updateFoodFreqChart(days) {
 function updateSleepCharts(days) {
   const recoveryChart = allCharts.recoveryChart;
   const scores = days.map(d => recoveryScore(d));
+  const whoopScores = days.map(d => whoopRecoveryScore(d));
   recoveryChart.data.labels = days.map(d => d.date.slice(5));
   recoveryChart.data.datasets[0].data = scores;
   recoveryChart.data.datasets[0].pointRadius = scores.map(s => s < 30 || s > 75 ? 6 : 3);
   recoveryChart.data.datasets[0].pointBackgroundColor = scores.map(s => perfColor(s));
   recoveryChart.data.datasets[1].data = rollingAvg(scores, 7);
+  recoveryChart.data.datasets[2].data = whoopScores;
+  recoveryChart.data.datasets[2].pointRadius = whoopScores.map(s => s == null ? 0 : 3);
+  recoveryChart.data.datasets[2].pointHoverRadius = whoopScores.map(s => s == null ? 0 : 6);
+  recoveryChart.data.datasets[2].pointBackgroundColor = whoopScores.map(s => s == null ? 'transparent' : perfColor(s));
   recoveryChart.options.onClick = (evt, elements) => { if (elements.length) openPanel(days[elements[0].index].date); };
   recoveryChart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
   recoveryChart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
     const d = days[ctx.dataIndex];
     const prev = prevDay(d.date);
-    return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
+    if (ctx.datasetIndex === 2) {
+      const whoop = whoopRecoveryForDate(d.date);
+      return [
+        ` WHOOP recovery: ${ctx.parsed.y}`,
+        whoop?.hrv != null ? ` HRV: ${whoop.hrv} ms` : ' HRV: —',
+        whoop?.rhr != null ? ` Resting HR: ${whoop.rhr} bpm` : ' Resting HR: —'
+      ];
+    }
+    const whoopScore = whoopRecoveryScore(d);
+    return [
+      ` Custom recovery: ${ctx.parsed.y}`,
+      whoopScore != null ? ` WHOOP recovery: ${whoopScore}` : ' WHOOP recovery: —',
+      ` Sleep: ${d.perf}% perf, ${d.hours}h`,
+      drinkDates.has(prev) ? ' 🍹 drank prev night' : ''
+    ].filter(Boolean);
   };
   recoveryChart.update();
 

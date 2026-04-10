@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sync WHOOP sleep data into js/data.js.
+Sync WHOOP sleep and recovery data into js/data.js.
 
 Reads WHOOP_REFRESH_TOKEN from the environment, fetches sleep records via
 the WHOOP v2 API, maps them to the dashboard schema, and overwrites the
@@ -41,6 +41,7 @@ import requests
 
 TOKEN_URL    = "https://api.prod.whoop.com/oauth/oauth2/token"
 SLEEP_URL    = "https://api.prod.whoop.com/developer/v2/activity/sleep"
+RECOVERY_URL = "https://api.prod.whoop.com/developer/v2/recovery"
 GITHUB_API   = "https://api.github.com"
 
 # Fetch sleep back to this date (covers full dashboard history)
@@ -114,7 +115,7 @@ def update_github_secret(repo: str, secret_name: str, value: str, pat: str) -> N
 
 
 # ---------------------------------------------------------------------------
-# WHOOP sleep fetch
+# WHOOP API fetch
 # ---------------------------------------------------------------------------
 
 def fetch_all_sleep(access_token: str, start: str) -> list[dict]:
@@ -147,6 +148,34 @@ def fetch_all_sleep(access_token: str, start: str) -> list[dict]:
     return records
 
 
+def fetch_all_recovery(access_token: str, start: str) -> list[dict]:
+    """Fetch all scored recovery records since `start` (ISO-8601)."""
+    headers = {"Authorization": f"Bearer {access_token}"}
+    records: list[dict] = []
+    next_token: str | None = None
+
+    while True:
+        params: dict[str, Any] = {"limit": 25, "start": start}
+        if next_token:
+            params["nextToken"] = next_token
+
+        resp = requests.get(RECOVERY_URL, headers=headers, params=params, timeout=15)
+        resp.raise_for_status()
+        body = resp.json()
+
+        for rec in body.get("records", []):
+            if rec.get("score_state") != "SCORED":
+                continue
+            records.append(rec)
+
+        next_token = body.get("next_token")
+        if not next_token:
+            break
+
+    print(f"  Fetched {len(records)} scored recovery records from WHOOP")
+    return records
+
+
 # ---------------------------------------------------------------------------
 # Schema mapping
 # ---------------------------------------------------------------------------
@@ -164,6 +193,13 @@ def _parse_timezone(name: str) -> ZoneInfo:
         sys.exit(f"Invalid WHOOP_TIMEZONE value: {name}")
 
 
+def _parse_iso_to_date(iso: str | None, tzinfo: ZoneInfo) -> str | None:
+    if not iso:
+        return None
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(tzinfo)
+    return dt.strftime("%Y-%m-%d")
+
+
 def _format_bedtime(iso: str, tzinfo: ZoneInfo) -> tuple[str, float]:
     """Return ("01:44 AM", 1.73) from an ISO-8601 timestamp."""
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(tzinfo)
@@ -171,6 +207,14 @@ def _format_bedtime(iso: str, tzinfo: ZoneInfo) -> tuple[str, float]:
     label = label.replace(" 0", " ")          # normalise single-digit hours
     hour_decimal = round(dt.hour + dt.minute / 60, 2)
     return label, hour_decimal
+
+
+def _first_present(obj: dict, *keys: str) -> Any:
+    for key in keys:
+        value = obj.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 def whoop_record_to_row(rec: dict, tzinfo: ZoneInfo) -> dict | None:
@@ -222,6 +266,37 @@ def whoop_record_to_row(rec: dict, tzinfo: ZoneInfo) -> dict | None:
     }
 
 
+def whoop_recovery_to_row(rec: dict, tzinfo: ZoneInfo) -> dict | None:
+    """Map a WHOOP recovery record to the dashboard whoopRecoveryData schema."""
+    score = rec.get("score") or {}
+    date = _parse_iso_to_date(
+        _first_present(rec, "created_at", "created", "updated_at", "updated", "start", "end"),
+        tzinfo,
+    )
+    recovery = _first_present(score, "recovery_score", "recovery")
+    if date is None or recovery is None:
+        return None
+
+    def maybe_round(value: Any, digits: int = 1) -> float | None:
+        if value is None:
+            return None
+        return round(float(value), digits)
+
+    rhr = _first_present(score, "resting_heart_rate", "resting_heart_rate_bpm")
+    hrv = _first_present(score, "hrv_rmssd_milli", "hrv")
+    skin_temp = _first_present(score, "skin_temp_celsius", "skin_temp")
+    spo2 = _first_present(score, "spo2_percentage", "blood_oxygen_percentage")
+
+    return {
+        "date": date,
+        "recovery": int(round(float(recovery))),
+        "hrv": maybe_round(hrv, 1),
+        "rhr": maybe_round(rhr, 1),
+        "skinTemp": maybe_round(skin_temp, 2),
+        "spo2": maybe_round(spo2, 1),
+    }
+
+
 # ---------------------------------------------------------------------------
 # js/data.js patch
 # ---------------------------------------------------------------------------
@@ -252,34 +327,67 @@ def _serialize_sleep_row(row: dict) -> str:
     return "{" + ",".join(fields) + "}"
 
 
-def patch_sleep_data(path: Path, rows: list[dict], dry_run: bool = False) -> bool:
-    """Replace the sleepData array in data.js. Returns True if file changed."""
+def _serialize_recovery_row(row: dict) -> str:
+    def fmt(v: Any) -> str:
+        if v is None:
+            return "null"
+        if isinstance(v, str):
+            return json.dumps(v)
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, int):
+            return str(v)
+        f = float(v)
+        if f.is_integer():
+            return str(int(f))
+        return format(f, ".2f").rstrip("0").rstrip(".")
+
+    fields = [
+        f'date:{fmt(row["date"])}',
+        f'recovery:{fmt(row["recovery"])}',
+        f'hrv:{fmt(row["hrv"])}',
+        f'rhr:{fmt(row["rhr"])}',
+        f'skinTemp:{fmt(row["skinTemp"])}',
+        f'spo2:{fmt(row["spo2"])}',
+    ]
+    return "{" + ",".join(fields) + "}"
+
+
+def _replace_or_insert_block(src: str, block_name: str, new_block: str, anchor: str) -> tuple[str, bool]:
+    pattern = re.compile(rf"const {re.escape(block_name)} = \[[\s\S]*?\];")
+    patched, n = pattern.subn(new_block, src, count=1)
+    if n:
+        return patched, True
+    if anchor in src:
+        return src.replace(anchor, new_block + "\n\n" + anchor, 1), True
+    return src, False
+
+
+def patch_whoop_data(path: Path, sleep_rows: list[dict], recovery_rows: list[dict], dry_run: bool = False) -> bool:
+    """Replace the sleepData and whoopRecoveryData arrays in data.js."""
     src = path.read_text(encoding="utf-8")
 
-    serialized = ",\n  ".join(_serialize_sleep_row(r) for r in rows)
-    new_block   = f"const sleepData = [\n  {serialized}\n];"
+    sleep_serialized = ",\n  ".join(_serialize_sleep_row(r) for r in sleep_rows)
+    recovery_serialized = ",\n  ".join(_serialize_recovery_row(r) for r in recovery_rows)
+    sleep_block = f"const sleepData = [\n  {sleep_serialized}\n];"
+    recovery_block = f"const whoopRecoveryData = [\n  {recovery_serialized}\n];"
 
-    # Replace existing sleepData block
-    patched, n = re.subn(
-        r"const sleepData = \[[\s\S]*?\];",
-        new_block,
-        src,
-        count=1,
-    )
-    if n == 0:
-        print("  WARNING: could not find sleepData block in data.js — no changes written")
+    patched, sleep_ok = _replace_or_insert_block(src, "sleepData", sleep_block, "const stepsData = [")
+    patched, recovery_ok = _replace_or_insert_block(patched, "whoopRecoveryData", recovery_block, "const stepsData = [")
+    if not sleep_ok or not recovery_ok:
+        print("  WARNING: could not safely patch WHOOP blocks in data.js — no changes written")
         return False
 
     if patched == src:
-        print("  sleepData unchanged — nothing to write")
+        print("  WHOOP sleep/recovery data unchanged — nothing to write")
         return False
 
     if dry_run:
-        print("  DRY RUN — would update sleepData with", len(rows), "rows")
+        print(f"  DRY RUN — would update sleepData ({len(sleep_rows)} rows) and whoopRecoveryData ({len(recovery_rows)} rows)")
         return True
 
     path.write_text(patched, encoding="utf-8")
-    print(f"  ✓ Wrote {len(rows)} sleep rows → {path}")
+    print(f"  ✓ Wrote {len(sleep_rows)} sleep rows and {len(recovery_rows)} recovery rows → {path}")
     return True
 
 
@@ -312,6 +420,30 @@ def parse_existing_sleep(path: Path) -> list[dict]:
     ]
 
 
+def parse_existing_recovery(path: Path) -> list[dict]:
+    src = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'\{date:"(?P<date>\d{4}-\d{2}-\d{2})",recovery:(?P<recovery>[0-9.]+),'
+        r'hrv:(?P<hrv>[0-9.]+|null),rhr:(?P<rhr>[0-9.]+|null),'
+        r'skinTemp:(?P<skinTemp>-?[0-9.]+|null),spo2:(?P<spo2>[0-9.]+|null)\}'
+    )
+
+    def maybe_float(value: str) -> float | None:
+        return None if value == "null" else float(value)
+
+    return [
+        {
+            "date": m.group("date"),
+            "recovery": int(round(float(m.group("recovery")))),
+            "hrv": maybe_float(m.group("hrv")),
+            "rhr": maybe_float(m.group("rhr")),
+            "skinTemp": maybe_float(m.group("skinTemp")),
+            "spo2": maybe_float(m.group("spo2")),
+        }
+        for m in pattern.finditer(src)
+    ]
+
+
 def merge_sleep_rows(existing: list[dict], fresh: list[dict]) -> list[dict]:
     """
     WHOOP data takes precedence.  Existing rows for dates not covered by
@@ -324,12 +456,19 @@ def merge_sleep_rows(existing: list[dict], fresh: list[dict]) -> list[dict]:
     return merged
 
 
+def merge_recovery_rows(existing: list[dict], fresh: list[dict]) -> list[dict]:
+    by_date: dict[str, dict] = {r["date"]: r for r in existing}
+    for row in fresh:
+        by_date[row["date"]] = row
+    return sorted(by_date.values(), key=lambda r: r["date"])
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sync WHOOP sleep data into js/data.js")
+    parser = argparse.ArgumentParser(description="Sync WHOOP sleep and recovery data into js/data.js")
     parser.add_argument("--dry-run", action="store_true", help="Print what would change without writing")
     args = parser.parse_args()
 
@@ -368,34 +507,49 @@ def main() -> None:
         else:
             print("  DRY RUN — would update WHOOP_REFRESH_TOKEN secret")
 
-    # ── Fetch sleep data ──────────────────────────────────────────────────────
+    # ── Fetch sleep + recovery data ──────────────────────────────────────────
     print(f"Fetching WHOOP sleep data since {FETCH_FROM} …")
-    records = fetch_all_sleep(access_token, FETCH_FROM)
+    sleep_records = fetch_all_sleep(access_token, FETCH_FROM)
+    print(f"Fetching WHOOP recovery data since {FETCH_FROM} …")
+    recovery_records = fetch_all_recovery(access_token, FETCH_FROM)
 
     # ── Map to dashboard schema ───────────────────────────────────────────────
-    fresh_rows: list[dict] = []
-    skipped = 0
-    for rec in records:
+    fresh_sleep_rows: list[dict] = []
+    sleep_skipped = 0
+    for rec in sleep_records:
         row = whoop_record_to_row(rec, tzinfo)
         if row:
-            fresh_rows.append(row)
+            fresh_sleep_rows.append(row)
         else:
-            skipped += 1
+            sleep_skipped += 1
 
-    fresh_rows.sort(key=lambda r: r["date"])
-    print(f"  Mapped {len(fresh_rows)} rows ({skipped} skipped — incomplete score data)")
+    fresh_recovery_rows: list[dict] = []
+    recovery_skipped = 0
+    for rec in recovery_records:
+        row = whoop_recovery_to_row(rec, tzinfo)
+        if row:
+            fresh_recovery_rows.append(row)
+        else:
+            recovery_skipped += 1
+
+    fresh_sleep_rows.sort(key=lambda r: r["date"])
+    fresh_recovery_rows.sort(key=lambda r: r["date"])
+    print(f"  Mapped {len(fresh_sleep_rows)} sleep rows ({sleep_skipped} skipped — incomplete score data)")
+    print(f"  Mapped {len(fresh_recovery_rows)} recovery rows ({recovery_skipped} skipped — incomplete score data)")
 
     # ── Merge with existing data ──────────────────────────────────────────────
-    print("Reading existing sleep data from js/data.js …")
-    existing_rows = parse_existing_sleep(DATA_JS_PATH)
-    print(f"  Found {len(existing_rows)} existing rows")
+    print("Reading existing WHOOP data from js/data.js …")
+    existing_sleep_rows = parse_existing_sleep(DATA_JS_PATH)
+    existing_recovery_rows = parse_existing_recovery(DATA_JS_PATH)
+    print(f"  Found {len(existing_sleep_rows)} sleep rows and {len(existing_recovery_rows)} recovery rows")
 
-    merged = merge_sleep_rows(existing_rows, fresh_rows)
-    print(f"  Merged total: {len(merged)} rows")
+    merged_sleep = merge_sleep_rows(existing_sleep_rows, fresh_sleep_rows)
+    merged_recovery = merge_recovery_rows(existing_recovery_rows, fresh_recovery_rows)
+    print(f"  Merged total: {len(merged_sleep)} sleep rows, {len(merged_recovery)} recovery rows")
 
     # ── Patch data.js ─────────────────────────────────────────────────────────
     print("Patching js/data.js …")
-    patch_sleep_data(DATA_JS_PATH, merged, dry_run=args.dry_run)
+    patch_whoop_data(DATA_JS_PATH, merged_sleep, merged_recovery, dry_run=args.dry_run)
 
     print("\nDone. Run  python update_bayes.py js/data.js  to refresh Bayesian estimates.")
 
