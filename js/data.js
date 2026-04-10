@@ -106,7 +106,8 @@ const data = {
     {date:"2026-04-06",protein:217,carbs:79,fat:88,calories:1990,weight:162.4,lifting:"Y",drinks:null,notes:"8 chicken sausages, protein shake, mexican steak bowl, edamame snack, chips, protein bar"},
     {date:"2026-04-07",protein:207,carbs:121,fat:60,calories:1980,weight:161.4,lifting:"Y",drinks:null,notes:"4 chicken sausages, bodega chicken over rice, protein bar, chicken and rice, protein ball, protein shake"},
     {date:"2026-04-08",protein:123,carbs:150,fat:110,calories:2420,weight:159.5,lifting:null,drinks:"1.5 whiskeys",notes:"burger and fries, rice noodles and grilled chicken, chips and guacamole, chicken breast"},
-    {date:"2026-04-09",protein:211,carbs:79,fat:85,calories:1290,weight:159.9,lifting:null,drinks:null,notes:"chinese buffet, protein shake 2x, protein ramen, chicken sausages, edamame snack 2x, protein chips"}
+    {date:"2026-04-09",protein:211,carbs:79,fat:85,calories:2290,weight:159.9,lifting:"Y",drinks:null,notes:"chinese buffet, protein shake 2x, protein ramen, chicken sausages, edamame snack 2x, protein chips"},
+    {date:"2026-04-10",protein:78,carbs:47,fat:27,calories:670,weight:159.8,lifting:null,drinks:null,notes:"protein ramen, chicken sausages, protein bar"}
   ]
 };
 
