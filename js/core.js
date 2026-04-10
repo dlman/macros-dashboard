@@ -720,7 +720,10 @@ const _bayesTDEE = window.dashboardData?.bayesian?.tdeePosterior?.mean || 2400;
 function glycogenStateModel(days, tdeeEst = _bayesTDEE, glycogenMaxG = GLYCOGEN_MAX_G) {
   const WATER_PER_G       = 3.5;   // g water bound per g glycogen
   const LIFT_EXTRA_G      = 35;    // extra glycogenolysis per resistance session
-  const MAX_DAILY_CHANGE  = 90;    // physiological rate cap (g/day either direction)
+  const BASE_REPLETION_G  = 45;    // slow daily repletion even without aggressive carb loading
+  const MAX_REPLETION_G   = 140;   // faster refill when depleted + eating enough carbs
+  const BASE_DEPLETION_G  = 55;    // ordinary daily drawdown when in deficit
+  const MAX_DEPLETION_G   = 125;   // deeper depletion on hard-cut / training-heavy days
 
   // Alcohol effects (three mechanisms):
   //   1. Drink calories don't convert to glycogen — exclude them from surplus calculation
@@ -782,8 +785,21 @@ function glycogenStateModel(days, tdeeEst = _bayesTDEE, glycogenMaxG = GLYCOGEN_
     let delta = carbsToGlycogenG - mobilisedG - liverDeplG;
     if (day.lifting === 'Y') delta -= LIFT_EXTRA_G;
 
-    // Clamp delta to physiological rate
-    delta    = Math.max(-MAX_DAILY_CHANGE, Math.min(MAX_DAILY_CHANGE, delta));
+    // Replace the old flat 90 g/day cap with softer physiology-aware bounds:
+    // depleted stores + higher carb intake permit faster repletion, while fuller
+    // stores slow down; depletion can run faster on higher-deficit or lift days.
+    const carbRepletionBoost = Math.max(0, carbs - 120) * 0.18;
+    const deficitDepletionBoost = Math.min(30, deficit / 25);
+    const liftDepletionBoost = day.lifting === 'Y' ? 12 : 0;
+    const maxGain = Math.min(
+      glycogenMaxG - glycogen,
+      BASE_REPLETION_G + (depletionFactor * (MAX_REPLETION_G - BASE_REPLETION_G)) + carbRepletionBoost
+    );
+    const maxLoss = Math.min(
+      glycogen,
+      BASE_DEPLETION_G + (fillFraction * (MAX_DEPLETION_G - BASE_DEPLETION_G)) + deficitDepletionBoost + liftDepletionBoost
+    );
+    delta    = Math.max(-maxLoss, Math.min(maxGain, delta));
     glycogen = Math.max(0, Math.min(glycogenMaxG, glycogen + delta));
 
     const waterG  = glycogen * WATER_PER_G;
@@ -901,8 +917,7 @@ function bodyCompEstimate(days = allDays) {
   const { start, end } = getRangeState();
   const rangeStart = allDates[start] || '2026-01-01';
   const rangeEnd = allDates[end] || YESTERDAY_ISO;
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const includeScan = DXA_SCAN.date >= rangeStart && DXA_SCAN.date <= todayISO;
+  const includeScan = DXA_SCAN.date >= rangeStart && DXA_SCAN.date <= rangeEnd;
   const includePrevScan = DXA_SCAN_PREV.date >= rangeStart && DXA_SCAN_PREV.date <= rangeEnd;
   if (!weightDays.length && !includeScan && !includePrevScan) return [];
   const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompRangeAtWeight(d.weight, days) }));

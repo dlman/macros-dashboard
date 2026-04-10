@@ -827,7 +827,7 @@ function updateCaloriesChart(months) {
   const visibleEnergy = ACTIVE_MONTHS.flatMap(m => (months[m.key]||[]).map(d => energyValue(d.calories))).concat([energyValue(goals.calories)]);
   const bounds = calcAxisBounds(visibleEnergy, useMetric ? 400 : 250);
   chart.options.onClick = (evt, elements) => {
-    if (!elements.length || elements[0].datasetIndex > 3) return;
+    if (!elements.length || elements[0].datasetIndex >= ACTIVE_MONTHS.length) return;
     const month = monthOrder[elements[0].datasetIndex];
     const day = months[month][elements[0].index];
     if (day) openPanel(day.date);
@@ -887,7 +887,7 @@ function updateMacroChart(months) {
   chart.options.scales.y.max = bounds.max;
   chart.options.scales.y.ticks.stepSize = bounds.step;
   chart.options.onClick = (evt, elements) => {
-    if (!elements.length || elements[0].datasetIndex > 3) return;
+    if (!elements.length || elements[0].datasetIndex >= ACTIVE_MONTHS.length) return;
     const month = monthOrder[elements[0].datasetIndex];
     const day = months[month][elements[0].index];
     if (day) openPanel(day.date);
