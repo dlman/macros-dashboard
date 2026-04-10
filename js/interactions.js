@@ -756,8 +756,7 @@ function updateAdjustedWeightViewChart(days) {
     if (!point) return [];
     return [
       `Modeled glycogen load: ${point.loadPct}% (${point.glycogenG}g)`,
-      `Modeled glycogen + water mass: ~${point.massLbs} lbs`,
-      'Purple line removes the modeled glycogen/water delta relative to Jan 6.'
+      `Modeled glycogen + water mass: ~${point.massLbs} lbs`
     ];
   };
   chart.options.scales.y.min = Math.floor(weightBounds.min);

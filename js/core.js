@@ -755,14 +755,16 @@ function glycogenStateModel(days, tdeeEst = _bayesTDEE, glycogenMaxG = GLYCOGEN_
     // maintenance (this is the supercompensation / diet-break spike mechanism).
     //
     // carbOxFraction: fraction of carbs that get burned (vs stored)
-    //   - Full stores (depletionFactor=0): ~90% burned, 10% stored
-    //   - Half-depleted (depletionFactor=0.5): ~77% burned, 23% stored
-    //   - Fully empty (depletionFactor=1): ~65% burned, 35% stored
-    //   - Deeper deficit pushes fraction burned higher (energy needed now)
+    // Tuned a bit more generously so moderate-carb dieting does not look
+    // unrealistically close to keto-level depletion.
+    //   - Full stores (depletionFactor=0): ~82% burned, 18% stored
+    //   - Half-depleted (depletionFactor=0.5): ~66% burned, 34% stored
+    //   - Fully empty (depletionFactor=1): ~50% burned, 50% stored
+    //   - Deeper deficit still pushes fraction burned higher (energy needed now)
     const depletionFactor = 1 - (glycogen / glycogenMaxG);
-    const carbOxFraction  = Math.min(1.0,
-      (0.90 - 0.25 * depletionFactor) + (deficitRatio * 0.35)
-    );
+    const carbOxFraction  = Math.max(0.5, Math.min(0.95,
+      (0.82 - 0.32 * depletionFactor) + (deficitRatio * 0.22)
+    ));
     let carbsToGlycogenG = Math.max(0, Math.min(
       carbs * (1 - carbOxFraction),
       glycogenMaxG - glycogen
@@ -772,10 +774,10 @@ function glycogenStateModel(days, tdeeEst = _bayesTDEE, glycogenMaxG = GLYCOGEN_
     if (drinkKcal > 0) carbsToGlycogenG *= (1 - ALCOHOL_SYNTHESIS_PENALTY);
 
     // ── Deficit-driven mobilisation ───────────────────────────────────────────
-    // Scaled down vs old model (0.25 not 0.35) because carb-routing already
-    // reduces net storage under a deficit; this covers the remainder
+    // Keep some deficit-driven glycogen use, but let the more generous carb
+    // routing above do most of the work during moderate-carb dieting.
     const fillFraction = glycogen / glycogenMaxG;
-    const mobilisedG   = Math.min((deficit * 0.25 * fillFraction) / 4, glycogen * 0.12);
+    const mobilisedG   = Math.min((deficit * 0.18 * fillFraction) / 4, glycogen * 0.10);
 
     // ── Alcohol: extra liver glycogen mobilised to cover blood glucose ────────
     const liverDeplG = drinkKcal > 0
