@@ -483,6 +483,8 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const latestDay = filteredDays[filteredDays.length - 1] || null;
   const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
   const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
+  const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
+  const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const weighInDelta = latestWeighInDelta(filteredDays);
   const calorieCurrent = currentStreak(filteredDays, d => d.calories <= goals.calories);
   const proteinCurrent = currentStreak(filteredDays, hitProteinFloor);
@@ -562,6 +564,25 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         })()}
       </div>
     `,
+    latestGlycogen
+      ? `
+        <div class="forecast-card mobile-primary">
+          <div class="eyebrow">Current Glycogen Load</div>
+          <div class="value">${latestGlycogen.loadPct}%</div>
+          <div class="sub">Modeled current glycogen level from the latest day in view, with about ${weightLabel(latestGlycogen.massLbs, 2)} tied up in glycogen + bound water.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill estimated">Modeled glycogen state</span><span class="trust-pill logged">Latest range day</span></div>
+          <div class="tiny">${formatShortDate(latestGlycogenDay.date)} · ~${latestGlycogen.glycogenG}g glycogen · ~${weightLabel(latestGlycogen.waterG / 453.592, 2)} bound water · ${latestGlycogen.drinkKcal > 0 ? `includes ~${energyLabel(latestGlycogen.drinkKcal)} drink impact` : 'no drink depletion modeled that day'}</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card mobile-primary">
+          <div class="eyebrow">Current Glycogen Load</div>
+          <div class="value">—</div>
+          <div class="sub">Need at least one tracked day in the active view to estimate your current glycogen and water load.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill estimated">Modeled glycogen state</span></div>
+          <div class="tiny">Range-based estimate</div>
+        </div>
+      `,
     sleepProjection
       ? `
         <div class="forecast-card mobile-secondary">
@@ -1140,8 +1161,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
               if (!point) return [];
               return [
                 `Modeled glycogen load: ${point.loadPct}% (${point.glycogenG}g)`,
-                `Modeled glycogen + water mass: ~${point.massLbs} lbs`,
-                'Purple line removes the modeled glycogen/water delta relative to Jan 6.'
+                `Modeled glycogen + water mass: ~${point.massLbs} lbs`
               ];
             }
           }
