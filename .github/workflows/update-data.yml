@@ -32,6 +32,15 @@ jobs:
       - name: Sync published CSV tabs into dashboard data
         run: python scripts/sync_google_sheets.py
 
+      - name: Sync WHOOP sleep data
+        run: python scripts/sync_whoop.py
+        env:
+          WHOOP_CLIENT_ID:     ${{ secrets.WHOOP_CLIENT_ID }}
+          WHOOP_CLIENT_SECRET: ${{ secrets.WHOOP_CLIENT_SECRET }}
+          WHOOP_REFRESH_TOKEN: ${{ secrets.WHOOP_REFRESH_TOKEN }}
+          GH_PAT:              ${{ secrets.GH_PAT }}
+          GH_REPO:             ${{ secrets.GH_REPO }}
+
       - name: Rebuild Bayesian artifacts
         run: python update_bayes.py js/data.js
 
