@@ -28,9 +28,10 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -44,6 +45,7 @@ GITHUB_API   = "https://api.github.com"
 
 # Fetch sleep back to this date (covers full dashboard history)
 FETCH_FROM   = "2026-01-01T00:00:00.000Z"
+DEFAULT_TIMEZONE = "America/New_York"
 
 ROOT         = Path(__file__).resolve().parents[1]
 DATA_JS_PATH = ROOT / "js" / "data.js"
@@ -155,16 +157,23 @@ def _ms_to_hours(ms: int | None) -> float | None:
     return round(ms / 3_600_000, 2)
 
 
-def _format_bedtime(iso: str) -> tuple[str, float]:
+def _parse_timezone(name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        sys.exit(f"Invalid WHOOP_TIMEZONE value: {name}")
+
+
+def _format_bedtime(iso: str, tzinfo: ZoneInfo) -> tuple[str, float]:
     """Return ("01:44 AM", 1.73) from an ISO-8601 timestamp."""
-    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(tz=None)
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(tzinfo)
     label = dt.strftime("%-I:%M %p")          # e.g. "1:44 AM"
     label = label.replace(" 0", " ")          # normalise single-digit hours
     hour_decimal = round(dt.hour + dt.minute / 60, 2)
     return label, hour_decimal
 
 
-def whoop_record_to_row(rec: dict) -> dict | None:
+def whoop_record_to_row(rec: dict, tzinfo: ZoneInfo) -> dict | None:
     """Map a WHOOP sleep record to the dashboard sleepData schema."""
     score = rec.get("score") or {}
     stages = score.get("stage_summary") or {}
@@ -173,13 +182,13 @@ def whoop_record_to_row(rec: dict) -> dict | None:
     end_iso = rec.get("end")
     if not end_iso:
         return None
-    end_dt  = datetime.fromisoformat(end_iso.replace("Z", "+00:00")).astimezone(tz=None)
+    end_dt  = datetime.fromisoformat(end_iso.replace("Z", "+00:00")).astimezone(tzinfo)
     date    = end_dt.strftime("%Y-%m-%d")
 
     start_iso = rec.get("start")
     if not start_iso:
         return None
-    bedtime, bedtime_hour = _format_bedtime(start_iso)
+    bedtime, bedtime_hour = _format_bedtime(start_iso, tzinfo)
 
     deep  = _ms_to_hours(stages.get("total_slow_wave_sleep_time_milli"))
     rem   = _ms_to_hours(stages.get("total_rem_sleep_time_milli"))
@@ -336,6 +345,9 @@ def main() -> None:
     refresh_token = require_env("WHOOP_REFRESH_TOKEN")
     gh_pat        = require_env("GH_PAT")
     gh_repo       = require_env("GH_REPO")
+    whoop_timezone = os.environ.get("WHOOP_TIMEZONE", DEFAULT_TIMEZONE).strip() or DEFAULT_TIMEZONE
+    tzinfo = _parse_timezone(whoop_timezone)
+    print(f"Using WHOOP timezone: {whoop_timezone}")
 
     # ── Refresh access token ──────────────────────────────────────────────────
     print("Refreshing WHOOP access token …")
@@ -364,7 +376,7 @@ def main() -> None:
     fresh_rows: list[dict] = []
     skipped = 0
     for rec in records:
-        row = whoop_record_to_row(rec)
+        row = whoop_record_to_row(rec, tzinfo)
         if row:
             fresh_rows.append(row)
         else:
