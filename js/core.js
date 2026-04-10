@@ -25,6 +25,7 @@ const TICK = () => ({ color: getComputedStyle(document.documentElement).getPrope
 // Goals (editable via settings)
 let goals = { calories: 2100, protein: null, carbs: 150, fat: 80, sleep: 7, sleepPerf: 70, bedtime: '12:30 AM' };
 const STORAGE_KEY = 'macros_dashboard_v4_state';
+const DEFAULT_RECOVERY_WEIGHTS = { sleep: 0.45, efficiency: 0.25, resp: 0.10, drink: 0.20 };
 
 // Units
 const BUILD_VERSION = '2026.03.21.2';
@@ -86,7 +87,14 @@ function loadPersistedState() {
     if (goals.calories === 2050) goals.calories = 2100;
     if (Array.isArray(saved.annotations)) annotations = saved.annotations;
     if (typeof saved.useMetric === 'boolean') useMetric = saved.useMetric;
-    if (saved.recoveryWeights) recoveryWeights = saved.recoveryWeights;
+    if (saved.recoveryWeights) {
+      const rw = saved.recoveryWeights;
+      const isLegacyDefault = Math.abs((rw.sleep ?? 0) - 0.4) < 0.0001
+        && Math.abs((rw.efficiency ?? 0) - 0.2) < 0.0001
+        && Math.abs((rw.resp ?? 0) - 0.2) < 0.0001
+        && Math.abs((rw.drink ?? 0) - 0.2) < 0.0001;
+      recoveryWeights = isLegacyDefault ? { ...DEFAULT_RECOVERY_WEIGHTS } : rw;
+    }
     if (typeof saved.themePreference === 'string') themePreference = saved.themePreference;
     else if (typeof saved.theme === 'string') themePreference = saved.theme;
     return saved;
@@ -227,7 +235,7 @@ function rollingAvg(arr, window) {
 }
 
 // Recovery score: configurable weights
-let recoveryWeights = { sleep: 0.4, efficiency: 0.2, resp: 0.2, drink: 0.2 };
+let recoveryWeights = { ...DEFAULT_RECOVERY_WEIGHTS };
 function recoveryScore(sleepDay) {
   if (!sleepDay || sleepDay.perf == null || sleepDay.efficiency == null) return null;
   const prev = prevDay(sleepDay.date);
