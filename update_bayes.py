@@ -475,6 +475,15 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
         flags=re.DOTALL,
     )
 
+    # Repair legacy broken sync output that left a stray "}" line between the
+    # dashboard data assignment and the closing IIFE.
+    src = re.sub(
+        r'(window\.dashboardData = \{ data, sleepData(?:, whoopRecoveryData)?, stepsData \};)\s*\n\s*\}\s*\n\s*\}\)\(\);',
+        r'\1\n\n})();',
+        src,
+        flags=re.DOTALL,
+    )
+
     # Serialize — strip 'observations' from the JSON written to data.js to keep it slim
     tdee_out = {k: v for k, v in bayes_tdee_result.items() if k != 'observations'}
     tdee_json = json.dumps(tdee_out, separators=(',', ':'))
@@ -491,16 +500,21 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
         f"{BAYES_END}\n"
     )
 
-    # Insert just before the closing })();
-    if 'window.dashboardData = { data, sleepData, stepsData };' in src:
-        src = src.replace(
-            'window.dashboardData = { data, sleepData, stepsData };',
-            'window.dashboardData = { data, sleepData, stepsData };' + block,
-        )
+    # Insert after the dashboard data assignment when possible.
+    footer_markers = [
+        'window.dashboardData = { data, sleepData, whoopRecoveryData, stepsData };',
+        'window.dashboardData = { data, sleepData, stepsData };',
+    ]
+    for marker in footer_markers:
+        if marker in src:
+            src = src.replace(marker, marker + block, 1)
+            break
     else:
-        # Fallback: append before last })();
-        src = src.rstrip()
-        src = src[:-4] + block + '\n})();\n'
+        # Fallback: insert before the final IIFE close without slicing blindly.
+        closing = src.rfind('})();')
+        if closing == -1:
+            raise ValueError("Could not find closing IIFE in data.js while inserting Bayes block")
+        src = src[:closing] + block + '\n})();\n'
 
     with open(path, 'w', encoding='utf-8') as f:
         f.write(src)
