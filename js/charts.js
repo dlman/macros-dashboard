@@ -618,10 +618,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-secondary">
           <div class="eyebrow">Time to ${bfTarget.targetBfPct}% BF</div>
           <div class="value">${bfTarget.daysToTarget === 0 ? 'Already there!' : `~${bfTarget.daysToTarget} days`}</div>
-          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, you'd hit ${bfTarget.targetBfPct}% body fat around ${weightLabel(bfTarget.targetWeight)}. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (~${weightLabel(bfTarget15.targetWeight)})` : ''}</div>
+          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, ${bfTarget.targetBfPct}% BF lands around ${weightLabel(bfTarget.cutStateTargetWeight)} cut-state or ~${weightLabel(bfTarget.fedStateTargetWeight)} at Jan 6-like glycogen. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (${weightLabel(bfTarget15.cutStateTargetWeight)} cut-state / ~${weightLabel(bfTarget15.fedStateTargetWeight)} fed-state)` : ''}</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
           <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
-          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk</div>
+          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk${bfTarget.currentGlycogenState ? ` · current glycogen ${bfTarget.currentGlycogenState.loadPct}% loaded (${bfTarget.fedStateDelta >= 0 ? '+' : ''}${weightLabel(bfTarget.fedStateDelta, 2)} vs Jan 6-like state)` : ''}</div>
         </div>
       `
       : `

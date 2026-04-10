@@ -2416,7 +2416,20 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   if (!wp || !wp.dailySlope || wp.dailySlope >= 0) return null;
   const currentWeight = wp.latestTrendWeight;
   const current = estimateBodyCompAtWeight(currentWeight, days);
-  if (current.bodyFatPct <= targetBfPct) return { daysToTarget: 0, targetWeight: current.weight, currentBfPct: current.bodyFatPct, targetBfPct, confidence: wp.confidence };
+  const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
+  const currentGlycogenState = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  const fedStateDelta = currentGlycogenState ? +(glycogenRefState.massLbs - currentGlycogenState.massLbs).toFixed(2) : 0;
+  if (current.bodyFatPct <= targetBfPct) return {
+    daysToTarget: 0,
+    targetWeight: current.weight,
+    cutStateTargetWeight: current.weight,
+    fedStateTargetWeight: +(current.weight + fedStateDelta).toFixed(1),
+    currentBfPct: current.bodyFatPct,
+    targetBfPct,
+    confidence: wp.confidence,
+    currentGlycogenState,
+    fedStateDelta
+  };
   // Binary search for the weight at which BF% hits target
   let lo = 100, hi = currentWeight;
   for (let i = 0; i < 50; i++) {
@@ -2430,9 +2443,13 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   return {
     daysToTarget,
     targetWeight,
+    cutStateTargetWeight: +targetWeight.toFixed(1),
+    fedStateTargetWeight: +(targetWeight + fedStateDelta).toFixed(1),
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
+    currentGlycogenState,
+    fedStateDelta,
     dailySlope: wp.dailySlope,
     confidence: wp.confidence
   };
