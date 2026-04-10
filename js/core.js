@@ -1011,6 +1011,23 @@ function avgEffectiveCalories(days) {
   return days.length ? days.reduce((sum, day) => sum + effectiveCalories(day), 0) / days.length : null;
 }
 
+function avgFoodCalories(days) {
+  return avgOrNull(days, 'calories');
+}
+
+function drinkNightsPerWeek(days) {
+  return days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
+}
+
+function scenarioRecentWindow(days = allDays, sleep = sleepData, count = 7) {
+  const recentDays = days.slice(-Math.max(1, count));
+  const recentDates = new Set(recentDays.map(d => d.date));
+  return {
+    days: recentDays,
+    sleep: sleep.filter(d => recentDates.has(d.date))
+  };
+}
+
 function latestWeightPointForScenario(days = allDays) {
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length) return weightDays[weightDays.length - 1];
@@ -1027,14 +1044,23 @@ function addDaysToDate(dateStr, daysToAdd) {
   return date.toISOString().slice(0, 10);
 }
 
+function scenarioBehaviorPenalties(avgSleep, drinkNightsPerWeekValue = 0, days = allDays, sleep = sleepData) {
+  const sleepPenalty = avgSleep < 5 ? 170 : (avgSleep < 6 ? 90 : (avgSleep < 7 ? 30 : 0));
+  const drinkEffect = historicalDrinkEffects(days, sleep);
+  const drinkPenalty = (drinkEffect.calorieDelta || 0) * (Math.max(0, drinkNightsPerWeekValue) / 7);
+  return {
+    sleepPenalty,
+    drinkPenalty,
+    drinkSleepPenalty: drinkEffect.drinkSleepPenalty
+  };
+}
+
 // What-if calculation
 function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days = allDays, sleep = sleepData) {
   const currentWeight = latestWeightForScenario(days);
   const tdee = workingTDEEProfile(days).maintenance;
   const dailyDeficit = tdee - dailyCal;
-  const sleepPenalty = avgSleep < 5 ? 170 : (avgSleep < 6 ? 90 : (avgSleep < 7 ? 30 : 0));
-  const drinkEffect = historicalDrinkEffects(days, sleep);
-  const drinkPenalty = (drinkEffect.calorieDelta || 0) * (Math.max(0, drinkNightsPerWeek) / 7);
+  const { sleepPenalty, drinkPenalty, drinkSleepPenalty } = scenarioBehaviorPenalties(avgSleep, drinkNightsPerWeek, days, sleep);
   const effectiveDeficit = dailyDeficit - sleepPenalty - drinkPenalty;
   const totalDeficit = effectiveDeficit * weeks * 7;
   const weightChange = totalDeficit / 3500;
@@ -1046,7 +1072,7 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
     totalDeficit,
     sleepPenalty,
     drinkPenalty,
-    drinkSleepPenalty: drinkEffect.drinkSleepPenalty,
+    drinkSleepPenalty,
     effectiveDeficit,
     tdee
   };
@@ -1719,15 +1745,20 @@ function historicalDrinkEffects(days, sleep) {
 }
 
 function getScenarioDefaults(days, sleep) {
-  const avgCalories = avgEffectiveCalories(days) ?? goals.calories;
-  const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
-  const drinkPerWeek = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
+  const recentWindow = scenarioRecentWindow(days, sleep, 7);
+  const recentDays = recentWindow.days;
+  const recentSleep = recentWindow.sleep;
+  const avgCalories = avgFoodCalories(recentDays) ?? goals.calories;
+  const avgSleep = avgOrNull(recentSleep, 'hours') ?? goals.sleep;
+  const drinkPerWeek = drinkNightsPerWeek(recentDays);
   const rangeTdee = workingTDEEProfile(days).maintenance;
+  const currentPenalties = scenarioBehaviorPenalties(avgSleep, drinkPerWeek, days, sleep);
+  const maintenanceFoodCalories = Math.max(1000, rangeTdee - currentPenalties.sleepPenalty - currentPenalties.drinkPenalty);
   return {
     current: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    maintain: { calories: Math.round(rangeTdee / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    mild_cut: { calories: Math.round((rangeTdee - 350) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    aggressive_cut: { calories: Math.round((rangeTdee - 650) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    maintain: { calories: Math.round(maintenanceFoodCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    mild_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 350) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    aggressive_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 650) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     better_sleep: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +Math.min(8, Math.max(goals.sleep, avgSleep + 1)).toFixed(1), drinks: drinkPerWeek },
     no_drinks: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: 0 }
   };
@@ -1748,9 +1779,10 @@ function scenarioPresetLabel(key) {
 function updateScenarioForecastChart(activeValues, days, sleep) {
   const chart = allCharts.scenarioForecastChart;
   const weeks = Math.max(1, activeValues.weeks);
-  const avgCalories = avgEffectiveCalories(days) ?? goals.calories;
-  const avgSleep = avgOrNull(sleep, 'hours') ?? goals.sleep;
-  const avgDrinks = days.length ? +(days.filter(d => d.drinks).length / Math.max(days.length / 7, 1)).toFixed(1) : 0;
+  const recentWindow = scenarioRecentWindow(days, sleep, 7);
+  const avgCalories = avgFoodCalories(recentWindow.days) ?? goals.calories;
+  const avgSleep = avgOrNull(recentWindow.sleep, 'hours') ?? goals.sleep;
+  const avgDrinks = drinkNightsPerWeek(recentWindow.days);
   const defaults = getScenarioDefaults(days, sleep);
   const activeLabel = scenarioPreset ? scenarioPresetLabel(scenarioPreset) : 'Active scenario';
   const activeSeries = scenarioForecastSeries(activeLabel, { ...activeValues, weeks }, days, sleep);

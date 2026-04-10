@@ -91,6 +91,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .forecast-card .value { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .forecast-card .sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
 .forecast-card .tiny { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
+.coach-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: -4px 0 18px; }
+.coach-card { background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(56,189,248,0.06)); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
+.coach-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
+.coach-card .value { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
+.coach-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 5px; line-height: 1.5; }
+.coach-card .tiny { font-size: 10px; color: var(--text-faint); margin-top: 7px; line-height: 1.45; }
+.coach-card.good { background: linear-gradient(135deg, rgba(52,211,153,0.10), rgba(56,189,248,0.06)); }
+.coach-card.warn { background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(56,189,248,0.05)); }
+.coach-card.bad { background: linear-gradient(135deg, rgba(248,113,113,0.10), rgba(245,158,11,0.04)); }
 .confidence-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 700; margin-top: 8px; }
 .confidence-pill.high { background: rgba(52,211,153,0.14); color: var(--col-green); }
 .confidence-pill.medium { background: rgba(251,191,36,0.14); color: var(--col-amber); }
@@ -630,6 +639,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .forecast-strip { grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
   .forecast-card { padding: 11px 12px; }
   .forecast-card .value { font-size: 18px; }
+  .coach-strip { grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
+  .coach-card { padding: 12px 14px; }
+  .coach-card .value { font-size: 19px; }
   .sticky-summary {
     position: static;
     top: auto;
@@ -718,6 +730,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .mini-metric-grid { grid-template-columns: 1fr; }
   .forecast-strip { margin-bottom: 12px; }
   .forecast-strip .forecast-card.mobile-secondary { display: none; }
+  .coach-strip { margin-bottom: 12px; }
   .sticky-summary { display: none; }
   .stat-grid, .score-grid, .compare-grid, .tdee-detail-grid { grid-template-columns: 1fr; }
   .report-head { flex-direction: column; align-items: flex-start; }

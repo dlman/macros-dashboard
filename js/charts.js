@@ -583,27 +583,6 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="tiny">Range-based estimate</div>
         </div>
       `,
-    sleepProjection
-      ? `
-        <div class="forecast-card mobile-secondary">
-          <div class="eyebrow">Next 14 Nights</div>
-          <div class="value">${sleepProjection.expectedHits}/${sleepProjection.horizonNights}</div>
-          <div class="sub">Projected sleep-target hits if the current ${Math.round(sleepProjection.hitRate)}% pace holds across the next two weeks.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Logged sleep</span></div>
-          <div class="confidence-pill ${sleepProjection.confidence.cls}">${sleepProjection.confidence.label}</div>
-          <div class="tiny">${sleepProjection.avgPerf != null ? `${Math.round(sleepProjection.avgPerf)}% average sleep performance` : 'Sleep pace only'}</div>
-        </div>
-      `
-      : `
-        <div class="forecast-card mobile-secondary">
-          <div class="eyebrow">Next 14 Nights</div>
-          <div class="value">—</div>
-          <div class="sub">Need sleep entries in the active view to project target-hit pace over the next two weeks.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill logged">Logged sleep</span></div>
-          <div class="confidence-pill low">Low confidence</div>
-          <div class="tiny">Sleep-target projection</div>
-        </div>
-      `,
     `
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Latest Snapshot</div>
@@ -641,6 +620,68 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         </div>
       `
   ].join('');
+}
+
+function renderCutInsightStrip(filteredDays, filteredSleep) {
+  const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
+  const trendReality = weightTrendReality(filteredDays);
+  const energyBalance = energyBalanceSummary(filteredDays);
+  const activeTdeeProfile = workingTDEEProfile(filteredDays);
+  const fullBayesTdee = freshBayesianPosterior(getAnalyticsDays());
+  const tdeeStability = tdeeStabilityProfile();
+  const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
+  const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  const gap = trendReality?.gap ?? null;
+  const scaleContextValue = gap == null
+    ? 'Need more weigh-ins'
+    : gap < -0.35
+      ? `Masking ~${weightLabel(Math.abs(gap))}`
+      : gap > 0.35
+        ? `Ahead by ~${weightLabel(Math.abs(gap))}`
+        : 'Mostly aligned';
+  const scaleContextSub = gap == null
+    ? 'Need at least two weigh-ins in the active view to compare deficit-implied loss with the filtered scale trend.'
+    : `Deficit math implies about ${weightLabel(Math.abs(trendReality.expectedLoss || 0))} of loss while the filtered trend shows ${weightLabel(Math.abs(trendReality.actualLoss || 0))}.`;
+  const latestDelta = latestGlycogen ? (latestGlycogen.massLbs - glycogenRefState.massLbs) : null;
+  const scaleContextTiny = latestGlycogen
+    ? `${formatShortDate(latestGlycogenDay.date)} glycogen delta vs Jan 6: ${latestDelta >= 0 ? '+' : ''}${weightLabel(latestDelta, 2)} · ${latestGlycogen.loadPct}% load`
+    : (energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range` : 'Scale-context needs glycogen state data.');
+  const maintenanceValue = tdeeStability
+    ? tdeeStability.status[0].toUpperCase() + tdeeStability.status.slice(1)
+    : activeTdeeProfile.confidence.label.replace(' confidence', '');
+  const maintenanceSub = fullBayesTdee
+    ? `Active maintenance is ~${energyLabel(activeTdeeProfile.maintenance)} with a full-range Bayesian anchor at ${energyLabel(fullBayesTdee.ci68Low)}–${energyLabel(fullBayesTdee.ci68High)}.`
+    : `Active maintenance is ~${energyLabel(activeTdeeProfile.maintenance)} with a current range of ${energyLabel(activeTdeeProfile.rangeLow)}–${energyLabel(activeTdeeProfile.rangeHigh)}.`;
+  const maintenanceTiny = tdeeStability
+    ? `7-point rolling SD ${energyLabel(tdeeStability.recentSd)} · ${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs full-range Bayesian`
+    : `${activeTdeeProfile.sampleSize || filteredDays.length} observations across ${activeTdeeProfile.spanDays || filteredDays.length} days`;
+  const statusValueMap = {
+    on_track: 'On Track',
+    noise: 'Noise-Limited',
+    plateau: 'Plateau Risk',
+    small_signal: 'Signal Thin',
+    unclear: 'Need Data'
+  };
+  document.getElementById('cutInsightStrip').innerHTML = `
+    <div class="coach-card ${plateau.cls}">
+      <div class="eyebrow">Cut Status</div>
+      <div class="value">${statusValueMap[plateau.status] || 'Need Data'}</div>
+      <div class="sub">${plateau.title}</div>
+      <div class="tiny">${plateau.text}</div>
+    </div>
+    <div class="coach-card ${gap == null ? 'warn' : gap < -0.35 ? 'warn' : gap > 0.35 ? 'good' : 'good'}">
+      <div class="eyebrow">Scale Context</div>
+      <div class="value">${scaleContextValue}</div>
+      <div class="sub">${scaleContextSub}</div>
+      <div class="tiny">${scaleContextTiny}</div>
+    </div>
+    <div class="coach-card ${tdeeStability ? (tdeeStability.status === 'stable' ? 'good' : tdeeStability.status === 'settling' ? 'warn' : 'bad') : 'warn'}">
+      <div class="eyebrow">Maintenance Confidence</div>
+      <div class="value">${maintenanceValue}</div>
+      <div class="sub">${maintenanceSub}</div>
+      <div class="tiny">${maintenanceTiny}</div>
+    </div>
+  `;
 }
 
 function renderExecutiveSummary() {
@@ -683,6 +724,7 @@ function renderExecutiveSummary() {
 
   renderHeroStage(current, previous, filteredDays, filteredSleep);
   renderForecastStrip(filteredDays, filteredSleep);
+  renderCutInsightStrip(filteredDays, filteredSleep);
 
   document.getElementById('stickySummary').innerHTML = `
     <div class="summary-hero">
@@ -2472,14 +2514,17 @@ function syncScenarioPresetButtons() {
 function runScenarioPlanner() {
   const rangeDays = getRangeDays();
   const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
+  const recentWindow = scenarioRecentWindow(rangeDays, rangeSleep, 7);
+  const recentDays = recentWindow.days;
+  const recentSleepDays = recentWindow.sleep;
   const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
   const weeks = Math.max(1, parseInt(document.getElementById('whatifWeeks').value) || 4);
   const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
   const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
   const r = calculateWhatIf(cal, weeks, sleepHours, drinkNights, rangeDays, rangeSleep);
-  const currentAvgCalories = avgEffectiveCalories(rangeDays) ?? goals.calories;
-  const currentAvgSleep = avgOrNull(rangeSleep, 'hours') ?? goals.sleep;
-  const currentDrinkNights = rangeDays.length ? (rangeDays.filter(d => d.drinks).length / Math.max(rangeDays.length / 7, 1)) : 0;
+  const currentAvgCalories = avgFoodCalories(recentDays) ?? goals.calories;
+  const currentAvgSleep = avgOrNull(recentSleepDays, 'hours') ?? goals.sleep;
+  const currentDrinkNights = drinkNightsPerWeek(recentDays);
   const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
   const deltaVsBaseline = parseFloat(r.weightChange) - parseFloat(baseline.weightChange);
   const dir = parseFloat(r.weightChange) >= 0 ? 'lose' : 'gain';
@@ -2490,13 +2535,13 @@ function runScenarioPlanner() {
   html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
   html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%)`;
   html += `<br>Projected composition: ~${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean (range: ${weightLabel(projectedComp.fatLow, 1)}–${weightLabel(projectedComp.fatHigh, 1)} fat)`;
-  html += `<br>Compared with your current-range pace, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
+  html += `<br>Compared with your last-7-day setup, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
   document.getElementById('whatifResult').innerHTML = html;
 
   document.getElementById('scenarioResultGrid').innerHTML = [
     {
       value: `${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}`,
-      sub: `Effective daily deficit after ${energyLabel(r.sleepPenalty)} sleep drag and ${energyLabel(r.drinkPenalty)} drink drag`
+      sub: `Effective daily deficit after ${energyLabel(r.sleepPenalty)} sleep drag and ${energyLabel(r.drinkPenalty)} drink-day calorie drag`
     },
     {
       value: weightLabel(Math.abs(parseFloat(r.weightChange)), 1),
@@ -2528,7 +2573,7 @@ function runScenarioPlanner() {
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, selected-range average intake is ${energyLabel(currentAvgCalories)} including estimated drink calories, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
 }
 
 // =====================================================================
@@ -2543,10 +2588,12 @@ function renderHeatmap() {
   legend.innerHTML = '';
 
   const months = ACTIVE_MONTHS.map(m => ({ label: m.label, days: data[m.key] }));
+  const heatmapRangeDays = getRangeDays();
+  const heatmapMaintenance = workingTDEEProfile(heatmapRangeDays).maintenance;
 
   // Ranges for color scaling
   const ranges = {
-    calories: { min: 1100, max: 3500, good: 'low' },
+    calories: { min: -900, max: 600, good: 'low' },
     protein: { min: 80, max: 250, good: 'high' },
     sleepPerf: { min: 0, max: 100, good: 'high' },
     weight: { min: -2, max: 2, good: 'low' }
@@ -2579,7 +2626,7 @@ function renderHeatmap() {
     mo.days.forEach(d => {
       const inRange = isDateInRange(d.date);
       let val = null;
-      if (heatmapMetric === 'calories') val = d.calories;
+      if (heatmapMetric === 'calories') val = effectiveCalories(d) - heatmapMaintenance;
       else if (heatmapMetric === 'protein') val = d.protein;
       else if (heatmapMetric === 'sleepPerf') { const s = sleepByDate[d.date]; if (s) val = s.perf; }
       else if (heatmapMetric === 'weight') {
@@ -2603,7 +2650,11 @@ function renderHeatmap() {
         cell.addEventListener('mouseenter', (e) => {
           const tt = document.getElementById('hmTooltip');
           let label = '';
-          if (heatmapMetric === 'calories') label = energyLabel(d.calories);
+          if (heatmapMetric === 'calories') {
+            const effective = effectiveCalories(d);
+            const delta = effective - heatmapMaintenance;
+            label = `${energyLabel(effective)} effective (${delta > 0 ? '+' : ''}${energyLabel(delta)} vs maint)`;
+          }
           else if (heatmapMetric === 'protein') label = `${d.protein}g protein`;
           else if (heatmapMetric === 'sleepPerf') label = `${val}% sleep`;
           else if (heatmapMetric === 'weight') label = `${val > 0 ? '+' : ''}${weightValue(Math.abs(val))} ${weightUnit()}`;
