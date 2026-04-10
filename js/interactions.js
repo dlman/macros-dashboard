@@ -707,6 +707,75 @@ function updateWeightChart(days) {
   chart.update();
 }
 
+function updateAdjustedWeightViewChart(days) {
+  const chart = allCharts.gpWeightChart;
+  if (!chart) return;
+  const points = days
+    .filter(d => d.weight && glycogenByDate[d.date])
+    .map(d => {
+      const state = glycogenByDate[d.date];
+      const deltaRaw = +(state.massLbs - glycogenRefState.massLbs).toFixed(2);
+      return {
+        date: d.date,
+        actualRaw: d.weight,
+        adjustedRaw: +(d.weight - deltaRaw).toFixed(2),
+        actual: weightValue(d.weight),
+        adjusted: weightValue(+(d.weight - deltaRaw).toFixed(2)),
+        delta: weightValue(deltaRaw, 2),
+        deltaRaw,
+        loadPct: state.loadPct,
+        glycogenG: state.glycogenG,
+        massLbs: state.massLbs
+      };
+    });
+  const noteEl = document.getElementById('adjustedWeightNote');
+  if (!points.length) {
+    chart.data.labels = [];
+    chart.data.datasets.forEach(ds => { ds.data = []; });
+    chart.update();
+    if (noteEl) noteEl.textContent = 'This view needs weigh-ins inside the selected range.';
+    return;
+  }
+  chart.data.labels = points.map(p => p.date.slice(5));
+  chart.data.datasets[0].data = points.map(p => p.actual);
+  chart.data.datasets[1].data = points.map(p => p.adjusted);
+  chart.data.datasets[2].data = points.map(p => p.delta);
+  chart.data.datasets[2].backgroundColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
+  chart.data.datasets[2].borderColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
+  const weightBounds = calcAxisBounds([...points.map(p => p.actual), ...points.map(p => p.adjusted)], useMetric ? 0.8 : 2);
+  const deltaBounds = calcAxisBounds(points.map(p => p.delta), useMetric ? 0.3 : 0.8);
+  chart.options.plugins.tooltip.callbacks.title = ctx => points[ctx[0].dataIndex]?.date || '';
+  chart.options.plugins.tooltip.callbacks.label = ctx => {
+    if (ctx.datasetIndex === 0) return ` Actual: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.datasetIndex === 1) return ` Glyco-adjusted: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.datasetIndex === 2) return ` Glycogen/water delta vs Jan 6: ${ctx.parsed.y > 0 ? '+' : ''}${ctx.parsed.y} ${weightUnit()}`;
+    return '';
+  };
+  chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
+    const point = points[ctx[0].dataIndex];
+    if (!point) return [];
+    return [
+      `Modeled glycogen load: ${point.loadPct}% (${point.glycogenG}g)`,
+      `Modeled glycogen + water mass: ~${point.massLbs} lbs`,
+      'Purple line removes the modeled glycogen/water delta relative to Jan 6.'
+    ];
+  };
+  chart.options.scales.y.min = Math.floor(weightBounds.min);
+  chart.options.scales.y.max = Math.ceil(weightBounds.max);
+  chart.options.scales.y.ticks.stepSize = useMetric ? 1 : 2;
+  chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
+  chart.options.scales.y2.min = Math.floor(deltaBounds.min);
+  chart.options.scales.y2.max = Math.ceil(deltaBounds.max);
+  chart.options.scales.y2.ticks.stepSize = useMetric ? 0.5 : 1;
+  chart.options.scales.y2.ticks.callback = v => `${v > 0 ? '+' : ''}${v} ${weightUnit()}`;
+  chart.update();
+  if (noteEl) {
+    const latest = points[points.length - 1];
+    const signLabel = latest.deltaRaw > 0 ? 'more glycogen/water than Jan 6' : latest.deltaRaw < 0 ? 'less glycogen/water than Jan 6' : 'about the same glycogen/water as Jan 6';
+    noteEl.textContent = `Latest modeled delta: ${latest.deltaRaw > 0 ? '+' : ''}${weightLabel(latest.deltaRaw, 2)} (${signLabel}); current load ${latest.loadPct}%.`;
+  }
+}
+
 function updateGlycogenChart(days) {
   const chart = allCharts.glycogenChart;
   if (!chart) return;
@@ -1351,6 +1420,7 @@ function refreshDashboard() {
     _exploreDirty = true;
   }
   safe(() => updateWeightChart(filteredDays), 'Weight Chart');
+  safe(() => updateAdjustedWeightViewChart(filteredDays), 'Adjusted Weight View');
   safe(() => updateBodyCompChart(filteredDays), 'Body Comp Chart');
   safe(() => updateGlycogenChart(filteredDays), 'Glycogen Chart');
   safe(() => updateCaloriesChart(months), 'Calories Chart');
@@ -1486,12 +1556,6 @@ function rebuildDerivedData({ invalidateBayes = false } = {}) {
   allDays.forEach(d => { if (d.drinks) drinkDates.add(d.date); if (d.lifting === 'Y') liftDates.add(d.date); });
   clearAnalyticsCaches();
   if (invalidateBayes && window.dashboardData?.bayesian) delete window.dashboardData.bayesian;
-  if (invalidateBayes && allCharts.gpWeightChart) {
-    allCharts.gpWeightChart.destroy();
-    delete allCharts.gpWeightChart;
-  }
-  const gpRow = document.getElementById('gpWeightChartRow');
-  if (invalidateBayes && gpRow) gpRow.style.display = 'none';
   // Update range slider max
   const rangeStartEl = document.getElementById('rangeStart');
   const rangeEndEl = document.getElementById('rangeEnd');

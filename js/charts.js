@@ -1039,70 +1039,77 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
 });
 
 // =====================================================================
-// GP WEIGHT FORECAST CHART
+// ACTUAL VS GLYCOGEN-ADJUSTED WEIGHT
 // =====================================================================
 (() => {
   const gpEl = document.getElementById('gpWeightChart');
   const rowEl = document.getElementById('gpWeightChartRow');
   if (!gpEl) return;
-  const gpData = freshBayesianPosterior(getAnalyticsDays()) ? window.dashboardData?.bayesian?.gpWeightTrend : null;
-  if (!gpData || gpData.length === 0) {
+  const adjustedPoints = allDays
+    .filter(d => d.weight && glycogenByDate[d.date])
+    .map(d => {
+      const state = glycogenByDate[d.date];
+      const delta = +(state.massLbs - glycogenRefState.massLbs).toFixed(2);
+      return {
+        date: d.date,
+        actual: weightValue(d.weight),
+        adjusted: weightValue(+(d.weight - delta).toFixed(2)),
+        delta: weightValue(delta, 2),
+        loadPct: state.loadPct,
+        glycogenG: state.glycogenG,
+        massLbs: state.massLbs
+      };
+    });
+  if (!adjustedPoints.length) {
     if (rowEl) rowEl.style.display = 'none';
     return;
   }
-  const yesterday = YESTERDAY_ISO;
-  const allGP = gpData;
-  const labels     = allGP.map(p => p.date.slice(5));
-  const means      = allGP.map(p => weightValue(p.mean));
-  const ciHighs    = allGP.map(p => weightValue(p.ci95High));
-  const ciLows     = allGP.map(p => weightValue(p.ci95Low));
-  const isForecast = allGP.map(p => p.forecast);
-
-  // Split mean into historical + forecast segments (null in other half keeps gap)
-  const histMeans  = means.map((v, i) => isForecast[i] ? null : v);
-  const fcastMeans = means.map((v, i) => isForecast[i] ? v : null);
-
-  // Restore last historical point as start of forecast segment for visual continuity
-  const lastHistIdx = isForecast.findIndex(f => f) - 1;
-  if (lastHistIdx >= 0) fcastMeans[lastHistIdx] = means[lastHistIdx];
-
-  const wBounds = calcAxisBounds([...ciHighs, ...ciLows].filter(Boolean), 2);
+  const labels = adjustedPoints.map(p => p.date.slice(5));
+  const actual = adjustedPoints.map(p => p.actual);
+  const adjusted = adjustedPoints.map(p => p.adjusted);
+  const deltas = adjustedPoints.map(p => p.delta);
+  const wBounds = calcAxisBounds([...actual, ...adjusted].filter(v => v != null), 2);
 
   allCharts.gpWeightChart = new Chart(gpEl, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        // CI upper (invisible border, fills down to lower)
         {
-          label: '95% CI upper',
-          data: ciHighs,
-          borderWidth: 0, pointRadius: 0, fill: '+1',
-          backgroundColor: 'rgba(168,85,247,0.07)',
-          tension: 0.3, order: 3
+          label: 'Actual weight',
+          data: actual,
+          borderColor: 'rgba(52,211,153,0.95)',
+          backgroundColor: 'rgba(52,211,153,0.1)',
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          fill: false,
+          tension: 0.3,
+          borderWidth: 2,
+          order: 2
         },
-        // CI lower
         {
-          label: '95% CI lower',
-          data: ciLows,
-          borderWidth: 0, pointRadius: 0, fill: false,
-          backgroundColor: 'transparent',
-          tension: 0.3, order: 4
-        },
-        // Historical GP mean
-        {
-          label: 'GP trend (historical)',
-          data: histMeans,
-          borderColor: 'rgba(168,85,247,0.85)', borderWidth: 2,
-          pointRadius: 0, fill: false, tension: 0.3, order: 1
-        },
-        // Forecast GP mean
-        {
-          label: 'GP forecast',
-          data: fcastMeans,
-          borderColor: 'rgba(168,85,247,0.45)', borderWidth: 2,
+          label: 'Glycogen-adjusted',
+          data: adjusted,
+          borderColor: 'rgba(192,132,252,0.9)',
+          backgroundColor: 'rgba(192,132,252,0.08)',
           borderDash: [5, 5],
-          pointRadius: 0, fill: false, tension: 0.3, order: 2
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+          borderWidth: 2,
+          order: 1
+        },
+        {
+          label: 'Modeled glycogen/water delta',
+          type: 'bar',
+          data: deltas,
+          yAxisID: 'y2',
+          backgroundColor: deltas.map(v => (v || 0) >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)'),
+          borderColor: deltas.map(v => (v || 0) >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)'),
+          borderWidth: 1,
+          borderRadius: 3,
+          borderSkipped: false,
+          order: 3
         }
       ]
     },
@@ -1113,29 +1120,28 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
         legend: {
           display: true,
           labels: { generateLabels: () => [
-            { text: '— GP trend (historical)', fillStyle: 'rgba(168,85,247,0.85)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
-            { text: '- - GP forecast (42d, shape-based)',   fillStyle: 'rgba(168,85,247,0.45)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
-            { text: '░ 95% credible band',     fillStyle: 'rgba(168,85,247,0.15)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '— Actual weight', fillStyle: 'rgba(52,211,153,0.95)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '- - Glycogen-adjusted', fillStyle: 'rgba(192,132,252,0.9)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
+            { text: '▮ Modeled glycogen/water delta', fillStyle: 'rgba(59,130,246,0.28)', strokeStyle: 'transparent', fontColor: '#94a3b8' },
           ], color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 }
         },
         tooltip: {
           ...chartDefaults().plugins.tooltip,
           callbacks: {
-            title: ctx => {
-              const point = allGP[ctx[0].dataIndex];
-              return point?.forecast ? `${point.date} · statistical curve forecast` : `${point.date} · historical GP trend`;
-            },
+            title: ctx => adjustedPoints[ctx[0].dataIndex]?.date || '',
             label: ctx => {
-              if (ctx.datasetIndex === 2) return ` GP trend: ${ctx.parsed.y} ${weightUnit()}`;
-              if (ctx.datasetIndex === 3) return ` GP forecast: ${ctx.parsed.y} ${weightUnit()} (shape-based, not calorie-plan based)`;
+              if (ctx.datasetIndex === 0) return ` Actual: ${ctx.parsed.y} ${weightUnit()}`;
+              if (ctx.datasetIndex === 1) return ` Glyco-adjusted: ${ctx.parsed.y} ${weightUnit()}`;
+              if (ctx.datasetIndex === 2) return ` Glycogen/water delta vs Jan 6: ${ctx.parsed.y > 0 ? '+' : ''}${ctx.parsed.y} ${weightUnit()}`;
               return null;
             },
             afterBody: ctx => {
-              const point = allGP[ctx[0].dataIndex];
-              if (!point?.forecast) return [];
+              const point = adjustedPoints[ctx[0].dataIndex];
+              if (!point) return [];
               return [
-                'This extrapolates the recent curve shape and uncertainty band.',
-                'Use the Scenario Planner for a deficit-based forecast.'
+                `Modeled glycogen load: ${point.loadPct}% (${point.glycogenG}g)`,
+                `Modeled glycogen + water mass: ~${point.massLbs} lbs`,
+                'Purple line removes the modeled glycogen/water delta relative to Jan 6.'
               ];
             }
           }
@@ -1144,7 +1150,14 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
       scales: {
         x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 20 } },
         y: { ...chartDefaults().scales.y, min: Math.floor(wBounds.min), max: Math.ceil(wBounds.max),
-             ticks: { ...TICK(), stepSize: useMetric ? 1 : 2, callback: v => `${v} ${weightUnit()}` } }
+             ticks: { ...TICK(), stepSize: useMetric ? 1 : 2, callback: v => `${v} ${weightUnit()}` } },
+        y2: {
+          ...chartDefaults().scales.y,
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { ...TICK(), stepSize: useMetric ? 0.5 : 1, callback: v => `${v > 0 ? '+' : ''}${v} ${weightUnit()}` },
+          title: { display: true, text: `Delta vs Jan 6 (${weightUnit()})`, color: '#94a3b8', font: { size: 10 } }
+        }
       }
     }
   });

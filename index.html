@@ -236,17 +236,18 @@
     </div>
   </div>
 
-  <!-- GP WEIGHT FORECAST -->
+  <!-- GLYCOGEN-ADJUSTED WEIGHT VIEW -->
   <div class="chart-row full" id="gpWeightChartRow">
     <div class="chart-card">
       <div class="card-header with-meta">
         <div class="card-heading">
-          <h3>GP Weight Trend &amp; 42-Day Forecast</h3>
-          <div class="card-subtitle">Shape-based statistical extrapolation of the weight curve. This is not a calorie-deficit forecast, so it can drift flat or slightly up if the recent curve has flattened or rebounded.</div>
+          <h3>Actual vs Glycogen-Adjusted Weight</h3>
+          <div class="card-subtitle">Shows what your weigh-ins would look like if glycogen and bound water were held at the Jan 6 reference level, which makes short-term water noise easier to separate from likely tissue change.</div>
           <div class="trust-row trust-inline">
-            <span class="trust-pill estimated">Gaussian Process model</span>
-            <span class="trust-pill low-trust" style="opacity:0.7;font-size:10px;">Run update_bayes.py after adding new data</span>
+            <span class="trust-pill logged">Logged weigh-ins</span>
+            <span class="trust-pill estimated">Estimated glycogen + water adjustment</span>
           </div>
+          <div class="chart-note" id="adjustedWeightNote">Latest glycogen-adjusted note will appear here once the selected range has weigh-ins.</div>
         </div>
       </div>
       <div class="chart-wrapper tall"><canvas id="gpWeightChart"></canvas></div>
