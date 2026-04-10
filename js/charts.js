@@ -278,14 +278,6 @@ function renderSleepStatCards() {
     sleepMonths[m.key] = filteredSleep.filter(d => d.date.startsWith(`2026-${m.num}`));
   });
   const metrics = [
-    { label: 'Avg Custom Recovery', key: '_customRecovery', fmt: v => Math.round(v)+'%', goodDir: 'up', computed: days => {
-      const vals = days.map(d => recoveryScore(d)).filter(v => v != null);
-      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-    }},
-    { label: 'Avg WHOOP Recovery', key: '_whoopRecovery', fmt: v => Math.round(v)+'%', goodDir: 'up', computed: days => {
-      const vals = days.map(d => whoopRecoveryScore(d)).filter(v => v != null);
-      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-    }},
     { label: 'Avg Sleep Performance', key: 'perf', fmt: v => Math.round(v)+'%', goodDir: 'up' },
     { label: 'Avg Sleep Duration', key: 'hours', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
     { label: 'Avg Time in Bed', key: '_tib', fmt: v => v.toFixed(1)+'h', goodDir: 'down', computed: days => {
@@ -305,8 +297,7 @@ function renderSleepStatCards() {
     for (let i = 1; i < ACTIVE_MONTHS.length; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
       const delta = vals[i] - vals[i-1];
-      const neutralThreshold = (m.key === 'perf' || m.key === '_customRecovery' || m.key === '_whoopRecovery') ? 0.5 : 0.05;
-      if (Math.abs(delta) < neutralThreshold) { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }
+      if (Math.abs(delta) < 0.5 && m.key === 'perf' || Math.abs(delta) < 0.05 && m.key !== 'perf') { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }
       const up = delta > 0;
       const good = (m.goodDir === 'up' && up) || (m.goodDir === 'down' && !up);
       const cls = good ? (up ? 'trend-up-good' : 'trend-down-good') : (up ? 'trend-up-bad' : 'trend-down-bad');
@@ -2037,7 +2028,6 @@ allCharts.foodFreqChart = new Chart(document.getElementById('foodFreqChart'), {
 // RECOVERY SCORE CHART
 // =====================================================================
 const recoveryScores = sleepData.map(d => recoveryScore(d));
-const whoopRecoveryScores = sleepData.map(d => whoopRecoveryScore(d));
 allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
   type: 'line',
   data: {
@@ -2055,19 +2045,6 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
         label: '7-day Avg',
         data: rollingAvg(recoveryScores, 7),
         borderColor: 'rgba(251,191,36,0.6)', borderDash:[6,3], pointRadius:0, tension:0.4, fill:false, borderWidth:2
-      },
-      {
-        label:'WHOOP Recovery',
-        data: whoopRecoveryScores,
-        borderColor:'#38bdf8',
-        backgroundColor:'rgba(56,189,248,0.12)',
-        pointRadius: whoopRecoveryScores.map(s => s == null ? 0 : 3),
-        pointHoverRadius: whoopRecoveryScores.map(s => s == null ? 0 : 6),
-        pointBackgroundColor: whoopRecoveryScores.map(s => s == null ? 'transparent' : perfColor(s)),
-        borderDash:[4,4],
-        spanGaps:true,
-        tension:0.28,
-        fill:false
       }
     ]
   },
@@ -2080,21 +2057,7 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
         if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
         const d = sleepData[ctx.dataIndex];
         const prev = prevDay(d.date);
-        if (ctx.datasetIndex === 2) {
-          const whoop = whoopRecoveryForDate(d.date);
-          return [
-            ` WHOOP recovery: ${ctx.parsed.y}`,
-            whoop?.hrv != null ? ` HRV: ${whoop.hrv} ms` : ' HRV: —',
-            whoop?.rhr != null ? ` Resting HR: ${whoop.rhr} bpm` : ' Resting HR: —'
-          ];
-        }
-        const whoopScore = whoopRecoveryScore(d);
-        return [
-          ` Custom recovery: ${ctx.parsed.y}`,
-          whoopScore != null ? ` WHOOP recovery: ${whoopScore}` : ' WHOOP recovery: —',
-          ` Sleep: ${d.perf}% perf, ${d.hours}h`,
-          drinkDates.has(prev) ? ' 🍹 drank prev night' : ''
-        ].filter(Boolean);
+        return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
       }
     }}},
     scales: { x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:20}}, y:{...chartDefaults().scales.y,min:0,max:100,ticks:{...TICK(),stepSize:10}} }

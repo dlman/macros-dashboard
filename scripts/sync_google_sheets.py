@@ -6,9 +6,8 @@ No credentials or secrets required — just publish each macro tab via
 File → Share → Publish to web → CSV, then paste the URL below.
 
 Add a new entry to PUBLISHED_CSV_URLS whenever you start a new month.
-Sleep, WHOOP recovery, and steps data are preserved from the existing
-js/data.js so the nutrition sync does not wipe the automated recovery
-pipeline.
+Sleep and steps data are preserved from the existing js/data.js (update
+those manually via WHOOP/Health exports as usual).
 
 Usage:
   python scripts/sync_google_sheets.py
@@ -232,28 +231,6 @@ def parse_existing_steps_data(path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def parse_existing_whoop_recovery_data(path: Path) -> list[dict[str, Any]]:
-    src = path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r'\{date:"(?P<date>\d{4}-\d{2}-\d{2})",recovery:(?P<recovery>[0-9.]+),'
-        r'hrv:(?P<hrv>[0-9.]+|null),rhr:(?P<rhr>[0-9.]+|null),'
-        r'skinTemp:(?P<skinTemp>-?[0-9.]+|null),spo2:(?P<spo2>[0-9.]+|null)\}'
-    )
-    def maybe_float(value: str) -> float | None:
-        return None if value == "null" else float(value)
-    return [
-        {
-            "date": m.group("date"),
-            "recovery": int(round(float(m.group("recovery")))),
-            "hrv": maybe_float(m.group("hrv")),
-            "rhr": maybe_float(m.group("rhr")),
-            "skinTemp": maybe_float(m.group("skinTemp")),
-            "spo2": maybe_float(m.group("spo2")),
-        }
-        for m in pattern.finditer(src)
-    ]
-
-
 def extract_bayes_block(path: Path) -> str:
     src = path.read_text(encoding="utf-8")
     start = src.find("// BAYES_START")
@@ -303,7 +280,6 @@ def apply_csv_to_bucket(
 def render_data_js(
     macro_buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
     sleep_rows: list[Any],
-    whoop_recovery_rows: list[Any],
     steps_rows: list[Any],
     bayes_block: str,
 ) -> str:
@@ -314,16 +290,14 @@ def render_data_js(
             f"  {month}: [\n    {serialized}\n  ]" if serialized else f"  {month}: []"
         )
     sleep_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
-    whoop_recovery_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in whoop_recovery_rows)
     steps_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
 
     return (
         "(() => {\n// Raw data\nconst data = {\n"
         + ",\n".join(macro_lines)
         + "\n};\n\nconst sleepData = [\n  " + sleep_ser + "\n];\n\n"
-        + "const whoopRecoveryData = [\n  " + whoop_recovery_ser + "\n];\n\n"
         + "const stepsData = [\n  " + steps_ser + "\n];\n\n"
-        + "window.dashboardData = { data, sleepData, whoopRecoveryData, stepsData };\n"
+        + "window.dashboardData = { data, sleepData, stepsData };\n"
         + (bayes_block if bayes_block else "")
         + "\n})();\n"
     )
@@ -340,7 +314,6 @@ def main() -> None:
     print("Reading existing data.js …")
     macro_buckets = parse_existing_macro_data(output_path)
     existing_sleep = parse_existing_sleep_data(output_path)
-    existing_whoop_recovery = parse_existing_whoop_recovery_data(output_path)
     existing_steps = parse_existing_steps_data(output_path)
     bayes_block = extract_bayes_block(output_path)
 
@@ -352,7 +325,7 @@ def main() -> None:
         rows = fetch_csv(url, f"{month_name} Macros")
         apply_csv_to_bucket(macro_buckets, rows, month_name)
 
-    output = render_data_js(macro_buckets, existing_sleep, existing_whoop_recovery, existing_steps, bayes_block)
+    output = render_data_js(macro_buckets, existing_sleep, existing_steps, bayes_block)
 
     if args.dry_run:
         print("\n--- DRY RUN: would write ---")

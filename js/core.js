@@ -132,13 +132,7 @@ function applyTheme(preference = themePreference) {
 
 // Shared dataset loaded from js/data.js
 
-const {
-  data,
-  sleepData,
-  stepsData,
-  whoopRecoveryData: rawWhoopRecoveryData = []
-} = window.dashboardData;
-const whoopRecoveryData = Array.isArray(rawWhoopRecoveryData) ? rawWhoopRecoveryData : [];
+const { data, sleepData, stepsData } = window.dashboardData;
 // Months that actually have data — drives all charts, stat cards, donuts, and toggles
 const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].length > 0);
 
@@ -155,20 +149,8 @@ const macroByDate = {};
 allDays.forEach(d => { macroByDate[d.date] = d; });
 const sleepByDate = {};
 sleepData.forEach(d => { sleepByDate[d.date] = d; });
-const whoopRecoveryByDate = {};
-whoopRecoveryData.forEach(d => { whoopRecoveryByDate[d.date] = d; });
 const drinkDates = new Set(allDays.filter(d => d.drinks).map(d => d.date));
 const liftDates = new Set(allDays.filter(d => d.lifting === 'Y').map(d => d.date));
-
-function whoopRecoveryForDate(dateStr) {
-  return whoopRecoveryByDate[dateStr] || null;
-}
-
-function whoopRecoveryScore(dateOrSleep) {
-  const dateStr = typeof dateOrSleep === 'string' ? dateOrSleep : dateOrSleep?.date;
-  if (!dateStr) return null;
-  return whoopRecoveryByDate[dateStr]?.recovery ?? null;
-}
 
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
