@@ -271,6 +271,24 @@
     </div>
   </div>
 
+  <!-- GLYCOGEN STATE -->
+  <div class="section-title">💧 Glycogen &amp; Water Retention Estimate</div>
+  <div class="chart-row full">
+    <div class="chart-card">
+      <div class="card-header with-meta">
+        <div class="card-heading">
+          <h3>Daily Glycogen Load</h3>
+          <div class="chart-note" id="glycogenNote"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:0 16px 10px;font-size:12px;color:var(--text-muted);line-height:1.6;" id="glycogenDxaCompare"></div>
+      <div class="chart-wrapper medium"><canvas id="glycogenChart"></canvas></div>
+      <div style="padding:8px 16px 4px;font-size:11px;color:var(--text-faint);">
+        Green ≥ 70% loaded · Amber 40–70% · Red &lt; 40% · ▲ = DXA scan date · Dashed purple line on weight chart = glyco-adjusted weight (relative to Jan 6 DXA glycogen level)
+      </div>
+    </div>
+  </div>
+
   <!-- DAILY STEPS -->
   <div class="section-title">Daily Activity — Steps</div>
   <div class="stat-grid" id="stepStatCards" style="margin-bottom:12px;"></div>
@@ -298,11 +316,7 @@
       <button class="export-btn" data-chart="caloriesChart">📸</button>
       <div class="card-header">
         <h3>Daily Calories — with target line &amp; rolling avg</h3>
-        <div class="month-toggles">
-          <button class="mtoggle jan" data-chart="calories" data-idx="0">Jan</button>
-          <button class="mtoggle feb" data-chart="calories" data-idx="1">Feb</button>
-          <button class="mtoggle mar" data-chart="calories" data-idx="2">Mar</button>
-        </div>
+        <div id="calToggles" class="month-toggles"></div>
       </div>
       <div class="chart-wrapper tall"><canvas id="caloriesChart"></canvas></div>
     </div>
@@ -347,11 +361,7 @@
             <button class="mtab" data-metric="carbs">Carbs</button>
             <button class="mtab" data-metric="fat">Fat</button>
           </div>
-          <div class="month-toggles">
-            <button class="mtoggle jan" data-chart="macro" data-idx="0">Jan</button>
-            <button class="mtoggle feb" data-chart="macro" data-idx="1">Feb</button>
-            <button class="mtoggle mar" data-chart="macro" data-idx="2">Mar</button>
-          </div>
+          <div id="macroToggles" class="month-toggles"></div>
         </div>
       </div>
       <div class="chart-wrapper tall"><canvas id="macroChart"></canvas></div>
@@ -371,14 +381,9 @@
     </div>
   </div>
 
-  <!-- DONUT CHARTS -->
+  <!-- DONUT CHARTS (generated dynamically by charts.js for each active month) -->
   <div class="section-title">Macro Composition by Month</div>
-  <div class="chart-row three">
-    <div class="chart-card"><div class="card-header"><h3>January — macro split</h3></div><div class="chart-wrapper medium"><canvas id="donutJan"></canvas></div></div>
-    <div class="chart-card"><div class="card-header"><h3>February — macro split</h3></div><div class="chart-wrapper medium"><canvas id="donutFeb"></canvas></div></div>
-    <div class="chart-card"><div class="card-header"><h3>March — macro split</h3></div><div class="chart-wrapper medium"><canvas id="donutMar"></canvas></div></div>
-          <div class="chart-card"><div class="card-header"><h3>April — macro split</h3></div><div class="chart-wrapper medium"><canvas id="donutApr"></canvas></div></div>
-  </div>
+  <div id="donutChartsContainer" class="chart-row three"></div>
 
   <!-- LIFTING & DRINKS -->
   <div class="section-title">Lifting Days & Drink Days</div>

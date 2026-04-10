@@ -4,9 +4,9 @@
 let currentPanelDate = null;
 
 function findDay(dateStr) {
-  for (const m of ['Jan','Feb','March','Apr']) {
-    const found = data[m].find(d => d.date === dateStr);
-    if (found) return { day: found, month: m };
+  for (const m of ACTIVE_MONTHS) {
+    const found = data[m.key].find(d => d.date === dateStr);
+    if (found) return { day: found, month: m.key };
   }
   return null;
 }
@@ -652,24 +652,29 @@ function updateWeightChart(days) {
     const intercept = (sumY - slope * sumX) / n;
     const regressionData = vals.map((_, i) => +(intercept + slope * i).toFixed(1));
     const lbsPerWeek = slope * 7;
-    if (!chart.data.datasets[2]) {
-      chart.data.datasets.push({
-        label: 'Trend',
-        data: regressionData,
-        borderColor: 'rgba(251,113,133,0.6)',
-        borderDash: [4, 6],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-        tension: 0
-      });
+    const trendDs = chart.data.datasets.find(d => d.label === 'Trend');
+    if (!trendDs) {
+      chart.data.datasets.push({ label: 'Trend', data: regressionData, borderColor: 'rgba(251,113,133,0.6)', borderDash: [4, 6], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 });
     } else {
-      chart.data.datasets[2].data = regressionData;
+      trendDs.data = regressionData;
     }
-    // Update chart header with rate
     const rateText = `${lbsPerWeek < 0 ? '' : '+'}${weightValue(lbsPerWeek)} ${weightUnit()}/week`;
     const weightChartHeader = document.querySelector('#weightChart')?.closest('.chart-card')?.querySelector('h3');
     if (weightChartHeader) weightChartHeader.textContent = `Weight — 7d avg, regression (${rateText})`;
+  }
+
+  // Update glyco-adjusted line (what would weight be at Jan 6 glycogen level?)
+  const glycoAdjData = points.map(p => {
+    const s = glycogenByDate[p.date];
+    if (!s) return null;
+    const delta = s.massLbs - glycogenRefState.massLbs;
+    return +((p.value - delta)).toFixed(1);
+  });
+  const glycoDs = chart.data.datasets.find(d => d.label === 'Glyco-adj (vs Jan 6)');
+  if (!glycoDs) {
+    chart.data.datasets.push({ label: 'Glyco-adj (vs Jan 6)', data: glycoAdjData, borderColor: 'rgba(192,132,252,0.75)', borderDash: [4,4], pointRadius: 0, tension: 0.4, fill: false, borderWidth: 1.5 });
+  } else {
+    glycoDs.data = glycoAdjData;
   }
   chart.data.datasets[0].pointRadius = points.map(p => drinkDates.has(p.date) || liftDates.has(p.date) ? 7 : 5);
   chart.data.datasets[0].pointStyle = points.map(p => drinkDates.has(p.date) ? 'triangle' : liftDates.has(p.date) ? 'rectRot' : 'circle');
@@ -687,14 +692,59 @@ function updateWeightChart(days) {
   const bounds = calcAxisBounds(vals, useMetric ? 0.8 : 2);
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 0) return ` ${weightLabel(points[ctx.dataIndex].value)}`;
-    if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
-    return ` Trend: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.dataset.label === '7-day Avg') return ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.dataset.label === 'Trend') return ` Trend: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.dataset.label === 'Glyco-adj (vs Jan 6)') {
+      const s = glycogenByDate[points[ctx.dataIndex]?.date];
+      return s ? ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()} (${s.loadPct}% glycogen loaded)` : ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()}`;
+    }
+    return ` ${ctx.parsed.y} ${weightUnit()}`;
   };
   chart.options.scales.y.min = Math.floor(bounds.min);
   chart.options.scales.y.max = Math.ceil(bounds.max);
   chart.options.scales.y.ticks.stepSize = useMetric ? 1 : 2;
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.update();
+}
+
+function updateGlycogenChart(days) {
+  const chart = allCharts.glycogenChart;
+  if (!chart) return;
+  // Recompute glycogen model for the currently filtered days
+  const tdeeEst = window.dashboardData?.bayesian?.tdeePosterior?.mean || _bayesTDEE || 2400;
+  const states = glycogenStateModel(days, tdeeEst, GLYCOGEN_MAX_G);
+  if (!states.length) return;
+  const dxaDates = [DXA_SCAN_PREV.date, DXA_SCAN.date];
+  const loadColors = states.map(s =>
+    s.loadPct >= 70 ? 'rgba(52,211,153,0.55)' :
+    s.loadPct >= 40 ? 'rgba(251,191,36,0.55)' :
+                      'rgba(248,113,113,0.55)'
+  );
+  chart.data.labels = states.map(s => s.date.slice(5));
+  chart.data.datasets[0].data = states.map(s => s.loadPct);
+  chart.data.datasets[0].pointBackgroundColor = loadColors;
+  chart.data.datasets[0].backgroundColor = loadColors;
+  chart.data.datasets[0].pointRadius = states.map(s => dxaDates.includes(s.date) ? 8 : 2);
+  chart.data.datasets[0].pointStyle = states.map(s => dxaDates.includes(s.date) ? 'triangle' : 'circle');
+  chart.options.plugins.tooltip.callbacks.title = ctx => states[ctx[0].dataIndex]?.date || '';
+  chart.options.plugins.tooltip.callbacks.label = ctx => {
+    if (ctx.dataset.label === '_fill') return null;
+    const s = states[ctx.dataIndex];
+    if (!s) return '';
+    const lines = [
+      ` Glycogen: ${s.loadPct}% loaded (${s.glycogenG}g)`,
+      ` Bound water: ~${(s.waterG / 453.592).toFixed(2)} lbs`,
+      ` Glyco+water mass: ~${s.massLbs} lbs`,
+    ];
+    if (s.drinkKcal > 0) lines.push(` 🍺 Alcohol: ~${s.drinkKcal} kcal — impaired synthesis + liver depletion applied`);
+    if (dxaDates.includes(s.date)) lines.unshift(` 📍 ${s.date === DXA_SCAN_PREV.date ? 'DXA Jan 6' : 'DXA Apr 8'}`);
+    return lines;
+  };
+  chart.update();
+  // Update summary note
+  const latest = states[states.length - 1];
+  const noteEl = document.getElementById('glycogenNote');
+  if (noteEl && latest) noteEl.textContent = `Current: ${latest.loadPct}% loaded (~${latest.massLbs} lbs glyco+water)`;
 }
 
 function updateBodyCompChart(days) {
@@ -730,12 +780,20 @@ function updateBodyCompChart(days) {
   };
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
     const d = bodyComp[ctx[0].dataIndex];
-    return d ? [
-      d.measured ? ` DXA measured point on ${d.scanLabel || 'Apr 8, 2026'}` : ` Estimated from the DXA baseline (Apr 8, 2026)`,
-      d.measured ? '' : ` Likely body-fat range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
-      d.measured ? ` Total: ${weightLabel(d.weight)}` : ` Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
-      d.measured ? '' : ` Total: ${weightLabel(d.weight)}`
-    ].filter(Boolean) : [];
+    if (!d) return [];
+    const gs = glycogenByDate[d.date];
+    const glycoNote = gs ? `  Glycogen: ${gs.loadPct}% loaded (~${gs.glycogenG}g, +${gs.waterG}g water)` : '';
+    if (d.measured) {
+      const scanDelta = gs ? (gs.loadPct - glycogenRefState.loadPct).toFixed(1) : null;
+      const deltaNote = scanDelta !== null ? `  vs Jan 6 reference: ${scanDelta > 0 ? '+' : ''}${scanDelta}% glycogen load` : '';
+      return [` DXA measured point on ${d.scanLabel || d.date}`, ` Total: ${weightLabel(d.weight)}`, glycoNote, deltaNote].filter(Boolean);
+    }
+    return [
+      ` Estimated from DXA baseline`,
+      ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
+      ` Total: ${weightLabel(d.weight)}`,
+      glycoNote
+    ].filter(Boolean);
   };
   chart.options.interaction = { mode: 'index', intersect: false, axis: 'x' };
   chart.options.scales.y.title.text = `Fat Mass (${weightUnit()})`;
@@ -759,17 +817,14 @@ function updateBodyCompChart(days) {
 
 function updateCaloriesChart(months) {
   const chart = allCharts.caloriesChart;
-  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, (months.Apr||[]).length, 1);
+  const maxLen = Math.max(...ACTIVE_MONTHS.map(m => (months[m.key]||[]).length), 1);
   chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
-    { label:'Jan', data: months.Jan.map(d => energyValue(d.calories)), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'Feb', data: months.Feb.map(d => energyValue(d.calories)), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'March', data: months.March.map(d => energyValue(d.calories)), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'Apr', data: (months.Apr||[]).map(d => energyValue(d.calories)), borderColor: COLORS.apr, backgroundColor:'rgba(192,132,252,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
+    ...ACTIVE_MONTHS.map(m => ({ label: m.label, data: (months[m.key]||[]).map(d => energyValue(d.calories)), borderColor: m.color, backgroundColor: m.bg, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false })),
     { label:`Target (${energyLabel(goals.calories)})`, data: Array(maxLen).fill(energyValue(goals.calories)), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
   ];
   calVisibility.forEach((visible, idx) => { chart.data.datasets[idx].hidden = !visible; });
-  const visibleEnergy = [...months.Jan, ...months.Feb, ...months.March, ...(months.Apr||[])].map(d => energyValue(d.calories)).concat([energyValue(goals.calories)]);
+  const visibleEnergy = ACTIVE_MONTHS.flatMap(m => (months[m.key]||[]).map(d => energyValue(d.calories))).concat([energyValue(goals.calories)]);
   const bounds = calcAxisBounds(visibleEnergy, useMetric ? 400 : 250);
   chart.options.onClick = (evt, elements) => {
     if (!elements.length || elements[0].datasetIndex > 3) return;
@@ -820,14 +875,11 @@ function updateWaterfallChart(days) {
 
 function updateMacroChart(months) {
   const chart = allCharts.macroChart;
-  const maxLen = Math.max(months.Jan.length, months.Feb.length, months.March.length, (months.Apr||[]).length, 1);
+  const maxLen = Math.max(...ACTIVE_MONTHS.map(m => (months[m.key]||[]).length), 1);
   const bounds = metricBounds[currentMetric];
   chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
-    { label:'Jan', data: months.Jan.map(d => d[currentMetric]), borderColor:COLORS.jan, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'Feb', data: months.Feb.map(d => d[currentMetric]), borderColor:COLORS.feb, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'March', data: months.March.map(d => d[currentMetric]), borderColor:COLORS.mar, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'Apr', data: (months.Apr||[]).map(d => d[currentMetric]), borderColor:COLORS.apr, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
+    ...ACTIVE_MONTHS.map(m => ({ label: m.label, data: (months[m.key]||[]).map(d => d[currentMetric]), borderColor: m.color, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 })),
     { label:`Goal (${goals[currentMetric]}g)`, data:Array(maxLen).fill(goals[currentMetric]), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
   ];
   macroVisibility.forEach((visible, idx) => { chart.data.datasets[idx].hidden = !visible; });
@@ -870,7 +922,7 @@ function updateMacroStackedChart(days) {
 }
 
 function updateDonutCharts(months) {
-  [['donutJan', 'Jan'], ['donutFeb', 'Feb'], ['donutMar', 'March'], ['donutApr', 'Apr']].forEach(([id, month]) => {
+  ACTIVE_MONTHS.map(m => ['donut' + m.key, m.key]).forEach(([id, month]) => {
     const chart = Chart.getChart(document.getElementById(id));
     const days = months[month];
     const pCal = avg(days, 'protein') * 4;
@@ -887,10 +939,8 @@ function updateDonutCharts(months) {
 function updateSimpleMonthBars(months) {
   const liftingChart = Chart.getChart(document.getElementById('liftingChart'));
   const drinksChart = Chart.getChart(document.getElementById('drinksChart'));
-  liftingChart.data.datasets[0].data = [months.Jan.filter(d => d.lifting === 'Y').length, months.Feb.filter(d => d.lifting === 'Y').length, months.March.filter(d => d.lifting === 'Y').length,
-      (months.Apr||[]).filter(d => d.lifting === 'Y').length];
-  drinksChart.data.datasets[0].data = [months.Jan.filter(d => d.drinks).length, months.Feb.filter(d => d.drinks).length, months.March.filter(d => d.drinks).length,
-      (months.Apr||[]).filter(d => d.drinks).length];
+  liftingChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => (months[m.key]||[]).filter(d => d.lifting === 'Y').length);
+  drinksChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => (months[m.key]||[]).filter(d => d.drinks).length);
   liftingChart.update();
   drinksChart.update();
 }
@@ -1302,6 +1352,7 @@ function refreshDashboard() {
   }
   safe(() => updateWeightChart(filteredDays), 'Weight Chart');
   safe(() => updateBodyCompChart(filteredDays), 'Body Comp Chart');
+  safe(() => updateGlycogenChart(filteredDays), 'Glycogen Chart');
   safe(() => updateCaloriesChart(months), 'Calories Chart');
   safe(() => updateWaterfallChart(filteredDays), 'Waterfall Chart');
   // Update TDEE display
@@ -1407,7 +1458,7 @@ function injectCustomData() {
   const cd = loadCustomData();
   const hasCustomData = !!(cd.macro.length || cd.sleep.length);
   cd.macro.forEach(entry => {
-    const month = entry.date.startsWith('2026-01') ? 'Jan' : entry.date.startsWith('2026-02') ? 'Feb' : entry.date.startsWith('2026-03') ? 'March' : 'Apr';
+    const month = monthKey(entry.date);
     if (!data[month].find(d => d.date === entry.date)) {
       data[month].push(entry);
       data[month].sort((a, b) => a.date.localeCompare(b.date));
@@ -1425,7 +1476,7 @@ function injectCustomData() {
 
 function rebuildDerivedData({ invalidateBayes = false } = {}) {
   allDays.length = 0;
-  ['Jan', 'Feb', 'March', 'Apr'].forEach(m => data[m].forEach(d => allDays.push(d)));
+  ACTIVE_MONTHS.forEach(m => data[m.key].forEach(d => allDays.push(d)));
   allDates.length = 0;
   allDays.forEach(d => allDates.push(d.date));
   Object.keys(macroByDate).forEach(k => delete macroByDate[k]);

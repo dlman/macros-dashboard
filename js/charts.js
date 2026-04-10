@@ -115,7 +115,6 @@ allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioFor
 // TREND ARROWS & STAT CARDS
 // =====================================================================
 function renderStatCards() {
-  const months = ['Jan','Feb','March','Apr'];
   const metrics = [
     { label: 'Avg Calories', key: 'calories', fmt: v => Math.round(v).toLocaleString(), goodDir: 'down' },
     { label: 'Avg Protein (g)', key: 'protein', fmt: v => Math.round(v), goodDir: 'up' },
@@ -130,9 +129,9 @@ function renderStatCards() {
   const filtered = monthBuckets(getFilteredDays());
   grid.innerHTML = '';
   [...metrics, ...perLb].forEach(m => {
-    const vals = months.map(mo => {
-      const d = filtered[mo];
-      if (!d.length) return null;
+    const vals = ACTIVE_MONTHS.map(mo => {
+      const d = filtered[mo.key];
+      if (!d || !d.length) return null;
       if (m.perLb) {
         const wDays = d.filter(dd => dd.weight);
         const avgW = wDays.length ? avg(wDays, 'weight') : 165;
@@ -141,8 +140,8 @@ function renderStatCards() {
       return avg(d, m.key);
     });
 
-    let arrows = ['','','',''];
-    for (let i = 1; i < 4; i++) {
+    let arrows = Array(ACTIVE_MONTHS.length).fill('');
+    for (let i = 1; i < ACTIVE_MONTHS.length; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
       const delta = vals[i] - vals[i-1];
       if (Math.abs(delta) < 1) { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }
@@ -157,7 +156,7 @@ function renderStatCards() {
     card.innerHTML = `
       <div class="label">${m.label}</div>
       <div class="months">
-        ${months.map((mo, i) => `<div class="month-val"><span class="month-name">${mo.slice(0,3)}</span><span class="val col-${mo.slice(0,3).toLowerCase()}">${vals[i] == null ? '—' : m.fmt(vals[i])}${arrows[i]}</span></div>`).join('')}
+        ${ACTIVE_MONTHS.map((mo, i) => `<div class="month-val"><span class="month-name">${mo.label}</span><span class="val" style="color:${mo.color}">${vals[i] == null ? '—' : m.fmt(vals[i])}${arrows[i]}</span></div>`).join('')}
       </div>`;
     grid.appendChild(card);
   });
@@ -166,9 +165,9 @@ function renderStatCards() {
   const mismatchCard = document.createElement('div');
   mismatchCard.className = 'stat-card';
   const allFilteredDays = getFilteredDays();
-  const mismatchVals = ['Jan', 'Feb', 'March', 'Apr'].map(mo => {
-    const mDays = filtered[mo];
-    if (!mDays.length) return null;
+  const mismatchVals = ACTIVE_MONTHS.map(mo => {
+    const mDays = filtered[mo.key];
+    if (!mDays || !mDays.length) return null;
     const avgLogged = avg(mDays, 'calories');
     const avgImplied = mDays.reduce((s, d) => s + (d.protein * 4 + d.carbs * 4 + d.fat * 9), 0) / mDays.length;
     return { logged: avgLogged, implied: avgImplied, gap: ((avgImplied - avgLogged) / avgLogged * 100) };
@@ -176,7 +175,7 @@ function renderStatCards() {
   mismatchCard.innerHTML = `
     <div class="label">Macro vs Logged Gap</div>
     <div class="months">
-      ${['Jan', 'Feb', 'Mar', 'Apr'].map((mo, i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
+      ${ACTIVE_MONTHS.map((mo, i) => `<div class="month-val"><span class="month-name">${mo.label}</span><span class="val" style="font-size:16px;color:${mismatchVals[i] && Math.abs(mismatchVals[i].gap) > 5 ? 'var(--col-amber)' : 'var(--text-muted)'}">${mismatchVals[i] == null ? '—' : (mismatchVals[i].gap > 0 ? '+' : '') + mismatchVals[i].gap.toFixed(1) + '%'}</span></div>`).join('')}
     </div>`;
   grid.appendChild(mismatchCard);
 
@@ -187,17 +186,16 @@ function renderStatCards() {
     { label: 'Cal', key: 'calories' },
     { label: 'Pro', key: 'protein' }
   ];
-  const conMonths = ['Jan', 'Feb', 'March', 'Apr'];
   consistencyCard.innerHTML = `
     <div class="label">Consistency (lower variance = higher)</div>
     <div class="months">
-      ${conMonths.map((mo, i) => {
-        const d = filtered[mo];
-        const calCon = d.length >= 3 ? consistencyScore(d, 'calories') : null;
-        const proCon = d.length >= 3 ? consistencyScore(d, 'protein') : null;
+      ${ACTIVE_MONTHS.map(mo => {
+        const d = filtered[mo.key];
+        const calCon = d && d.length >= 3 ? consistencyScore(d, 'calories') : null;
+        const proCon = d && d.length >= 3 ? consistencyScore(d, 'protein') : null;
         const calColor = calCon == null ? 'var(--text-muted)' : calCon >= 85 ? 'var(--col-green)' : calCon >= 70 ? 'var(--col-amber)' : 'var(--col-red)';
         const proColor = proCon == null ? 'var(--text-muted)' : proCon >= 85 ? 'var(--col-green)' : proCon >= 70 ? 'var(--col-amber)' : 'var(--col-red)';
-        return `<div class="month-val"><span class="month-name">${mo.slice(0,3)}</span><span class="val" style="font-size:13px;"><span style="color:${calColor}">${calCon != null ? calCon + '%' : '—'}</span> / <span style="color:${proColor}">${proCon != null ? proCon + '%' : '—'}</span></span></div>`;
+        return `<div class="month-val"><span class="month-name">${mo.label}</span><span class="val" style="font-size:13px;"><span style="color:${calColor}">${calCon != null ? calCon + '%' : '—'}</span> / <span style="color:${proColor}">${proCon != null ? proCon + '%' : '—'}</span></span></div>`;
       }).join('')}
     </div>
     <div style="font-size:10px;color:var(--text-faint);margin-top:2px;">Cal / Protein consistency</div>`;
@@ -287,7 +285,10 @@ function renderHighlights() {
 function renderSleepStatCards() {
   const grid = document.getElementById('sleepStatGrid');
   const filteredSleep = getFilteredSleep();
-  const months = {Jan: filteredSleep.filter(d=>d.date.startsWith('2026-01')), Feb: filteredSleep.filter(d=>d.date.startsWith('2026-02')), Mar: filteredSleep.filter(d=>d.date.startsWith('2026-03')), Apr: filteredSleep.filter(d=>d.date.startsWith('2026-04'))};
+  const sleepMonths = {};
+  ACTIVE_MONTHS.forEach(m => {
+    sleepMonths[m.key] = filteredSleep.filter(d => d.date.startsWith(`2026-${m.num}`));
+  });
   const metrics = [
     { label: 'Avg Sleep Performance', key: 'perf', fmt: v => Math.round(v)+'%', goodDir: 'up' },
     { label: 'Avg Sleep Duration', key: 'hours', fmt: v => v.toFixed(1)+'h', goodDir: 'up' },
@@ -300,11 +301,12 @@ function renderSleepStatCards() {
   ];
   grid.innerHTML = '';
   metrics.forEach(m => {
-    const vals = m.computed
-      ? [m.computed(months.Jan), m.computed(months.Feb), m.computed(months.Mar), m.computed(months.Apr)]
-      : [avgOrNull(months.Jan, m.key), avgOrNull(months.Feb, m.key), avgOrNull(months.Mar, m.key), avgOrNull(months.Apr, m.key)];
-    let arrows = ['','','',''];
-    for (let i = 1; i < 4; i++) {
+    const vals = ACTIVE_MONTHS.map(mo => {
+      const d = sleepMonths[mo.key] || [];
+      return m.computed ? m.computed(d) : avgOrNull(d, m.key);
+    });
+    let arrows = Array(ACTIVE_MONTHS.length).fill('');
+    for (let i = 1; i < ACTIVE_MONTHS.length; i++) {
       if (vals[i] == null || vals[i - 1] == null) continue;
       const delta = vals[i] - vals[i-1];
       if (Math.abs(delta) < 0.5 && m.key === 'perf' || Math.abs(delta) < 0.05 && m.key !== 'perf') { arrows[i] = '<span class="trend-arrow trend-neutral">→</span>'; continue; }
@@ -315,8 +317,7 @@ function renderSleepStatCards() {
     }
     const card = document.createElement('div');
     card.className = 'stat-card';
-    const mos = ['Jan','Feb','Mar','Apr'];
-    card.innerHTML = `<div class="label">${m.label}</div><div class="months">${mos.map((mo,i) => `<div class="month-val"><span class="month-name">${mo}</span><span class="val col-${mo.toLowerCase()}">${vals[i] == null ? '—' : m.fmt(vals[i])}${arrows[i]}</span></div>`).join('')}</div>`;
+    card.innerHTML = `<div class="label">${m.label}</div><div class="months">${ACTIVE_MONTHS.map((mo,i) => `<div class="month-val"><span class="month-name">${mo.label}</span><span class="val" style="color:${mo.color}">${vals[i] == null ? '—' : m.fmt(vals[i])}${arrows[i]}</span></div>`).join('')}</div>`;
     grid.appendChild(card);
   });
 }
@@ -958,12 +959,22 @@ function renderSleepInsights() {
 // WEIGHT CHART (enhanced: rolling avg + drink/lift markers + goal annotation)
 // =====================================================================
 const weightPoints = [];
-['Jan','Feb','March','Apr'].forEach(m => {
-  data[m].filter(d=>d.weight).forEach(d => weightPoints.push({ x: d.date.slice(5)+' ('+m.slice(0,3)+')', y: d.weight, date: d.date }));
+ACTIVE_MONTHS.forEach(m => {
+  data[m.key].filter(d=>d.weight).forEach(d => weightPoints.push({ x: d.date.slice(5)+' ('+m.label+')', y: d.weight, date: d.date }));
 });
 const weightVals = weightPoints.map(p => p.y);
 const weightRolling = rollingAvg(weightVals, 7);
 const weightDates = weightPoints.map(p => p.date);
+
+// Glycogen-adjusted weight: removes the glycogen+water delta vs. the Jan 6 DXA reference.
+// Interpretation: "what would scale say if you were carrying the same glycogen as Jan 6?"
+// When the line is ABOVE actual weight → you're more depleted now than at reference.
+const glycoAdjWeights = weightPoints.map(p => {
+  const s = glycogenByDate[p.date];
+  if (!s) return null;
+  const delta = s.massLbs - glycogenRefState.massLbs; // positive = carrying more glyco/water now
+  return +( (p.y - delta) ).toFixed(1);
+});
 
 allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
   type: 'line',
@@ -992,7 +1003,9 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
         data: weightRolling,
         borderColor: 'rgba(251,191,36,0.6)', borderDash: [6,3],
         pointRadius: 0, tension: 0.4, fill: false, borderWidth: 2
-      }
+      },
+      // Dataset 2 reserved for trend line (pushed dynamically by updateWeightChart)
+      // Dataset 3 reserved for glyco-adjusted (pushed dynamically by updateWeightChart)
     ]
   },
   options: {
@@ -1007,10 +1020,19 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
       legend: { display: true, labels: { generateLabels: () => [
         { text: '● Weight', fillStyle:'#34d399', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '— 7-day avg', fillStyle:'rgba(251,191,36,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
+        { text: '-- Trend', fillStyle:'rgba(251,113,133,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
+        { text: '-- Glyco-adj (vs Jan 6)', fillStyle:'rgba(192,132,252,0.75)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '▲ Drink day', fillStyle:EVENT_COLORS.drink, strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '■ Lift day', fillStyle:EVENT_COLORS.lift, strokeStyle:'transparent', fontColor:'#94a3b8' },
       ], color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ctx.datasetIndex===0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` 7d avg: ${ctx.parsed.y.toFixed(1)} ${weightUnit()}` } }
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+        label: ctx => {
+          if (ctx.datasetIndex === 0) return ` ${ctx.parsed.y} ${weightUnit()}`;
+          if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(1)} ${weightUnit()}`;
+          const s = glycogenByDate[weightDates[ctx.dataIndex]];
+          return s ? ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()} (glycogen ${s.loadPct}% loaded)` : '';
+        }
+      }}
     },
     scales: { x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 20 } }, y: { ...chartDefaults().scales.y, ticks: { ...TICK(), stepSize: useMetric ? 1 : 2, callback: v => v+' '+weightUnit() } } }
   }
@@ -1217,12 +1239,21 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
         },
         afterBody: ctx => {
           const d = bodyComp[ctx[0].dataIndex];
-          return d ? [
-            d.measured ? `  DXA measured point on ${d.scanLabel || 'Apr 8, 2026'}` : `  Estimated from the DXA baseline (Apr 8, 2026)  `,
-            d.measured ? '' : `  Likely body-fat range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
-            d.measured ? `  Total: ${weightLabel(d.weight)}` : `  Model assumes ~${Math.round((d.fatFreeShare || 0) * 100)}% of weight change comes from fat-free mass`,
-            d.measured ? '' : `  Total: ${weightLabel(d.weight)}`
-          ].filter(Boolean) : [];
+          if (!d) return [];
+          const gs = glycogenByDate[d.date];
+          const glycoNote = gs ? `  Glycogen: ${gs.loadPct}% loaded (~${gs.glycogenG}g, +${gs.waterG}g water)` : '';
+          if (d.measured) {
+            const refLoad = glycogenRefState.loadPct;
+            const scanDelta = gs ? (gs.loadPct - refLoad).toFixed(1) : null;
+            const deltaNote = scanDelta !== null ? `  vs Jan 6 reference: ${scanDelta > 0 ? '+' : ''}${scanDelta}% glycogen load` : '';
+            return [`  DXA measured point on ${d.scanLabel || d.date}`, `  Total: ${weightLabel(d.weight)}`, glycoNote, deltaNote].filter(Boolean);
+          }
+          return [
+            `  Estimated from DXA baseline`,
+            `  Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
+            `  Total: ${weightLabel(d.weight)}`,
+            glycoNote
+          ].filter(Boolean);
         }
       }}
     },
@@ -1244,20 +1275,116 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
 });
 
 // =====================================================================
+// GLYCOGEN LOAD CHART
+// =====================================================================
+(() => {
+  const el = document.getElementById('glycogenChart');
+  if (!el || !glycogenStates.length) return;
+
+  // Colour each point by load level: green ≥70 %, amber 40–70 %, red <40 %
+  const loadColors = glycogenStates.map(s =>
+    s.loadPct >= 70 ? 'rgba(52,211,153,0.55)' :
+    s.loadPct >= 40 ? 'rgba(251,191,36,0.55)' :
+                      'rgba(248,113,113,0.55)'
+  );
+
+  // Mark the two DXA scan dates
+  const dxaDates = [DXA_SCAN_PREV.date, DXA_SCAN.date];
+  const dxaLabels = { [DXA_SCAN_PREV.date]: 'DXA Jan 6', [DXA_SCAN.date]: 'DXA Apr 8' };
+
+  allCharts.glycogenChart = new Chart(el, {
+    type: 'line',
+    data: {
+      labels: glycogenStates.map(s => s.date.slice(5)),
+      datasets: [
+        {
+          label: 'Glycogen Load %',
+          data: glycogenStates.map(s => s.loadPct),
+          borderColor: 'rgba(192,132,252,0.9)',
+          backgroundColor: loadColors,
+          pointBackgroundColor: loadColors,
+          pointRadius: glycogenStates.map(s => dxaDates.includes(s.date) ? 8 : 2),
+          pointStyle: glycogenStates.map(s => dxaDates.includes(s.date) ? 'triangle' : 'circle'),
+          tension: 0.4, fill: false, borderWidth: 2
+        },
+        // Shaded fill zone — draw a zero-opacity area so we can colour the background
+        {
+          label: '_fill',
+          data: glycogenStates.map(() => 100),
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(192,132,252,0.04)',
+          pointRadius: 0, fill: '-1', tension: 0
+        }
+      ]
+    },
+    options: {
+      ...chartDefaults(),
+      plugins: {
+        ...chartDefaults().plugins,
+        legend: { display: false },
+        tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+          title: ctx => glycogenStates[ctx[0].dataIndex]?.date || '',
+          label: ctx => {
+            if (ctx.dataset.label === '_fill') return null;
+            const s = glycogenStates[ctx.dataIndex];
+            if (!s) return '';
+            const lines = [
+              ` Glycogen: ${s.loadPct}% loaded (${s.glycogenG}g)`,
+              ` Bound water: ~${(s.waterG / 453.592).toFixed(2)} lbs`,
+              ` Glyco+water mass: ~${s.massLbs} lbs`,
+            ];
+            if (s.drinkKcal > 0) lines.push(` 🍺 Alcohol: ~${s.drinkKcal} kcal — impaired synthesis + liver depletion applied`);
+            if (dxaDates.includes(s.date)) lines.unshift(` 📍 ${dxaLabels[s.date]}`);
+            return lines;
+          }
+        }}
+      },
+      scales: {
+        x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 18 } },
+        y: {
+          ...chartDefaults().scales.y, min: 0, max: 100,
+          ticks: { ...TICK(), stepSize: 20, callback: v => v + '%' },
+          title: { display: true, text: 'Glycogen Load %', color: '#94a3b8', font: { size: 10 } }
+        }
+      }
+    }
+  });
+
+  // Populate the summary card
+  const latest = glycogenStates[glycogenStates.length - 1];
+  const jan6   = glycogenByDate[DXA_SCAN_PREV.date];
+  const apr8   = glycogenByDate[DXA_SCAN.date];
+  const noteEl = document.getElementById('glycogenNote');
+  if (noteEl && latest) {
+    noteEl.textContent = `Current: ${latest.loadPct}% loaded (~${latest.massLbs} lbs glyco+water)`;
+  }
+  const compEl = document.getElementById('glycogenDxaCompare');
+  if (compEl && jan6 && apr8) {
+    const lbsDiff = (apr8.massLbs - jan6.massLbs).toFixed(2);
+    const sign = lbsDiff > 0 ? '+' : '';
+    compEl.innerHTML = `
+      <span>Jan 6 DXA: <strong>${jan6.loadPct}%</strong> loaded (${jan6.massLbs} lbs glyco+water)</span>
+      <span>Apr 8 DXA: <strong>${apr8.loadPct}%</strong> loaded (${apr8.massLbs} lbs glyco+water)</span>
+      <span>Difference: <strong>${sign}${lbsDiff} lbs</strong> — estimated glycogen/water artifact between scans</span>
+      <span style="color:var(--col-green)">Glycogen-corrected lean mass on Apr 8: ~<strong>${(DXA_SCAN.leanMass - parseFloat(lbsDiff)).toFixed(1)} lbs</strong></span>`;
+  }
+})();
+
+// =====================================================================
 // CALORIES CHART (enhanced: goal line + rolling avg)
 // =====================================================================
-const monthOrder = ['Jan','Feb','March','Apr'];
-let calVisibility = Array.isArray(persistedState.calVisibility) && persistedState.calVisibility.length === 4 ? persistedState.calVisibility : [true, true, true, true];
+const monthOrder = ACTIVE_MONTHS.map(m => m.key);
+let calVisibility = Array.isArray(persistedState.calVisibility) && persistedState.calVisibility.length === ACTIVE_MONTHS.length ? persistedState.calVisibility : Array(ACTIVE_MONTHS.length).fill(true);
 
 function makeCalDatasets() {
-  const ds = [
-    { label:'Jan', data: data.Jan.map(d=>d.calories), borderColor: COLORS.jan, backgroundColor:'rgba(245,158,11,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'Feb', data: data.Feb.map(d=>d.calories), borderColor: COLORS.feb, backgroundColor:'rgba(56,189,248,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'March', data: data.March.map(d=>d.calories), borderColor: COLORS.mar, backgroundColor:'rgba(52,211,153,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-    { label:'Apr', data: (data.Apr||[]).map(d=>d.calories), borderColor: COLORS.apr, backgroundColor:'rgba(192,132,252,0.1)', tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false },
-  ];
-  // Goal line (only for longest month)
-  const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
+  const ds = ACTIVE_MONTHS.map(m => ({
+    label: m.label,
+    data: data[m.key].map(d => d.calories),
+    borderColor: m.color,
+    backgroundColor: m.bg,
+    tension: 0.3, pointRadius: 4, pointHoverRadius: 7, fill: false
+  }));
+  const maxLen = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
   ds.push({
     label: `Target (${goals.calories})`,
     data: Array(maxLen).fill(goals.calories),
@@ -1266,13 +1393,13 @@ function makeCalDatasets() {
   return ds;
 }
 
-const maxLabels = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
+const maxLabels = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
 allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
   type: 'line',
   data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: makeCalDatasets() },
   options: {
     ...chartDefaults(),
-    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 4) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
+    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < ACTIVE_MONTHS.length) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
     plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${energyLabel(ctx.parsed.y)}` } } },
     scales: { x: { ...chartDefaults().scales.x, title:{display:true,text:'Day of Month',color:'#64748b',font:{size:11}}, ticks:{...TICK()} }, y: { ...chartDefaults().scales.y, min: 1000, max: 3600, ticks: { ...TICK(), stepSize: 250, callback: v => v.toLocaleString()+' kcal' } } }
   }
@@ -1382,20 +1509,19 @@ allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), 
 // COMBINED MACRO CHART (enhanced)
 // =====================================================================
 let currentMetric = persistedState.currentMetric || 'protein';
-let macroVisibility = Array.isArray(persistedState.macroVisibility) && persistedState.macroVisibility.length === 4 ? persistedState.macroVisibility : [true, true, true, true];
+let macroVisibility = Array.isArray(persistedState.macroVisibility) && persistedState.macroVisibility.length === ACTIVE_MONTHS.length ? persistedState.macroVisibility : Array(ACTIVE_MONTHS.length).fill(true);
 const metricBounds = { protein:{min:80,max:250,step:20}, carbs:{min:40,max:310,step:30}, fat:{min:10,max:160,step:15} };
 
 const macroDatasets = () => {
-  const ds = [
-    { label:'Jan', data: data.Jan.map(d=>d[currentMetric]), borderColor:COLORS.jan, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'Feb', data: data.Feb.map(d=>d[currentMetric]), borderColor:COLORS.feb, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'March', data: data.March.map(d=>d[currentMetric]), borderColor:COLORS.mar, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 },
-    { label:'Apr', data: (data.Apr||[]).map(d=>d[currentMetric]), borderColor:COLORS.apr, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false, borderWidth:2 }
-  ];
-  // Goal line
+  const ds = ACTIVE_MONTHS.map(m => ({
+    label: m.label,
+    data: data[m.key].map(d => d[currentMetric]),
+    borderColor: m.color,
+    tension: 0.3, pointRadius: 4, pointHoverRadius: 7, fill: false, borderWidth: 2
+  }));
   const goalVal = goals[currentMetric];
   if (goalVal) {
-    const maxLen = Math.max(data.Jan.length, data.Feb.length, data.March.length, (data.Apr||[]).length);
+    const maxLen = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
     ds.push({ label:`Goal (${goalVal}g)`, data:Array(maxLen).fill(goalVal), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 });
   }
   return ds;
@@ -1406,7 +1532,7 @@ allCharts.macroChart = new Chart(document.getElementById('macroChart'), {
   data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: macroDatasets() },
   options: {
     ...chartDefaults(),
-    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < 4) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if(data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
+    onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < ACTIVE_MONTHS.length) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if(data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
     plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:16 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}g` } } },
     scales: { x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:10} }, y: { ...chartDefaults().scales.y, min: metricBounds.protein.min, max: metricBounds.protein.max, ticks:{...TICK(), stepSize: metricBounds.protein.step, callback:v=>v+'g'} } }
   }
@@ -1522,25 +1648,59 @@ function donutChart(id, month) {
     options: { responsive:true, animation:{duration:400}, plugins: { legend: { display:true, position:'bottom', labels:{color:'#94a3b8',font:{size:11},padding:10} }, tooltip: { backgroundColor:'#1e2535', titleColor:'#e2e8f0', bodyColor:'#94a3b8', callbacks: { label: ctx => ` ${ctx.label}: ${energyLabel(ctx.parsed)}` } } }, cutout:'65%' }
   });
 }
-donutChart('donutJan','Jan');
-donutChart('donutFeb','Feb');
-donutChart('donutMar','March');
-donutChart('donutApr','Apr');
+// Dynamically generate donut chart cards for every active month
+(function initDonutCharts() {
+  const container = document.getElementById('donutChartsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  ACTIVE_MONTHS.forEach(m => {
+    const canvasId = 'donut' + m.key;
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<div class="card-header"><h3>${m.longLabel} — macro split</h3></div><div class="chart-wrapper medium"><canvas id="${canvasId}"></canvas></div>`;
+    container.appendChild(card);
+    donutChart(canvasId, m.key);
+  });
+})();
+
+// Dynamically generate month toggle buttons for calories + macro charts
+(function initMonthToggles() {
+  ['calToggles', 'macroToggles'].forEach((containerId, chartIdx) => {
+    const chartName = chartIdx === 0 ? 'calories' : 'macro';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    ACTIVE_MONTHS.forEach((m, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'mtoggle';
+      btn.dataset.chart = chartName;
+      btn.dataset.idx = idx;
+      btn.textContent = m.label;
+      btn.style.color = m.color;
+      btn.style.borderColor = m.color;
+      container.appendChild(btn);
+    });
+  });
+})();
 
 // =====================================================================
 // LIFTING & DRINKS CHARTS
 // =====================================================================
-const liftingCounts = { Jan: data.Jan.filter(d=>d.lifting==='Y').length, Feb: data.Feb.filter(d=>d.lifting==='Y').length, March: data.March.filter(d=>d.lifting==='Y').length, Apr: (data.Apr||[]).filter(d=>d.lifting==='Y').length };
 new Chart(document.getElementById('liftingChart'), {
   type: 'bar',
-  data: { labels: ['January','February','March','April'], datasets: [{ data: [liftingCounts.Jan, liftingCounts.Feb, liftingCounts.March, liftingCounts.Apr], backgroundColor: [COLORS.jan, COLORS.feb, COLORS.mar, COLORS.apr], borderRadius:6, borderSkipped:false }] },
+  data: {
+    labels: ACTIVE_MONTHS.map(m => m.longLabel),
+    datasets: [{ data: ACTIVE_MONTHS.map(m => data[m.key].filter(d=>d.lifting==='Y').length), backgroundColor: ACTIVE_MONTHS.map(m => m.color), borderRadius:6, borderSkipped:false }]
+  },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} lifting sessions` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:2} } } }
 });
 
-const drinksCounts = { Jan: data.Jan.filter(d=>d.drinks).length, Feb: data.Feb.filter(d=>d.drinks).length, March: data.March.filter(d=>d.drinks).length, Apr: (data.Apr||[]).filter(d=>d.drinks).length };
 new Chart(document.getElementById('drinksChart'), {
   type: 'bar',
-  data: { labels: ['January','February','March','April'], datasets: [{ data: [drinksCounts.Jan, drinksCounts.Feb, drinksCounts.March, drinksCounts.Apr], backgroundColor: ['rgba(245,158,11,0.6)','rgba(56,189,248,0.6)','rgba(52,211,153,0.6)','rgba(192,132,252,0.6)'], borderRadius:6, borderSkipped:false }] },
+  data: {
+    labels: ACTIVE_MONTHS.map(m => m.longLabel),
+    datasets: [{ data: ACTIVE_MONTHS.map(m => data[m.key].filter(d=>d.drinks).length), backgroundColor: ACTIVE_MONTHS.map(m => m.color + '99'), borderRadius:6, borderSkipped:false }]
+  },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} drink days` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:1} } } }
 });
 
@@ -2349,12 +2509,7 @@ function renderHeatmap() {
   grid.innerHTML = '';
   legend.innerHTML = '';
 
-  const months = [
-    { label: 'Jan', days: data.Jan },
-    { label: 'Feb', days: data.Feb },
-    { label: 'Mar', days: data.March },
-    { label: 'Apr', days: (data.Apr||[]) }
-  ];
+  const months = ACTIVE_MONTHS.map(m => ({ label: m.label, days: data[m.key] }));
 
   // Ranges for color scaling
   const ranges = {

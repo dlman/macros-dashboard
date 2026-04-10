@@ -1,7 +1,23 @@
 // =====================================================================
 // DATA LAYER
 // =====================================================================
-const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399', apr: '#c084fc' };
+const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399', apr: '#c084fc', may: '#f97316', jun: '#ec4899', jul: '#06b6d4', aug: '#a3e635', sep: '#fb923c', oct: '#e879f9', nov: '#2dd4bf', dec: '#fbbf24' };
+// Full month registry — to add a new month just add a URL to sync_google_sheets.py;
+// everything below derives from ACTIVE_MONTHS (which is filtered to months present in data).
+const MONTH_REGISTRY = [
+  { key: 'Jan',   num: '01', label: 'Jan',  longLabel: 'January',   color: COLORS.jan, bg: 'rgba(245,158,11,0.1)' },
+  { key: 'Feb',   num: '02', label: 'Feb',  longLabel: 'February',  color: COLORS.feb, bg: 'rgba(56,189,248,0.1)' },
+  { key: 'March', num: '03', label: 'Mar',  longLabel: 'March',     color: COLORS.mar, bg: 'rgba(52,211,153,0.1)' },
+  { key: 'Apr',   num: '04', label: 'Apr',  longLabel: 'April',     color: COLORS.apr, bg: 'rgba(192,132,252,0.1)' },
+  { key: 'May',   num: '05', label: 'May',  longLabel: 'May',       color: COLORS.may, bg: 'rgba(249,115,22,0.1)' },
+  { key: 'Jun',   num: '06', label: 'Jun',  longLabel: 'June',      color: COLORS.jun, bg: 'rgba(236,72,153,0.1)' },
+  { key: 'Jul',   num: '07', label: 'Jul',  longLabel: 'July',      color: COLORS.jul, bg: 'rgba(6,182,212,0.1)' },
+  { key: 'Aug',   num: '08', label: 'Aug',  longLabel: 'August',    color: COLORS.aug, bg: 'rgba(163,230,53,0.1)' },
+  { key: 'Sep',   num: '09', label: 'Sep',  longLabel: 'September', color: COLORS.sep, bg: 'rgba(251,146,60,0.1)' },
+  { key: 'Oct',   num: '10', label: 'Oct',  longLabel: 'October',   color: COLORS.oct, bg: 'rgba(232,121,249,0.1)' },
+  { key: 'Nov',   num: '11', label: 'Nov',  longLabel: 'November',  color: COLORS.nov, bg: 'rgba(45,212,191,0.1)' },
+  { key: 'Dec',   num: '12', label: 'Dec',  longLabel: 'December',  color: COLORS.dec, bg: 'rgba(251,191,36,0.1)' },
+];
 const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4' };
 const GRID = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || 'rgba(255,255,255,0.05)' });
 const TICK = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--tick-color').trim() || '#64748b', font: { size: 11 } });
@@ -109,6 +125,8 @@ function applyTheme(preference = themePreference) {
 // Shared dataset loaded from js/data.js
 
 const { data, sleepData, stepsData } = window.dashboardData;
+// Months that actually have data — drives all charts, stat cards, donuts, and toggles
+const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].length > 0);
 
 
 
@@ -116,7 +134,7 @@ const { data, sleepData, stepsData } = window.dashboardData;
 // COMPUTED DATA & HELPERS
 // =====================================================================
 // Flatten all days
-const allDays = [...data.Jan, ...data.Feb, ...data.March, ...(data.Apr||[])];
+const allDays = ACTIVE_MONTHS.flatMap(m => data[m.key]);
 const allDates = allDays.map(d => d.date);
 const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
 const macroByDate = {};
@@ -154,19 +172,17 @@ function perfColor(p, alpha=1) {
 }
 
 function monthKey(dateStr) {
-  const month = dateStr.slice(5, 7);
-  if (month === '01') return 'Jan';
-  if (month === '02') return 'Feb';
-  return 'March';
+  const num = dateStr.slice(5, 7);
+  const entry = MONTH_REGISTRY.find(m => m.num === num);
+  return entry ? entry.key : ACTIVE_MONTHS[0]?.key || 'Jan';
 }
 
 function monthBuckets(days) {
-  return {
-    Jan: days.filter(d => d.date.startsWith('2026-01')),
-    Feb: days.filter(d => d.date.startsWith('2026-02')),
-    March: days.filter(d => d.date.startsWith('2026-03')),
-    Apr: days.filter(d => d.date.startsWith('2026-04'))
-  };
+  const result = {};
+  ACTIVE_MONTHS.forEach(m => {
+    result[m.key] = days.filter(d => d.date.startsWith(`2026-${m.num}`));
+  });
+  return result;
 }
 
 function getAnalyticsDays(days = allDays) {
@@ -267,11 +283,9 @@ function foodsForDay(day) {
 }
 
 function monthlyProgression(filtered) {
-  const months = ['Jan', 'Feb', 'March', 'Apr'];
-  const labels = ['Jan', 'Feb', 'Mar', 'Apr'];
-  const summaries = months.map((mo, i) => {
-    const d = filtered[mo];
-    if (!d.length) return null;
+  const summaries = ACTIVE_MONTHS.map(m => {
+    const d = filtered[m.key];
+    if (!d || !d.length) return null;
     const avgCal = Math.round(avg(d, 'calories'));
     const avgPro = Math.round(avg(d, 'protein'));
     const liftRate = +(d.filter(dd => dd.lifting === 'Y').length / Math.max(d.length / 7, 1)).toFixed(1);
@@ -280,7 +294,7 @@ function monthlyProgression(filtered) {
     const wDays = d.filter(dd => dd.weight);
     const wChange = wDays.length >= 2 ? wDays[wDays.length - 1].weight - wDays[0].weight : null;
     const calCon = consistencyScore(d, 'calories');
-    return { label: labels[i], avgCal, avgPro, liftRate, proteinHit, drinkNights, wChange, calCon, days: d.length };
+    return { label: m.label, avgCal, avgPro, liftRate, proteinHit, drinkNights, wChange, calCon, days: d.length };
   }).filter(Boolean);
   if (summaries.length < 2) return null;
 
@@ -682,6 +696,113 @@ function pearson(x, y) {
   }
   return dx && dy ? num / Math.sqrt(dx*dy) : 0;
 }
+
+// =====================================================================
+// GLYCOGEN STATE MODEL
+// =====================================================================
+// Estimates daily glycogen load (g) and associated water retention.
+// Every gram of glycogen holds ~3.5g water, so a fully depleted vs.
+// fully loaded state swings scale weight by 3–5 lbs with zero tissue change.
+// This is key context for interpreting DXA scan differences over time.
+//
+// Model logic (daily loop):
+//   1. Carbs consumed → partially oxidized for energy, remainder stored as glycogen
+//   2. Caloric deficit → some glycogen mobilised to cover the shortfall (rest from fat)
+//   3. Resistance training → extra ~35g glycogenolysis per session
+//   4. Stores are clamped to [0, glycogenMaxG]
+//
+// TDEE used: Bayesian posterior if available, else 2 400 kcal fallback.
+// glycogenMaxG: ~500g is a reasonable estimate for a lean, trained male.
+
+const GLYCOGEN_MAX_G = 500;
+const _bayesTDEE = window.dashboardData?.bayesian?.tdeePosterior?.mean || 2400;
+
+function glycogenStateModel(days, tdeeEst = _bayesTDEE, glycogenMaxG = GLYCOGEN_MAX_G) {
+  const WATER_PER_G       = 3.5;   // g water bound per g glycogen
+  const LIFT_EXTRA_G      = 35;    // extra glycogenolysis per resistance session
+  const MAX_DAILY_CHANGE  = 90;    // physiological rate cap (g/day either direction)
+
+  // Alcohol effects (three mechanisms):
+  //   1. Drink calories don't convert to glycogen — exclude them from surplus calculation
+  //   2. Alcohol impairs glycogen synthase → reduce synthesis efficiency on drink nights
+  //   3. Liver mobilises glycogen to maintain blood glucose while processing ethanol
+  const ALCOHOL_SYNTHESIS_PENALTY = 0.35; // 35 % reduction in glycogen synthesis efficiency
+  const ALCOHOL_LIVER_DEPLETION_PER_100KCAL = 8; // ~8g liver glycogen per 100 kcal alcohol
+
+  // Initialise at 75 % — typical for someone eating at maintenance before starting a cut
+  let glycogen = glycogenMaxG * 0.75;
+  const results = [];
+
+  for (const day of days) {
+    const drinkKcal = estimateDrinkCalories(day.drinks);   // 0 if no drinks logged
+    const foodCals  = day.calories != null ? day.calories : tdeeEst;
+    const totalCals = foodCals + drinkKcal;
+    const carbs     = day.carbs != null ? day.carbs : Math.round(foodCals * 0.35 / 4);
+
+    // TDEE comparison uses total effective calories (food + alcohol)
+    const deficit      = Math.max(0, tdeeEst - totalCals);
+    const deficitRatio = deficit / tdeeEst;
+
+    // ── Carb disposal ─────────────────────────────────────────────────────────
+    // The OLD model burned carbs × min(1, cals/TDEE) — so at maintenance,
+    // 100% of carbs were oxidised and glycogen never recovered.
+    //
+    // Reality: when stores are depleted, glycogen synthase is upregulated and
+    // the body preferentially routes dietary carbs INTO glycogen even at
+    // maintenance (this is the supercompensation / diet-break spike mechanism).
+    //
+    // carbOxFraction: fraction of carbs that get burned (vs stored)
+    //   - Full stores (depletionFactor=0): ~90% burned, 10% stored
+    //   - Half-depleted (depletionFactor=0.5): ~77% burned, 23% stored
+    //   - Fully empty (depletionFactor=1): ~65% burned, 35% stored
+    //   - Deeper deficit pushes fraction burned higher (energy needed now)
+    const depletionFactor = 1 - (glycogen / glycogenMaxG);
+    const carbOxFraction  = Math.min(1.0,
+      (0.90 - 0.25 * depletionFactor) + (deficitRatio * 0.35)
+    );
+    let carbsToGlycogenG = Math.max(0, Math.min(
+      carbs * (1 - carbOxFraction),
+      glycogenMaxG - glycogen
+    ));
+
+    // Alcohol impairs glycogen synthase — reduce carb→glycogen conversion
+    if (drinkKcal > 0) carbsToGlycogenG *= (1 - ALCOHOL_SYNTHESIS_PENALTY);
+
+    // ── Deficit-driven mobilisation ───────────────────────────────────────────
+    // Scaled down vs old model (0.25 not 0.35) because carb-routing already
+    // reduces net storage under a deficit; this covers the remainder
+    const fillFraction = glycogen / glycogenMaxG;
+    const mobilisedG   = Math.min((deficit * 0.25 * fillFraction) / 4, glycogen * 0.12);
+
+    // ── Alcohol: extra liver glycogen mobilised to cover blood glucose ────────
+    const liverDeplG = drinkKcal > 0
+      ? Math.min((drinkKcal / 100) * ALCOHOL_LIVER_DEPLETION_PER_100KCAL, glycogen * 0.15)
+      : 0;
+
+    let delta = carbsToGlycogenG - mobilisedG - liverDeplG;
+    if (day.lifting === 'Y') delta -= LIFT_EXTRA_G;
+
+    // Clamp delta to physiological rate
+    delta    = Math.max(-MAX_DAILY_CHANGE, Math.min(MAX_DAILY_CHANGE, delta));
+    glycogen = Math.max(0, Math.min(glycogenMaxG, glycogen + delta));
+
+    const waterG  = glycogen * WATER_PER_G;
+    const massLbs = (glycogen + waterG) / 453.592;
+    const loadPct = +(glycogen / glycogenMaxG * 100).toFixed(1);
+
+    results.push({ date: day.date, glycogenG: Math.round(glycogen), waterG: Math.round(waterG), loadPct, massLbs: +massLbs.toFixed(2), drinkKcal });
+  }
+  return results;
+}
+
+const glycogenStates   = glycogenStateModel(allDays);
+const glycogenByDate   = {};
+glycogenStates.forEach(s => { glycogenByDate[s.date] = s; });
+
+// Reference glycogen level at the January DXA scan (for adjusted-weight calculation)
+// Computed here so charts.js can use it without repeating the lookup
+const _jan6Date        = '2026-01-06';
+const glycogenRefState = glycogenByDate[_jan6Date] || glycogenStates[0] || { massLbs: 3.0, loadPct: 75 };
 
 // Jan 6, 2026 baseline scan
 const DXA_SCAN_PREV = {
