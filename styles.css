@@ -81,6 +81,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-mini h3 { font-size: 22px; color: var(--text-primary); letter-spacing: -0.7px; margin-bottom: 2px; }
 .hero-mini p { font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-bottom: 8px; }
 .hero-mini .mini-chart { height: 92px; }
+.hero-insights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.hero-insight { background: color-mix(in srgb, var(--bg-input) 86%, transparent); border: 1px solid var(--border-card); border-radius: 10px; padding: 10px 11px; }
+.hero-insight .k { font-size: 15px; font-weight: 800; color: var(--text-primary); line-height: 1.15; }
+.hero-insight .t { font-size: 10px; color: var(--text-faint); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.7px; }
+.hero-insight .s { font-size: 10px; color: var(--text-muted); margin-top: 4px; line-height: 1.35; }
 .hero-pulse { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; }
 .hero-pulse .pulse-item { background: color-mix(in srgb, var(--bg-input) 84%, transparent); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 10px; }
 .hero-pulse .pulse-item .k { font-size: 18px; font-weight: 800; color: var(--text-primary); }
@@ -631,6 +636,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   }
   .hero-chart { height: 240px; }
   .hero-mini .mini-chart { display: none; }
+  .hero-insights { grid-template-columns: 1fr; gap: 6px; margin-top: 6px; }
   .hero-mini h3 { font-size: 18px; }
   .hero-mini p { margin-bottom: 0; }
   .hero-pulse { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

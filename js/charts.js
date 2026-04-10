@@ -43,18 +43,6 @@ allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart')
   }
 });
 
-allCharts.heroCalChart = new Chart(document.getElementById('heroCalChart'), {
-  type: 'line',
-  data: { labels: [], datasets: [{ data: [], borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.12)', fill: true }] },
-  options: sparklineOptions('#38bdf8')
-});
-
-allCharts.heroSleepChart = new Chart(document.getElementById('heroSleepChart'), {
-  type: 'line',
-  data: { labels: [], datasets: [{ data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.14)', fill: true }] },
-  options: sparklineOptions('#f59e0b', 0, 100)
-});
-
 allCharts.trendDecompChart = new Chart(document.getElementById('trendDecompChart'), {
   type: 'bar',
   data: {
@@ -415,22 +403,25 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => ctx.datasetIndex === 0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` Filtered trend: ${ctx.parsed.y} ${weightUnit()}`;
   allCharts.heroWeightChart.update();
 
-  const calVals = filteredDays.map(d => energyValue(d.calories));
-  allCharts.heroCalChart.data.labels = filteredDays.map(d => d.date.slice(5));
-  allCharts.heroCalChart.data.datasets[0].data = calVals;
-  allCharts.heroCalChart.options.plugins.tooltip.callbacks.label = ctx => ` ${ctx.parsed.y.toLocaleString()} ${energyUnit()}`;
-  allCharts.heroCalChart.update();
-
-  const sleepVals = filteredSleep.map(d => d.perf);
-  allCharts.heroSleepChart.data.labels = filteredSleep.map(d => d.date.slice(5));
-  allCharts.heroSleepChart.data.datasets[0].data = sleepVals;
-  allCharts.heroSleepChart.options.plugins.tooltip.callbacks.label = ctx => ` ${ctx.parsed.y}% sleep performance`;
-  allCharts.heroSleepChart.update();
-
   const trendReality = weightTrendReality(filteredDays);
   const energyBalance = energyBalanceSummary(filteredDays);
+  const activeMaintenance = workingTDEEProfile(filteredDays).maintenance;
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
   const lag = getLagMetrics(filteredDays, filteredSleep);
+  const recentCalDays = filteredDays.slice(-7);
+  const priorCalDays = filteredDays.slice(-14, -7);
+  const recentCalAvg = avgEffectiveCalories(recentCalDays);
+  const priorCalAvg = avgEffectiveCalories(priorCalDays);
+  const calDelta7 = recentCalAvg != null && priorCalAvg != null ? recentCalAvg - priorCalAvg : null;
+  const recentBelowMaintenance = recentCalDays.filter(d => effectiveCalories(d) <= activeMaintenance).length;
+  const recentSleepDays = filteredSleep.slice(-7);
+  const priorSleepDays = filteredSleep.slice(-14, -7);
+  const recentSleepPerf = avgOrNull(recentSleepDays, 'perf');
+  const priorSleepPerf = avgOrNull(priorSleepDays, 'perf');
+  const sleepPerfDelta7 = recentSleepPerf != null && priorSleepPerf != null ? recentSleepPerf - priorSleepPerf : null;
+  const recentSleepHours = avgOrNull(recentSleepDays, 'hours');
+  const priorSleepHours = avgOrNull(priorSleepDays, 'hours');
+  const sleepHoursDelta7 = recentSleepHours != null && priorSleepHours != null ? recentSleepHours - priorSleepHours : null;
   const observedLoss = trendReality.actualLoss;
   const weightTrend = observedLoss == null
     ? 'No weigh-in trend yet.'
@@ -453,8 +444,32 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   document.getElementById('heroCalSub').textContent = energyBalance
     ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance across the range · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
     : 'No intake data in the selected range';
+  document.getElementById('heroCalInsights').innerHTML = `
+    <div class="hero-insight">
+      <div class="k">${recentCalAvg != null ? energyLabel(recentCalAvg) : '—'}</div>
+      <div class="t">Last 7 Avg</div>
+      <div class="s">${calDelta7 == null ? 'Need a prior 7-day block' : `${calDelta7 <= 0 ? 'Down' : 'Up'} ${energyLabel(Math.abs(calDelta7))} vs prior 7`}</div>
+    </div>
+    <div class="hero-insight">
+      <div class="k">${recentCalDays.length ? `${recentBelowMaintenance}/${recentCalDays.length}` : '—'}</div>
+      <div class="t">Below Maint</div>
+      <div class="s">${recentCalDays.length ? 'Last 7 days at or under maintenance' : 'Need intake data'}</div>
+    </div>
+  `;
   document.getElementById('heroSleepValue').textContent = current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—';
   document.getElementById('heroSleepSub').textContent = current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep with ${Math.round(current.sleepHitRate)}% target hit rate` : 'No sleep entries in the selected range';
+  document.getElementById('heroSleepInsights').innerHTML = `
+    <div class="hero-insight">
+      <div class="k">${recentSleepHours != null ? `${recentSleepHours.toFixed(1)}h` : '—'}</div>
+      <div class="t">Last 7 Avg</div>
+      <div class="s">${sleepHoursDelta7 == null ? 'Need a prior 7-night block' : `${sleepHoursDelta7 >= 0 ? '+' : ''}${sleepHoursDelta7.toFixed(1)}h vs prior 7`}</div>
+    </div>
+    <div class="hero-insight">
+      <div class="k">${recentSleepDays.length ? `${recentSleepDays.filter(d => d.perf >= goals.sleepPerf).length}/${recentSleepDays.length}` : '—'}</div>
+      <div class="t">Target Nights</div>
+      <div class="s">${sleepPerfDelta7 == null ? 'Target-hit count over last 7 nights' : `${sleepPerfDelta7 >= 0 ? '+' : ''}${Math.round(sleepPerfDelta7)} pts vs prior 7`}</div>
+    </div>
+  `;
   document.getElementById('heroPulseTitle').textContent = current.drinkNights === 0 ? 'No drink nights in range' : `${current.drinkNights} drink night${current.drinkNights === 1 ? '' : 's'}`;
   document.getElementById('heroPulseSub').textContent = current.drinkNights === 0 ? 'The biggest recovery drag is absent in this range.' : 'Alcohol load is present and likely affecting recovery.';
   document.getElementById('heroPulse').innerHTML = `
