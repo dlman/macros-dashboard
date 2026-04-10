@@ -28,7 +28,6 @@ const STORAGE_KEY = 'macros_dashboard_v4_state';
 const DEFAULT_RECOVERY_WEIGHTS = { sleep: 0.45, efficiency: 0.25, resp: 0.10, drink: 0.20 };
 
 // Units
-const BUILD_VERSION = '2026.03.21.2';
 let useMetric = false; // false = lbs/kcal, true = kg/kJ
 let themePreference = 'system';
 function convWeight(lbs) { return useMetric ? (lbs * 0.453592).toFixed(1) : lbs; }
@@ -144,6 +143,15 @@ const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].leng
 // Flatten all days
 const allDays = ACTIVE_MONTHS.flatMap(m => data[m.key]);
 const allDates = allDays.map(d => d.date);
+const BUILD_VERSION = (() => {
+  const candidates = [
+    ...allDates,
+    ...sleepData.map(d => d.date).filter(Boolean),
+    ...stepsData.map(d => d.date).filter(Boolean)
+  ].filter(Boolean).sort();
+  const latest = candidates.at(-1);
+  return latest ? latest.replace(/-/g, '.') : 'unknown';
+})();
 const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
 const macroByDate = {};
 allDays.forEach(d => { macroByDate[d.date] = d; });
