@@ -25,7 +25,6 @@
     <button class="hdr-btn" id="themeToggle" title="Toggle light/dark theme">🌙 Theme</button>
     <button class="hdr-btn" id="unitToggle" title="Toggle lbs/kg, kcal/kJ">lbs / kcal</button>
     <button class="hdr-btn" id="exportAllBtn" title="Export full dashboard as PNG">📸 Export</button>
-    <button class="hdr-btn" id="dataEntryBtn" title="Add or import data">➕ Add Data</button>
     <button class="hdr-btn" id="settingsBtn" title="Goals & Annotations">⚙️ Settings</button>
   </div>
 </header>
@@ -201,31 +200,37 @@
     </div>
 
   <!-- HEATMAP CALENDAR -->
-  <div class="heatmap-container" id="progressHeatmapSection">
-    <div class="heatmap-header">
-      <h3>📅 Daily Heatmap</h3>
-      <div class="metric-tabs" id="heatmapTabs">
-        <button class="mtab active" data-hm="calories">Calories</button>
-        <button class="mtab" data-hm="protein">Protein</button>
-        <button class="mtab" data-hm="sleepPerf">Sleep %</button>
-        <button class="mtab" data-hm="weight">Weight Δ</button>
+  <details class="mobile-detail-shell" id="progressHeatmapShell" open>
+    <summary>Daily Heatmap</summary>
+    <div class="heatmap-container" id="progressHeatmapSection">
+      <div class="heatmap-header">
+        <h3>📅 Daily Heatmap</h3>
+        <div class="metric-tabs" id="heatmapTabs">
+          <button class="mtab active" data-hm="calories">Calories</button>
+          <button class="mtab" data-hm="protein">Protein</button>
+          <button class="mtab" data-hm="sleepPerf">Sleep %</button>
+          <button class="mtab" data-hm="weight">Weight Δ</button>
+        </div>
       </div>
+      <div class="heatmap-grid" id="heatmapGrid"></div>
+      <div class="heatmap-legend" id="heatmapLegend"></div>
     </div>
-    <div class="heatmap-grid" id="heatmapGrid"></div>
-    <div class="heatmap-legend" id="heatmapLegend"></div>
-  </div>
+  </details>
 
   <!-- MONTHLY AVERAGES (with trend arrows) -->
-  <div class="section-title">Monthly Averages</div>
-  <div class="stat-grid" id="statGrid"></div>
+  <details class="mobile-detail-shell" id="progressMonthlyShell" open>
+    <summary>Monthly Averages &amp; Streaks</summary>
+    <div class="section-title">Monthly Averages</div>
+    <div class="stat-grid" id="statGrid"></div>
 
-  <div class="monthly-progression" id="monthlyProgression" style="margin:12px 0 18px;padding:12px 16px;border-radius:10px;background:var(--card-bg);font-size:13px;line-height:1.6;color:var(--text-muted);"></div>
+    <div class="monthly-progression" id="monthlyProgression" style="margin:12px 0 18px;padding:12px 16px;border-radius:10px;background:var(--card-bg);font-size:13px;line-height:1.6;color:var(--text-muted);"></div>
 
-  <div class="badge-row" id="dowMacroInsight" style="margin:8px 0 12px;"></div>
+    <div class="badge-row" id="dowMacroInsight" style="margin:8px 0 12px;"></div>
 
-  <!-- HIGHLIGHTS -->
-  <div class="section-title">Highlights & Streaks</div>
-  <div class="badge-row" id="highlightBadges"></div>
+    <!-- HIGHLIGHTS -->
+    <div class="section-title">Highlights & Streaks</div>
+    <div class="badge-row" id="highlightBadges"></div>
+  </details>
 
   <!-- WEIGHT TREND -->
   <div class="section-title">Body Weight Trend</div>
@@ -274,34 +279,40 @@
   </div>
 
   <!-- GLYCOGEN STATE -->
-  <div class="section-title">💧 Glycogen &amp; Water Retention Estimate</div>
-  <div class="chart-row full">
-    <div class="chart-card">
-      <div class="card-header with-meta">
-        <div class="card-heading">
-          <h3>Daily Glycogen Load</h3>
-          <div class="chart-note" id="glycogenNote"></div>
+  <details class="mobile-detail-shell" id="progressGlycogenShell" open>
+    <summary>Glycogen &amp; Water Estimate</summary>
+    <div class="section-title">💧 Glycogen &amp; Water Retention Estimate</div>
+    <div class="chart-row full">
+      <div class="chart-card">
+        <div class="card-header with-meta">
+          <div class="card-heading">
+            <h3>Daily Glycogen Load</h3>
+            <div class="chart-note" id="glycogenNote"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:0 16px 10px;font-size:12px;color:var(--text-muted);line-height:1.6;" id="glycogenDxaCompare"></div>
+        <div class="chart-wrapper medium"><canvas id="glycogenChart"></canvas></div>
+        <div style="padding:8px 16px 4px;font-size:11px;color:var(--text-faint);">
+          Green ≥ 70% loaded · Amber 40–70% · Red &lt; 40% · ▲ = DXA scan date · Dashed purple line on weight chart = glyco-adjusted weight (relative to Jan 6 DXA glycogen level)
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;padding:0 16px 10px;font-size:12px;color:var(--text-muted);line-height:1.6;" id="glycogenDxaCompare"></div>
-      <div class="chart-wrapper medium"><canvas id="glycogenChart"></canvas></div>
-      <div style="padding:8px 16px 4px;font-size:11px;color:var(--text-faint);">
-        Green ≥ 70% loaded · Amber 40–70% · Red &lt; 40% · ▲ = DXA scan date · Dashed purple line on weight chart = glyco-adjusted weight (relative to Jan 6 DXA glycogen level)
-      </div>
     </div>
-  </div>
+  </details>
 
   <!-- DAILY STEPS -->
-  <div class="section-title">Daily Activity — Steps</div>
-  <div class="stat-grid" id="stepStatCards" style="margin-bottom:12px;"></div>
-  <div class="chart-row full">
-    <div class="chart-card">
-      <button class="export-btn" data-chart="stepsChart">📸</button>
-      <div class="card-header"><h3>Daily Steps — bars colored green when ≥ 8k, amber line = 7-day avg</h3></div>
-      <div class="chart-wrapper medium"><canvas id="stepsChart"></canvas></div>
+  <details class="mobile-detail-shell" id="progressStepsShell" open>
+    <summary>Daily Activity &amp; Steps</summary>
+    <div class="section-title">Daily Activity — Steps</div>
+    <div class="stat-grid" id="stepStatCards" style="margin-bottom:12px;"></div>
+    <div class="chart-row full">
+      <div class="chart-card">
+        <button class="export-btn" data-chart="stepsChart">📸</button>
+        <div class="card-header"><h3>Daily Steps — bars colored green when ≥ 8k, amber line = 7-day avg</h3></div>
+        <div class="chart-wrapper medium"><canvas id="stepsChart"></canvas></div>
+      </div>
     </div>
-  </div>
-  <div id="stepsCorrelationInsight" style="margin:4px 0 16px;"></div>
+    <div id="stepsCorrelationInsight" style="margin:4px 0 16px;"></div>
+  </details>
 
   </div>
 
@@ -341,34 +352,37 @@
     </div>
   </div>
 
-  <div id="deficitLagInsight" style="margin:0 0 18px;"></div>
+  <details class="mobile-detail-shell" id="nutritionTrendShell" open>
+    <summary>Adherence &amp; Macro Trends</summary>
+    <div id="deficitLagInsight" style="margin:0 0 18px;"></div>
 
-  <!-- ROLLING ADHERENCE -->
-  <div class="chart-row full">
-    <div class="chart-card">
-      <div class="card-header"><h3>Rolling 7-Day Adherence Rate</h3></div>
-      <div class="chart-wrapper medium"><canvas id="adherenceChart"></canvas></div>
-    </div>
-  </div>
-
-  <!-- COMBINED MACRO CHART -->
-  <div class="chart-row full">
-    <div class="chart-card">
-      <button class="export-btn" data-chart="macroChart">📸</button>
-      <div class="card-header">
-        <h3 id="macroChartTitle">Daily Protein (g)</h3>
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-          <div class="metric-tabs">
-            <button class="mtab active" data-metric="protein">Protein</button>
-            <button class="mtab" data-metric="carbs">Carbs</button>
-            <button class="mtab" data-metric="fat">Fat</button>
-          </div>
-          <div id="macroToggles" class="month-toggles"></div>
-        </div>
+    <!-- ROLLING ADHERENCE -->
+    <div class="chart-row full">
+      <div class="chart-card">
+        <div class="card-header"><h3>Rolling 7-Day Adherence Rate</h3></div>
+        <div class="chart-wrapper medium"><canvas id="adherenceChart"></canvas></div>
       </div>
-      <div class="chart-wrapper tall"><canvas id="macroChart"></canvas></div>
     </div>
-  </div>
+
+    <!-- COMBINED MACRO CHART -->
+    <div class="chart-row full">
+      <div class="chart-card">
+        <button class="export-btn" data-chart="macroChart">📸</button>
+        <div class="card-header">
+          <h3 id="macroChartTitle">Daily Protein (g)</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <div class="metric-tabs">
+              <button class="mtab active" data-metric="protein">Protein</button>
+              <button class="mtab" data-metric="carbs">Carbs</button>
+              <button class="mtab" data-metric="fat">Fat</button>
+            </div>
+            <div id="macroToggles" class="month-toggles"></div>
+          </div>
+        </div>
+        <div class="chart-wrapper tall"><canvas id="macroChart"></canvas></div>
+      </div>
+    </div>
+  </details>
 
   <details class="advanced-shell" open>
     <summary>More Nutrition Analysis</summary>
@@ -437,42 +451,48 @@
     </div>
   </div>
 
-  <!-- Sleep Performance -->
-  <div class="chart-row full">
-    <div class="chart-card">
-      <button class="export-btn" data-chart="sleepPerfChart">📸</button>
-      <div class="card-header"><h3>Daily Sleep Performance %</h3></div>
-      <div class="chart-wrapper tall"><canvas id="sleepPerfChart"></canvas></div>
+  <details class="mobile-detail-shell" id="sleepTrendShell" open>
+    <summary>Sleep Trends</summary>
+    <!-- Sleep Performance -->
+    <div class="chart-row full">
+      <div class="chart-card">
+        <button class="export-btn" data-chart="sleepPerfChart">📸</button>
+        <div class="card-header"><h3>Daily Sleep Performance %</h3></div>
+        <div class="chart-wrapper tall"><canvas id="sleepPerfChart"></canvas></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Sleep Duration + Stages -->
-  <div class="chart-row two">
-    <div class="chart-card"><div class="card-header"><h3>Sleep Duration (hrs)</h3></div><div class="chart-wrapper medium"><canvas id="sleepDurChart"></canvas></div></div>
-    <div class="chart-card"><div class="card-header"><h3>Sleep Stages — Deep · REM · Light</h3></div><div class="chart-wrapper medium"><canvas id="sleepStagesChart"></canvas></div></div>
-  </div>
-
-  <!-- Sleep Debt -->
-  <div class="chart-row full">
-    <div class="chart-card">
-      <button class="export-btn" data-chart="sleepDebtChart">📸</button>
-      <div class="card-header"><h3>Cumulative Sleep Debt (vs 7h target)</h3></div>
-      <div class="chart-wrapper medium"><canvas id="sleepDebtChart"></canvas></div>
+    <!-- Sleep Duration + Stages -->
+    <div class="chart-row two">
+      <div class="chart-card"><div class="card-header"><h3>Sleep Duration (hrs)</h3></div><div class="chart-wrapper medium"><canvas id="sleepDurChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-header"><h3>Sleep Stages — Deep · REM · Light</h3></div><div class="chart-wrapper medium"><canvas id="sleepStagesChart"></canvas></div></div>
     </div>
-  </div>
 
-  <!-- Cross insights -->
-  <div class="section-title" id="sleepInsightSection" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
-  <div class="badge-row" id="sleepInsightBadges"></div>
-  <div id="recoveryBottleneckInsight" style="margin-top:8px;"></div>
-  <div id="macroSleepInsight" style="margin-top:8px;"></div>
-  <div id="alcoholReboundInsight" style="margin-top:8px;"></div>
-  <div id="bedtimeQuintileInsight" style="margin-top:8px;"></div>
+    <!-- Sleep Debt -->
+    <div class="chart-row full">
+      <div class="chart-card">
+        <button class="export-btn" data-chart="sleepDebtChart">📸</button>
+        <div class="card-header"><h3>Cumulative Sleep Debt (vs 7h target)</h3></div>
+        <div class="chart-wrapper medium"><canvas id="sleepDebtChart"></canvas></div>
+      </div>
+    </div>
+  </details>
 
-  <div class="chart-row two">
-    <div class="chart-card"><div class="card-header"><h3>Sleep Performance: Previous Night Drink vs Clean</h3></div><div class="chart-wrapper medium"><canvas id="drinkSleepChart"></canvas></div></div>
-    <div class="chart-card"><div class="card-header"><h3>Sleep Perf by Day of Week</h3></div><div class="chart-wrapper medium"><canvas id="dowChart"></canvas></div></div>
-  </div>
+  <details class="mobile-detail-shell" id="sleepInsightShell" open>
+    <summary>Sleep × Nutrition Insights</summary>
+    <!-- Cross insights -->
+    <div class="section-title" id="sleepInsightSection" style="margin-top:36px;">🔗 Sleep × Nutrition Insights</div>
+    <div class="badge-row" id="sleepInsightBadges"></div>
+    <div id="recoveryBottleneckInsight" style="margin-top:8px;"></div>
+    <div id="macroSleepInsight" style="margin-top:8px;"></div>
+    <div id="alcoholReboundInsight" style="margin-top:8px;"></div>
+    <div id="bedtimeQuintileInsight" style="margin-top:8px;"></div>
+
+    <div class="chart-row two">
+      <div class="chart-card"><div class="card-header"><h3>Sleep Performance: Previous Night Drink vs Clean</h3></div><div class="chart-wrapper medium"><canvas id="drinkSleepChart"></canvas></div></div>
+      <div class="chart-card"><div class="card-header"><h3>Sleep Perf by Day of Week</h3></div><div class="chart-wrapper medium"><canvas id="dowChart"></canvas></div></div>
+    </div>
+  </details>
   <details class="advanced-shell" open data-tab-section="sleep">
     <summary>More Sleep Analysis</summary>
     <div class="advanced-inner">
@@ -679,70 +699,6 @@
   </div>
   <div class="settings-group">
     <button class="hdr-btn" id="applySettings" style="width:100%;justify-content:center;">Apply & Rebuild Charts</button>
-  </div>
-</div>
-
-<!-- DATA ENTRY MODAL -->
-<div id="dataEntryOverlay"></div>
-<div id="dataEntryModal" style="display:none;">
-  <h2>➕ Add Data</h2>
-  <div class="de-msg" id="deMsg"></div>
-  <div class="de-tabs">
-    <button class="de-tab active" data-de="form">Quick Entry</button>
-    <button class="de-tab" data-de="csv">CSV Paste</button>
-    <button class="de-tab" data-de="file">File Import</button>
-  </div>
-  <div class="de-section active" id="deFormSection">
-    <div class="de-form-grid">
-      <div class="de-field"><label>Date</label><input type="date" id="deDate"></div>
-      <div class="de-field"><label>Calories</label><input type="number" id="deCal" placeholder="e.g. 1900"></div>
-      <div class="de-field"><label>Protein (g)</label><input type="number" id="dePro" placeholder="e.g. 180"></div>
-      <div class="de-field"><label>Carbs (g)</label><input type="number" id="deCarbs" placeholder="e.g. 120"></div>
-      <div class="de-field"><label>Fat (g)</label><input type="number" id="deFat" placeholder="e.g. 70"></div>
-      <div class="de-field"><label>Weight</label><input type="number" id="deWeight" step="0.1" placeholder="optional"></div>
-      <div class="de-field"><label>Lifting?</label><select id="deLifting"><option value="">No</option><option value="Y">Yes</option></select></div>
-      <div class="de-field"><label>Drinks</label><input type="text" id="deDrinks" placeholder="optional"></div>
-      <div class="de-field full"><label>Food Notes</label><input type="text" id="deNotes" placeholder="e.g. protein shake 2x, chicken bowl" style="width:100%;"></div>
-    </div>
-    <p style="font-size:11px;color:var(--text-faint);margin-bottom:6px;">Sleep data (optional):</p>
-    <div class="de-form-grid">
-      <div class="de-field"><label>Sleep Perf %</label><input type="number" id="deSleepPerf" placeholder="e.g. 72"></div>
-      <div class="de-field"><label>Sleep Hours</label><input type="number" id="deSleepHours" step="0.1" placeholder="e.g. 6.5"></div>
-      <div class="de-field"><label>Bedtime</label><input type="text" id="deBedtime" placeholder="e.g. 01:30 AM"></div>
-      <div class="de-field"><label>Deep Sleep (hrs)</label><input type="number" id="deDeep" step="0.1" placeholder="e.g. 1.4"></div>
-      <div class="de-field"><label>REM (hrs)</label><input type="number" id="deRem" step="0.1" placeholder="e.g. 1.1"></div>
-      <div class="de-field"><label>Light (hrs)</label><input type="number" id="deLight" step="0.1" placeholder="e.g. 3.5"></div>
-      <div class="de-field"><label>Efficiency %</label><input type="number" id="deEfficiency" placeholder="e.g. 88"></div>
-      <div class="de-field"><label>Resp Rate</label><input type="number" id="deResp" step="0.1" placeholder="e.g. 16.0"></div>
-    </div>
-  </div>
-  <div class="de-section" id="deCsvSection">
-    <div class="de-field full">
-      <label>Paste CSV (columns: date, protein, carbs, fat, calories, weight, lifting, drinks, notes)</label>
-      <textarea id="deCsvInput" placeholder="2026-03-19,180,120,70,1900,162.0,Y,,protein shake 2x&#10;2026-03-20,165,100,60,1750,,,,chicken bowl"></textarea>
-    </div>
-    <div class="de-preview" id="deCsvPreview"></div>
-  </div>
-  <div class="de-section" id="deFileSection">
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">Import from your tracking files. Accepts two formats:</p>
-    <div class="de-form-grid">
-      <div class="de-field">
-        <label>Macros (.xlsx)</label>
-        <p style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">Sheets named "[Month] Macros" with columns: date, protein, carbs, fat, calories, notes, lifting?, Drinks?, Weight</p>
-        <input type="file" id="deFileXlsx" accept=".xlsx,.xls" style="font-size:12px;">
-      </div>
-      <div class="de-field">
-        <label>Sleep (.csv)</label>
-        <p style="font-size:10px;color:var(--text-faint);margin-bottom:4px;">Whoop/sleep tracker export with: Cycle start time, Sleep performance %, Respiratory rate, durations, efficiency</p>
-        <input type="file" id="deFileCsv" accept=".csv" style="font-size:12px;">
-      </div>
-    </div>
-    <div class="de-preview" id="deFilePreview" style="margin-top:8px;"></div>
-    <p style="font-size:10px;color:var(--text-faint);margin-top:8px;">Tip: You can import both files at once. Existing entries for the same date will be replaced.</p>
-  </div>
-  <div class="de-actions">
-    <button class="de-cancel" id="deCancelBtn">Cancel</button>
-    <button class="de-save" id="deSaveBtn">Save Entry</button>
   </div>
 </div>
 

@@ -149,6 +149,10 @@ function isMobileViewport() {
   return window.matchMedia('(max-width: 900px)').matches;
 }
 
+function isCompactMobileViewport() {
+  return window.matchMedia('(max-width: 560px)').matches;
+}
+
 function attachChartZoomHandlers() {
   document.querySelectorAll('.chart-card canvas').forEach(canvas => {
     if (canvas.dataset.zoomBound === 'true') return;
@@ -628,6 +632,7 @@ function calcAxisBounds(values, padding = 1) {
 }
 
 function updateWeightChart(days) {
+  const compact = isCompactMobileViewport();
   const chart = allCharts.weightChart;
   const points = days.filter(d => d.weight).map(d => ({
     label: `${d.date.slice(5)} (${monthKey(d.date).slice(0, 3)})`,
@@ -660,7 +665,7 @@ function updateWeightChart(days) {
     }
     const rateText = `${lbsPerWeek < 0 ? '' : '+'}${weightValue(lbsPerWeek)} ${weightUnit()}/week`;
     const weightChartHeader = document.querySelector('#weightChart')?.closest('.chart-card')?.querySelector('h3');
-    if (weightChartHeader) weightChartHeader.textContent = `Weight — 7d avg, regression (${rateText})`;
+    if (weightChartHeader) weightChartHeader.textContent = compact ? `Weight — 7d avg (${rateText})` : `Weight — 7d avg, regression (${rateText})`;
   }
 
   // Update glyco-adjusted line (what would weight be at Jan 6 glycogen level?)
@@ -676,7 +681,10 @@ function updateWeightChart(days) {
   } else {
     glycoDs.data = glycoAdjData;
   }
-  chart.data.datasets[0].pointRadius = points.map(p => drinkDates.has(p.date) || liftDates.has(p.date) ? 7 : 5);
+  chart.data.datasets[0].pointRadius = points.map(p => {
+    const eventPoint = drinkDates.has(p.date) || liftDates.has(p.date);
+    return compact ? (eventPoint ? 5 : 3) : (eventPoint ? 7 : 5);
+  });
   chart.data.datasets[0].pointStyle = points.map(p => drinkDates.has(p.date) ? 'triangle' : liftDates.has(p.date) ? 'rectRot' : 'circle');
   chart.data.datasets[0].pointBackgroundColor = points.map(p => {
     if (drinkDates.has(p.date)) return EVENT_COLORS.drink;
@@ -690,6 +698,10 @@ function updateWeightChart(days) {
     if (elements.length && elements[0].datasetIndex === 0) openPanel(points[elements[0].index].date);
   };
   const bounds = calcAxisBounds(vals, useMetric ? 0.8 : 2);
+  chart.options.plugins.legend.display = !compact;
+  chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
+  chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
+  chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 0) return ` ${weightLabel(points[ctx.dataIndex].value)}`;
     if (ctx.dataset.label === '7-day Avg') return ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
@@ -708,6 +720,7 @@ function updateWeightChart(days) {
 }
 
 function updateAdjustedWeightViewChart(days) {
+  const compact = isCompactMobileViewport();
   const chart = allCharts.gpWeightChart;
   if (!chart) return;
   const points = days
@@ -742,8 +755,11 @@ function updateAdjustedWeightViewChart(days) {
   chart.data.datasets[2].data = points.map(p => p.delta);
   chart.data.datasets[2].backgroundColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
   chart.data.datasets[2].borderColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
+  chart.data.datasets[0].pointRadius = compact ? 1.5 : 2.5;
+  chart.data.datasets[0].pointHoverRadius = compact ? 3.5 : 5;
   const weightBounds = calcAxisBounds([...points.map(p => p.actual), ...points.map(p => p.adjusted)], useMetric ? 0.8 : 2);
   const deltaBounds = calcAxisBounds(points.map(p => p.delta), useMetric ? 0.3 : 0.8);
+  chart.options.plugins.legend.display = !compact;
   chart.options.plugins.tooltip.callbacks.title = ctx => points[ctx[0].dataIndex]?.date || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 0) return ` Actual: ${ctx.parsed.y} ${weightUnit()}`;
@@ -763,10 +779,14 @@ function updateAdjustedWeightViewChart(days) {
   chart.options.scales.y.max = Math.ceil(weightBounds.max);
   chart.options.scales.y.ticks.stepSize = useMetric ? 1 : 2;
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
+  chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
+  chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
+  chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   chart.options.scales.y2.min = Math.floor(deltaBounds.min);
   chart.options.scales.y2.max = Math.ceil(deltaBounds.max);
   chart.options.scales.y2.ticks.stepSize = useMetric ? 0.5 : 1;
   chart.options.scales.y2.ticks.callback = v => `${v > 0 ? '+' : ''}${v} ${weightUnit()}`;
+  chart.options.scales.y2.title.display = !compact;
   chart.update();
   if (noteEl) {
     const latest = points[points.length - 1];
@@ -776,6 +796,7 @@ function updateAdjustedWeightViewChart(days) {
 }
 
 function updateGlycogenChart(days) {
+  const compact = isCompactMobileViewport();
   const chart = allCharts.glycogenChart;
   if (!chart) return;
   // Recompute glycogen model for the currently filtered days
@@ -792,7 +813,7 @@ function updateGlycogenChart(days) {
   chart.data.datasets[0].data = states.map(s => s.loadPct);
   chart.data.datasets[0].pointBackgroundColor = loadColors;
   chart.data.datasets[0].backgroundColor = loadColors;
-  chart.data.datasets[0].pointRadius = states.map(s => dxaDates.includes(s.date) ? 8 : 2);
+  chart.data.datasets[0].pointRadius = states.map(s => dxaDates.includes(s.date) ? (compact ? 5.5 : 8) : (compact ? 1.5 : 2));
   chart.data.datasets[0].pointStyle = states.map(s => dxaDates.includes(s.date) ? 'triangle' : 'circle');
   chart.options.plugins.tooltip.callbacks.title = ctx => states[ctx[0].dataIndex]?.date || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
@@ -816,6 +837,7 @@ function updateGlycogenChart(days) {
 }
 
 function updateBodyCompChart(days) {
+  const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days);
   const fatVals = bodyComp.map(d => weightValue(d.fat));
@@ -830,13 +852,18 @@ function updateBodyCompChart(days) {
   chart.data.datasets[1].pointHoverRadius = 0;
   chart.data.datasets[1].pointHitRadius = 0;
   chart.data.datasets[2].data = fatVals;
-  chart.data.datasets[2].pointRadius = bodyComp.map(d => d.measured ? 0 : 4);
+  chart.data.datasets[2].pointRadius = bodyComp.map(d => d.measured ? 0 : (compact ? 2.5 : 4));
   chart.data.datasets[3].data = leanVals;
-  chart.data.datasets[3].pointRadius = bodyComp.map(d => d.measured ? 0 : 3);
+  chart.data.datasets[3].pointRadius = bodyComp.map(d => d.measured ? 0 : (compact ? 2 : 3));
   chart.data.datasets[4].data = bodyComp.map(d => d.measured ? weightValue(d.fat) : null);
   chart.data.datasets[5].data = bodyComp.map(d => d.measured ? weightValue(d.lean) : null);
+  chart.data.datasets[4].pointRadius = compact ? 4.5 : 7;
+  chart.data.datasets[4].pointHoverRadius = compact ? 5.5 : 8;
+  chart.data.datasets[5].pointRadius = compact ? 4.5 : 7;
+  chart.data.datasets[5].pointHoverRadius = compact ? 5.5 : 8;
   const fatBounds = calcAxisBounds([...fatVals, ...fatHighVals.filter(v => v != null)], useMetric ? 1 : 2);
   const leanBounds = calcAxisBounds(leanVals, useMetric ? 1 : 1);
+  chart.options.plugins.legend.display = !compact;
   chart.options.plugins.tooltip.callbacks.title = ctx => bodyComp[ctx[0].dataIndex]?.date || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const d = bodyComp[ctx.dataIndex];
@@ -868,17 +895,24 @@ function updateBodyCompChart(days) {
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.scales.y.min = Math.floor(fatBounds.min);
   chart.options.scales.y.max = Math.ceil(fatBounds.max);
+  chart.options.scales.y.title.display = !compact;
   chart.options.scales.y2.title.text = `Lean Mass (${weightUnit()})`;
   chart.options.scales.y2.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.scales.y2.min = Math.floor(leanBounds.min);
   chart.options.scales.y2.max = Math.ceil(leanBounds.max);
+  chart.options.scales.y2.title.display = !compact;
+  chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 16;
+  chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
+  chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   chart.update();
 
   const latestEstimated = [...bodyComp].reverse().find(d => !d.measured) || [...bodyComp].reverse().find(Boolean);
   const bodyCompRangeNote = document.getElementById('bodyCompRangeNote');
   if (bodyCompRangeNote) {
     bodyCompRangeNote.textContent = latestEstimated
-      ? `Latest estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
+      ? compact
+        ? `Latest est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · likely range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
+        : `Latest estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
       : 'Latest estimated body fat range will appear here once the selected range has weigh-ins.';
   }
 }
@@ -909,6 +943,7 @@ function updateCaloriesChart(months) {
 }
 
 function updateWaterfallChart(days) {
+  const compact = isCompactMobileViewport();
   const chart = allCharts.waterfallChart;
   const baseTDEE = workingTDEEProfile(getAnalyticsDays()).maintenance;
   let cum = 0;
@@ -921,8 +956,9 @@ function updateWaterfallChart(days) {
   chart.data.datasets[0].data = view.map(d => energyValue(d.cum));
   chart.data.datasets[0].backgroundColor = view.map(d => d.cum >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
   chart.data.datasets[1].data = view.map(d => energyValue(d.delta));
-  chart.data.datasets[1].pointRadius = view.map(d => Math.abs(d.delta) > 800 ? 5 : 3);
+  chart.data.datasets[1].pointRadius = view.map(d => compact ? (Math.abs(d.delta) > 800 ? 3.5 : 1.8) : (Math.abs(d.delta) > 800 ? 5 : 3));
   chart.data.datasets[1].pointBackgroundColor = view.map(d => d.delta >= 0 ? '#34d399' : '#f87171');
+  chart.options.plugins.legend.display = !compact;
   chart.options.onClick = (evt, elements) => { if (elements.length) openPanel(view[elements[0].index].date); };
   chart.options.plugins.tooltip.callbacks.title = ctx => view[ctx[0].dataIndex]?.date || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
@@ -938,6 +974,11 @@ function updateWaterfallChart(days) {
   chart.options.scales.y.ticks.callback = v => `${v.toLocaleString()} ${energyUnit()}`;
   chart.options.scales.y2.title.text = `Daily (${energyUnit()})`;
   chart.options.scales.y2.ticks.callback = v => `${v > 0 ? '+' : ''}${v.toLocaleString()} ${energyUnit()}`;
+  chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
+  chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
+  chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
+  chart.options.scales.y.title.display = !compact;
+  chart.options.scales.y2.title.display = !compact;
   chart.update();
 }
 
@@ -1161,13 +1202,18 @@ function updateFoodFreqChart(days) {
 }
 
 function updateSleepCharts(days) {
+  const compact = isCompactMobileViewport();
   const recoveryChart = allCharts.recoveryChart;
   const scores = days.map(d => recoveryScore(d));
   recoveryChart.data.labels = days.map(d => d.date.slice(5));
   recoveryChart.data.datasets[0].data = scores;
-  recoveryChart.data.datasets[0].pointRadius = scores.map(s => s < 30 || s > 75 ? 6 : 3);
+  recoveryChart.data.datasets[0].pointRadius = scores.map(s => compact ? (s < 30 || s > 75 ? 4.5 : 2) : (s < 30 || s > 75 ? 6 : 3));
   recoveryChart.data.datasets[0].pointBackgroundColor = scores.map(s => perfColor(s));
   recoveryChart.data.datasets[1].data = rollingAvg(scores, 7);
+  recoveryChart.options.plugins.legend.display = !compact;
+  recoveryChart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
+  recoveryChart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
+  recoveryChart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   recoveryChart.options.onClick = (evt, elements) => { if (elements.length) openPanel(days[elements[0].index].date); };
   recoveryChart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
   recoveryChart.options.plugins.tooltip.callbacks.label = ctx => {
@@ -1387,6 +1433,7 @@ function renderStepsCorrelations(days) {
 }
 
 function refreshDashboard() {
+  const compact = isCompactMobileViewport();
   let usingFallback = false;
   let filteredDays = getFilteredDays();
   let filteredSleep = getFilteredSleep();
@@ -1435,9 +1482,13 @@ function refreshDashboard() {
           low: Math.min(overallProfile.rangeLow, cuttingProfile.rangeLow),
           high: Math.max(overallProfile.rangeHigh, cuttingProfile.rangeHigh)
         };
-    document.getElementById('waterfallTitle').textContent = usingBayes
-      ? `Cumulative Calorie Deficit (Bayesian TDEE: ~${energyLabel(overallProfile.maintenance)}, 68% range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)}, cutting-phase fallback: ~${energyLabel(cuttingProfile.maintenance)})`
-      : `Cumulative Calorie Deficit (TDEE: ~${energyLabel(overallProfile.maintenance)}, cutting phase: ~${energyLabel(cuttingProfile.maintenance)}, range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)})`;
+    document.getElementById('waterfallTitle').textContent = compact
+      ? (usingBayes
+        ? `Cumulative Calorie Deficit · Bayes TDEE ~${energyLabel(overallProfile.maintenance)}`
+        : `Cumulative Calorie Deficit · TDEE ~${energyLabel(overallProfile.maintenance)}`)
+      : (usingBayes
+        ? `Cumulative Calorie Deficit (Bayesian TDEE: ~${energyLabel(overallProfile.maintenance)}, 68% range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)}, cutting-phase fallback: ~${energyLabel(cuttingProfile.maintenance)})`
+        : `Cumulative Calorie Deficit (TDEE: ~${energyLabel(overallProfile.maintenance)}, cutting phase: ~${energyLabel(cuttingProfile.maintenance)}, range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)})`);
   }
   safe(() => updateMacroChart(months), 'Macro Chart');
   safe(() => updateMacroStackedChart(filteredDays), 'Macro Stacked Chart');
@@ -1451,6 +1502,10 @@ function refreshDashboard() {
   safe(() => updateFoodFreqChart(filteredDays), 'Food Freq Chart');
   safe(() => updateSleepCharts(filteredSleep), 'Sleep Charts');
   safe(() => updateInsightCharts(filteredSleep), 'Insight Charts');
+  const bodyCompTitle = document.querySelector('#bodyCompChart')?.closest('.chart-card')?.querySelector('h3');
+  if (bodyCompTitle) bodyCompTitle.textContent = compact ? 'DXA Body Composition Estimate' : 'DXA-Anchored Body Composition Estimate (Fat vs Lean Mass)';
+  const recoveryTitle = document.querySelector('#recoveryChart')?.closest('.chart-card')?.querySelector('h3');
+  if (recoveryTitle) recoveryTitle.textContent = compact ? '💪 Daily Recovery Score' : '💪 Daily Recovery Score (composite: sleep + efficiency + resp + drink penalty)';
   attachChartZoomHandlers();
   const scenarioDefaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
   if (!scenarioFormInitialized) {
@@ -1504,390 +1559,15 @@ document.querySelectorAll('.mobile-detail-shell').forEach(shell => {
     shell.dataset.userToggled = 'true';
   });
 });
-window.addEventListener('resize', () => syncResponsiveLayout());
+let _responsiveRefresh = null;
+window.addEventListener('resize', () => {
+  syncResponsiveLayout();
+  clearTimeout(_responsiveRefresh);
+  _responsiveRefresh = setTimeout(() => refreshDashboard(), 120);
+});
 window.addEventListener('scroll', () => {
   document.getElementById('backToTopBtn').classList.toggle('show', window.scrollY > 640);
 });
-
-// =====================================================================
-// DATA ENTRY
-// =====================================================================
-const DATA_STORAGE_KEY = 'macros_dashboard_v4_custom_data';
-
-function loadCustomData() {
-  try { return JSON.parse(localStorage.getItem(DATA_STORAGE_KEY) || '{"macro":[],"sleep":[]}'); }
-  catch { return { macro: [], sleep: [] }; }
-}
-
-function saveCustomData(cd) {
-  localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(cd));
-}
-
-function injectCustomData() {
-  const cd = loadCustomData();
-  const hasCustomData = !!(cd.macro.length || cd.sleep.length);
-  cd.macro.forEach(entry => {
-    const month = monthKey(entry.date);
-    if (!data[month].find(d => d.date === entry.date)) {
-      data[month].push(entry);
-      data[month].sort((a, b) => a.date.localeCompare(b.date));
-    }
-  });
-  cd.sleep.forEach(entry => {
-    if (!sleepData.find(d => d.date === entry.date)) {
-      sleepData.push(entry);
-      sleepData.sort((a, b) => a.date.localeCompare(b.date));
-    }
-  });
-  // Rebuild derived structures
-  rebuildDerivedData({ invalidateBayes: hasCustomData });
-}
-
-function rebuildDerivedData({ invalidateBayes = false } = {}) {
-  allDays.length = 0;
-  ACTIVE_MONTHS.forEach(m => data[m.key].forEach(d => allDays.push(d)));
-  allDates.length = 0;
-  allDays.forEach(d => allDates.push(d.date));
-  Object.keys(macroByDate).forEach(k => delete macroByDate[k]);
-  allDays.forEach(d => macroByDate[d.date] = d);
-  drinkDates.clear();
-  liftDates.clear();
-  allDays.forEach(d => { if (d.drinks) drinkDates.add(d.date); if (d.lifting === 'Y') liftDates.add(d.date); });
-  clearAnalyticsCaches();
-  if (invalidateBayes && window.dashboardData?.bayesian) delete window.dashboardData.bayesian;
-  // Update range slider max
-  const rangeStartEl = document.getElementById('rangeStart');
-  const rangeEndEl = document.getElementById('rangeEnd');
-  const maxIdx = maxAnalyticsIndex();
-  if (rangeStartEl) rangeStartEl.max = maxIdx;
-  if (rangeEndEl) { rangeEndEl.max = maxIdx; rangeEndEl.value = maxIdx; }
-  rangeEndIdx = maxIdx;
-}
-
-function parseBedtimeHour(bedtime) {
-  const m = bedtime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (!m) return 2;
-  let hour = parseInt(m[1], 10) % 12;
-  if (m[3].toUpperCase() === 'PM') hour += 12;
-  return hour + parseInt(m[2], 10) / 60;
-}
-
-function openDataEntry() {
-  document.getElementById('dataEntryModal').style.display = '';
-  document.getElementById('dataEntryOverlay').classList.add('show');
-  const today = new Date().toISOString().slice(0, 10);
-  document.getElementById('deDate').value = today;
-  document.getElementById('deMsg').className = 'de-msg';
-  document.getElementById('deMsg').textContent = '';
-}
-
-function closeDataEntry() {
-  document.getElementById('dataEntryModal').style.display = 'none';
-  document.getElementById('dataEntryOverlay').classList.remove('show');
-}
-
-document.getElementById('dataEntryBtn').addEventListener('click', openDataEntry);
-document.getElementById('deCancelBtn').addEventListener('click', closeDataEntry);
-document.getElementById('dataEntryOverlay').addEventListener('click', closeDataEntry);
-
-document.querySelectorAll('.de-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.de-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.de-section').forEach(s => s.classList.remove('active'));
-    tab.classList.add('active');
-    const sectionMap = { form: 'deFormSection', csv: 'deCsvSection', file: 'deFileSection' };
-    document.getElementById(sectionMap[tab.dataset.de]).classList.add('active');
-    const labelMap = { form: 'Save Entry', csv: 'Import CSV', file: 'Import Files' };
-    document.getElementById('deSaveBtn').textContent = labelMap[tab.dataset.de];
-  });
-});
-
-document.getElementById('deCsvInput').addEventListener('input', () => {
-  const lines = document.getElementById('deCsvInput').value.trim().split('\n').filter(Boolean);
-  if (!lines.length) { document.getElementById('deCsvPreview').innerHTML = ''; return; }
-  const cols = ['date','protein','carbs','fat','calories','weight','lifting','drinks','notes'];
-  let html = '<table><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
-  lines.slice(0, 10).forEach(line => {
-    const parts = line.split(',').map(s => s.trim());
-    html += '<tr>' + cols.map((_, i) => `<td>${parts[i] || ''}</td>`).join('') + '</tr>';
-  });
-  if (lines.length > 10) html += `<tr><td colspan="${cols.length}" style="text-align:center;">...and ${lines.length - 10} more rows</td></tr>`;
-  html += '</table>';
-  document.getElementById('deCsvPreview').innerHTML = html;
-});
-
-// ===== File import helpers =====
-function parseXlsxMacros(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
-  const macroEntries = [];
-  // Look for sheets ending in "Macros"
-  const macroSheets = wb.SheetNames.filter(n => /macros/i.test(n));
-  macroSheets.forEach(sheetName => {
-    const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-    rows.forEach(row => {
-      // First column is the date (unnamed or various names)
-      const dateKey = Object.keys(row).find(k => /unnamed|date/i.test(k)) || Object.keys(row)[0];
-      let dateVal = row[dateKey];
-      if (!dateVal) return;
-      // Handle Excel date objects
-      if (dateVal instanceof Date) {
-        dateVal = dateVal.toISOString().slice(0, 10);
-      } else if (typeof dateVal === 'number') {
-        // Excel serial date
-        const d = new Date((dateVal - 25569) * 86400 * 1000);
-        dateVal = d.toISOString().slice(0, 10);
-      } else {
-        dateVal = String(dateVal).slice(0, 10);
-      }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return;
-
-      const protein = +row.protein || 0;
-      const carbs = +row.carbs || 0;
-      const fat = +row.fat || 0;
-      const calories = +row.calories || 0;
-      if (!calories && !protein) return; // skip empty rows
-
-      const liftKey = Object.keys(row).find(k => /lifting/i.test(k));
-      const drinkKey = Object.keys(row).find(k => /drink/i.test(k));
-      const weightKey = Object.keys(row).find(k => /weight/i.test(k));
-      const notesKey = Object.keys(row).find(k => /notes/i.test(k) && !/unnamed/i.test(k));
-
-      macroEntries.push({
-        date: dateVal,
-        protein, carbs, fat, calories,
-        weight: weightKey && row[weightKey] != null && row[weightKey] !== '' ? +row[weightKey] : null,
-        lifting: liftKey && row[liftKey] && String(row[liftKey]).toUpperCase() === 'Y' ? 'Y' : null,
-        drinks: drinkKey && row[drinkKey] ? String(row[drinkKey]) : null,
-        notes: notesKey && row[notesKey] ? String(row[notesKey]) : ''
-      });
-    });
-  });
-  return macroEntries;
-}
-
-function parseSleepCsv(csvText) {
-  const lines = csvText.trim().split('\n');
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.trim());
-
-  const colIdx = (pattern) => headers.findIndex(h => pattern.test(h));
-  const iCycleStart = colIdx(/cycle start time/i);
-  const iPerf = colIdx(/sleep performance/i);
-  const iResp = colIdx(/respiratory rate/i);
-  const iAsleep = colIdx(/asleep duration/i);
-  const iLight = colIdx(/light sleep/i);
-  const iDeep = colIdx(/deep.*duration/i);
-  const iRem = colIdx(/rem.*duration/i);
-  const iEfficiency = colIdx(/sleep efficiency/i);
-  const iNap = colIdx(/nap/i);
-
-  const entries = [];
-  const seen = new Set();
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map(s => s.trim());
-    // Skip naps
-    if (iNap >= 0 && cols[iNap] && cols[iNap].toLowerCase() === 'true') continue;
-
-    const cycleStart = cols[iCycleStart];
-    if (!cycleStart) continue;
-    // Extract date from cycle start time (format: 2026-03-17 23:57:32)
-    const dateStr = cycleStart.slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-    // Use only one sleep entry per date (the first/most recent one in the file)
-    if (seen.has(dateStr)) continue;
-    seen.add(dateStr);
-
-    const perf = iPerf >= 0 ? +cols[iPerf] || 0 : 0;
-    const resp = iResp >= 0 ? +cols[iResp] || 16 : 16;
-    const asleepMin = iAsleep >= 0 ? +cols[iAsleep] || 0 : 0;
-    const deepMin = iDeep >= 0 ? +cols[iDeep] || 0 : 0;
-    const remMin = iRem >= 0 ? +cols[iRem] || 0 : 0;
-    const lightMin = iLight >= 0 ? +cols[iLight] || 0 : 0;
-    const efficiency = iEfficiency >= 0 ? +cols[iEfficiency] || 85 : 85;
-
-    // Derive bedtime from cycle start time
-    const timeMatch = cycleStart.match(/(\d{2}):(\d{2}):\d{2}$/);
-    let bedtimeStr = '02:00 AM';
-    let bedtimeHour = 2;
-    if (timeMatch) {
-      let h = +timeMatch[1];
-      const m = +timeMatch[2];
-      bedtimeHour = h + m / 60;
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      bedtimeStr = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
-    }
-
-    entries.push({
-      date: dateStr,
-      perf,
-      hours: +(asleepMin / 60).toFixed(2),
-      bedtime: bedtimeStr,
-      bedtime_hour: bedtimeHour,
-      deep: +(deepMin / 60).toFixed(2),
-      rem: +(remMin / 60).toFixed(2),
-      light: +(lightMin / 60).toFixed(2),
-      efficiency,
-      resp
-    });
-  }
-  return entries;
-}
-
-// File preview on select
-['deFileXlsx', 'deFileCsv'].forEach(id => {
-  document.getElementById(id)?.addEventListener('change', () => {
-    const xlsxFile = document.getElementById('deFileXlsx').files[0];
-    const csvFile = document.getElementById('deFileCsv').files[0];
-    const preview = document.getElementById('deFilePreview');
-    const parts = [];
-    if (xlsxFile) parts.push(`Macros: ${xlsxFile.name} (${(xlsxFile.size / 1024).toFixed(0)} KB)`);
-    if (csvFile) parts.push(`Sleep: ${csvFile.name} (${(csvFile.size / 1024).toFixed(0)} KB)`);
-    preview.innerHTML = parts.length ? parts.map(p => `<div style="margin-bottom:4px;">${p}</div>`).join('') : '';
-  });
-});
-
-document.getElementById('deSaveBtn').addEventListener('click', () => {
-  const msgEl = document.getElementById('deMsg');
-  const activeTab = document.querySelector('.de-tab.active').dataset.de;
-  const cd = loadCustomData();
-
-  if (activeTab === 'file') {
-    // ===== File Import Mode =====
-    const xlsxFile = document.getElementById('deFileXlsx').files[0];
-    const csvFile = document.getElementById('deFileCsv').files[0];
-    if (!xlsxFile && !csvFile) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Select at least one file.'; return; }
-
-    msgEl.className = 'de-msg'; msgEl.textContent = '';
-    const promises = [];
-    let macroCount = 0, sleepCount = 0;
-
-    if (xlsxFile) {
-      promises.push(new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const entries = parseXlsxMacros(e.target.result);
-            entries.forEach(entry => {
-              cd.macro = cd.macro.filter(d => d.date !== entry.date);
-              cd.macro.push(entry);
-              macroCount++;
-            });
-            resolve();
-          } catch (err) { reject(err); }
-        };
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(xlsxFile);
-      }));
-    }
-
-    if (csvFile) {
-      promises.push(new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const entries = parseSleepCsv(e.target.result);
-            entries.forEach(entry => {
-              cd.sleep = cd.sleep.filter(d => d.date !== entry.date);
-              cd.sleep.push(entry);
-              sleepCount++;
-            });
-            resolve();
-          } catch (err) { reject(err); }
-        };
-        reader.onerror = reject;
-        reader.readAsText(csvFile);
-      }));
-    }
-
-    Promise.all(promises).then(() => {
-      saveCustomData(cd);
-      injectCustomData();
-      updateRangeLabels();
-      refreshDashboard();
-      const parts = [];
-      if (macroCount) parts.push(`${macroCount} macro entries`);
-      if (sleepCount) parts.push(`${sleepCount} sleep entries`);
-      msgEl.className = 'de-msg success';
-      msgEl.textContent = `Imported ${parts.join(' and ')}. Dashboard refreshed.`;
-      // Clear file inputs
-      document.getElementById('deFileXlsx').value = '';
-      document.getElementById('deFileCsv').value = '';
-      document.getElementById('deFilePreview').innerHTML = '';
-    }).catch(err => {
-      msgEl.className = 'de-msg error';
-      msgEl.textContent = `Import error: ${err.message}`;
-    });
-
-  } else if (activeTab === 'csv') {
-    const lines = document.getElementById('deCsvInput').value.trim().split('\n').filter(Boolean);
-    if (!lines.length) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Paste CSV data first.'; return; }
-    let added = 0;
-    lines.forEach(line => {
-      const p = line.split(',').map(s => s.trim());
-      if (!p[0] || !p[0].match(/^\d{4}-\d{2}-\d{2}$/)) return;
-      const entry = {
-        date: p[0], protein: +p[1] || 0, carbs: +p[2] || 0, fat: +p[3] || 0,
-        calories: +p[4] || 0, weight: p[5] ? +p[5] : null,
-        lifting: p[6] === 'Y' ? 'Y' : null, drinks: p[7] || null, notes: p[8] || ''
-      };
-      cd.macro = cd.macro.filter(d => d.date !== entry.date);
-      cd.macro.push(entry);
-      added++;
-    });
-    saveCustomData(cd);
-    injectCustomData();
-    updateRangeLabels();
-    refreshDashboard();
-    msgEl.className = 'de-msg success';
-    msgEl.textContent = `Imported ${added} entries. Dashboard refreshed.`;
-  } else {
-    const date = document.getElementById('deDate').value;
-    const cal = +document.getElementById('deCal').value;
-    if (!date || !cal) { msgEl.className = 'de-msg error'; msgEl.textContent = 'Date and calories are required.'; return; }
-    const entry = {
-      date, protein: +document.getElementById('dePro').value || 0,
-      carbs: +document.getElementById('deCarbs').value || 0,
-      fat: +document.getElementById('deFat').value || 0, calories: cal,
-      weight: document.getElementById('deWeight').value ? +document.getElementById('deWeight').value : null,
-      lifting: document.getElementById('deLifting').value || null,
-      drinks: document.getElementById('deDrinks').value || null,
-      notes: document.getElementById('deNotes').value || ''
-    };
-    cd.macro = cd.macro.filter(d => d.date !== date);
-    cd.macro.push(entry);
-
-    // Sleep data
-    const sleepPerf = document.getElementById('deSleepPerf').value;
-    if (sleepPerf) {
-      const bedtime = document.getElementById('deBedtime').value || '02:00 AM';
-      const sleepEntry = {
-        date, perf: +sleepPerf,
-        hours: +document.getElementById('deSleepHours').value || 0,
-        bedtime,
-        bedtime_hour: parseBedtimeHour(bedtime),
-        deep: +document.getElementById('deDeep').value || 0,
-        rem: +document.getElementById('deRem').value || 0,
-        light: +document.getElementById('deLight').value || 0,
-        efficiency: +document.getElementById('deEfficiency').value || 85,
-        resp: +document.getElementById('deResp').value || 16
-      };
-      cd.sleep = cd.sleep.filter(d => d.date !== date);
-      cd.sleep.push(sleepEntry);
-    }
-    saveCustomData(cd);
-    injectCustomData();
-    updateRangeLabels();
-    refreshDashboard();
-    msgEl.className = 'de-msg success';
-    msgEl.textContent = `Saved ${date}. Dashboard refreshed.`;
-  }
-});
-
-// Load custom data on startup
-injectCustomData();
 
 refreshDashboard();
 console.log('Dashboard v4 loaded with decision-support analysis and live filters.');
