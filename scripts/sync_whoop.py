@@ -2,22 +2,25 @@
 """
 Sync WHOOP sleep data into js/data.js.
 
-Reads WHOOP_REFRESH_TOKEN from the environment, fetches sleep records via
-the WHOOP v2 API, maps them to the dashboard schema, and overwrites the
-sleepData array in js/data.js.  After a successful token refresh the new
-refresh token is written back to the WHOOP_REFRESH_TOKEN GitHub Actions
-secret so rotation is fully automatic.
+Reads WHOOP_REFRESH_TOKEN from the environment (or .env.local for local dev),
+fetches sleep records via the WHOOP v2 API, maps them to the dashboard schema,
+and overwrites the sleepData array in js/data.js.  After a successful token
+refresh the new refresh token is persisted automatically:
+  - In CI (GitHub Actions): written back to the WHOOP_REFRESH_TOKEN secret
+  - Locally: written back to .env.local in the project root
 
-Required GitHub Actions secrets:
+Required credentials (GitHub Actions secrets or .env.local):
   WHOOP_CLIENT_ID      - WHOOP app client ID
   WHOOP_CLIENT_SECRET  - WHOOP app client secret
   WHOOP_REFRESH_TOKEN  - current refresh token (auto-rotated each run)
+
+Required only in CI (for GitHub Secrets rotation):
   GH_PAT               - GitHub PAT with repo + secrets:write scopes
-  GH_REPO              - "owner/repo"  e.g. "dicksonluong/macros-dashboard"
+  GH_REPO              - "owner/repo"  e.g. "dlman/macros-dashboard"
 
 Usage:
-  python scripts/sync_whoop.py
-  python scripts/sync_whoop.py --dry-run
+  python scripts/sync_whoop.py            # works locally with .env.local
+  python scripts/sync_whoop.py --dry-run  # preview without writing
 """
 
 from __future__ import annotations
@@ -49,6 +52,51 @@ DEFAULT_TIMEZONE = "America/New_York"
 
 ROOT         = Path(__file__).resolve().parents[1]
 DATA_JS_PATH = ROOT / "js" / "data.js"
+ENV_LOCAL    = ROOT / ".env.local"
+
+
+# ---------------------------------------------------------------------------
+# Local dev: .env.local loader
+# ---------------------------------------------------------------------------
+
+def load_env_local() -> None:
+    """
+    Load KEY=VALUE pairs from .env.local into os.environ (without overwriting
+    values already set by the shell or CI).  Called once at startup so the
+    script works identically whether run via GitHub Actions or locally.
+    """
+    if not ENV_LOCAL.exists():
+        return
+    with ENV_LOCAL.open() as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+
+
+def persist_token_locally(new_token: str) -> None:
+    """
+    Write the rotated WHOOP_REFRESH_TOKEN back to .env.local so subsequent
+    local runs use the fresh token automatically.
+    """
+    lines: list[str] = []
+    replaced = False
+    if ENV_LOCAL.exists():
+        for raw in ENV_LOCAL.read_text().splitlines():
+            if raw.startswith("WHOOP_REFRESH_TOKEN="):
+                lines.append(f"WHOOP_REFRESH_TOKEN={new_token}")
+                replaced = True
+            else:
+                lines.append(raw)
+    if not replaced:
+        lines.append(f"WHOOP_REFRESH_TOKEN={new_token}")
+    ENV_LOCAL.write_text("\n".join(lines) + "\n")
+    print(f"  ✓ Rotated WHOOP_REFRESH_TOKEN written to .env.local")
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +381,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Print what would change without writing")
     args = parser.parse_args()
 
+    # ── Load .env.local for local dev (no-op in CI where secrets are injected) ─
+    load_env_local()
+
     # ── Read secrets from environment ────────────────────────────────────────
     def require_env(name: str) -> str:
         v = os.environ.get(name, "").strip()
@@ -340,11 +391,22 @@ def main() -> None:
             sys.exit(f"Missing required environment variable: {name}")
         return v
 
+    def optional_env(name: str) -> str:
+        return os.environ.get(name, "").strip()
+
     client_id     = require_env("WHOOP_CLIENT_ID")
     client_secret = require_env("WHOOP_CLIENT_SECRET")
     refresh_token = require_env("WHOOP_REFRESH_TOKEN")
-    gh_pat        = require_env("GH_PAT")
-    gh_repo       = require_env("GH_REPO")
+    gh_pat        = optional_env("GH_PAT")
+    gh_repo       = optional_env("GH_REPO")
+
+    # Detect local vs CI mode
+    is_local = not (gh_pat and gh_repo)
+    if is_local:
+        print("Running in LOCAL mode — rotated tokens will be saved to .env.local")
+    else:
+        print(f"Running in CI mode — rotated tokens will update GitHub secret ({gh_repo})")
+
     whoop_timezone = os.environ.get("WHOOP_TIMEZONE", DEFAULT_TIMEZONE).strip() or DEFAULT_TIMEZONE
     tzinfo = _parse_timezone(whoop_timezone)
     print(f"Using WHOOP timezone: {whoop_timezone}")
@@ -362,11 +424,18 @@ def main() -> None:
 
     # ── Persist the rotated refresh token ────────────────────────────────────
     if new_refresh_token != refresh_token:
-        print("Refresh token rotated — updating GitHub secret …")
-        if not args.dry_run:
-            update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
+        if is_local:
+            print("Refresh token rotated — saving to .env.local …")
+            if not args.dry_run:
+                persist_token_locally(new_refresh_token)
+            else:
+                print("  DRY RUN — would update WHOOP_REFRESH_TOKEN in .env.local")
         else:
-            print("  DRY RUN — would update WHOOP_REFRESH_TOKEN secret")
+            print("Refresh token rotated — updating GitHub secret …")
+            if not args.dry_run:
+                update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
+            else:
+                print("  DRY RUN — would update WHOOP_REFRESH_TOKEN secret")
 
     # ── Fetch sleep data ──────────────────────────────────────────────────────
     print(f"Fetching WHOOP sleep data since {FETCH_FROM} …")
