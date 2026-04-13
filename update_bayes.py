@@ -491,16 +491,23 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
         f"{BAYES_END}\n"
     )
 
-    # Insert just before the closing })();
-    if 'window.dashboardData = { data, sleepData, stepsData };' in src:
-        src = src.replace(
-            'window.dashboardData = { data, sleepData, stepsData };',
-            'window.dashboardData = { data, sleepData, stepsData };' + block,
+    # Insert after the dashboardData export if present, regardless of fields.
+    src, export_replacements = re.subn(
+        r'(window\.dashboardData\s*=\s*\{[^;\n]*\};)',
+        lambda m: m.group(1) + block,
+        src,
+        count=1,
+    )
+    if export_replacements == 0:
+        # Fallback: append immediately before the closing IIFE.
+        src, close_replacements = re.subn(
+            r'\n\}\)\(\);\s*$',
+            block + '\n})();\n',
+            src,
+            count=1,
         )
-    else:
-        # Fallback: append before last })();
-        src = src.rstrip()
-        src = src[:-4] + block + '\n})();\n'
+        if close_replacements == 0:
+            raise RuntimeError("Could not find dashboardData export or closing IIFE in js/data.js")
 
     with open(path, 'w', encoding='utf-8') as f:
         f.write(src)

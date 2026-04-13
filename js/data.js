@@ -420,8 +420,6 @@ const recoveryData = [
 ];
 
 window.dashboardData = { data, sleepData, stepsData, recoveryData };
-
-}
 // BAYES_START
 window.dashboardData.bayesian = {
   tdeePosterior: {"date":"2026-04-12","mean":2633,"sigma":150.8,"ci95Low":2338,"ci95High":2929,"ci68Low":2482,"ci68High":2784,"nObs":86,"avgSteps":6517,"SE_TDEE":16,"windowStart":"2026-01-03","windowEnd":"2026-04-12","spanDays":99,"activityTerms":{"baseline":1677,"rawStepPer1k":-120,"rawLiftDay":250,"rawDrinkDay":250,"stepPer1k":18,"liftDay":112,"drinkDay":85,"intervalCount":86,"avgIntervalDays":1.2,"r2":0.054,"trust":0.107,"confidence":"low","avgSteps":6517}},
