@@ -927,14 +927,21 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays) {
   const fatVals = variants.map(v => v.fat);
   const leanVals = variants.map(v => v.lean);
   const bfVals = variants.map(v => v.bodyFatPct);
+  const minBfPad = 0.45 + ((1 - confidenceScore) * 0.55);
+  const bodyFatPctLow = Math.max(0, Math.min(Math.min(...bfVals), base.bodyFatPct - minBfPad));
+  const bodyFatPctHigh = Math.min(100, Math.max(Math.max(...bfVals), base.bodyFatPct + minBfPad));
+  const fatLowFromBf = weight * (bodyFatPctLow / 100);
+  const fatHighFromBf = weight * (bodyFatPctHigh / 100);
+  const leanLowFromBf = Math.max(weight - fatHighFromBf, 0);
+  const leanHighFromBf = Math.max(weight - fatLowFromBf, 0);
   return {
     ...base,
-    fatLow: Math.min(...fatVals),
-    fatHigh: Math.max(...fatVals),
-    leanLow: Math.min(...leanVals),
-    leanHigh: Math.max(...leanVals),
-    bodyFatPctLow: Math.min(...bfVals),
-    bodyFatPctHigh: Math.max(...bfVals),
+    fatLow: Math.min(Math.min(...fatVals), fatLowFromBf),
+    fatHigh: Math.max(Math.max(...fatVals), fatHighFromBf),
+    leanLow: Math.min(Math.min(...leanVals), leanLowFromBf),
+    leanHigh: Math.max(Math.max(...leanVals), leanHighFromBf),
+    bodyFatPctLow,
+    bodyFatPctHigh,
     confidence: projectionConfidence(confidenceScore),
     confidenceScore
   };
