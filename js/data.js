@@ -108,7 +108,8 @@ const data = {
     {date:"2026-04-08",protein:123,carbs:150,fat:110,calories:2420,weight:159.5,lifting:null,drinks:"1.5 whiskeys",notes:"burger and fries, rice noodles and grilled chicken, chips and guacamole, chicken breast"},
     {date:"2026-04-09",protein:211,carbs:79,fat:85,calories:2290,weight:159.9,lifting:"Y",drinks:null,notes:"chinese buffet, protein shake 2x, protein ramen, chicken sausages, edamame snack 2x, protein chips"},
     {date:"2026-04-10",protein:128,carbs:202,fat:81,calories:2130,weight:159.8,lifting:null,drinks:"2 wines",notes:"protein ramen, chicken sausages, protein bar, lunch pho, 2 pepperoni pizzas slices, mcdonald fries"},
-    {date:"2026-04-11",protein:95,carbs:100,fat:51,calories:1435,weight:161.5,lifting:null,drinks:null,notes:"taco bell, thai gummies, protein shake 2x"}
+    {date:"2026-04-11",protein:95,carbs:145,fat:65,calories:1785,weight:161.5,lifting:null,drinks:"6 drinks",notes:"taco bell, thai gummies, protein shake 2x, pizza slice"},
+    {date:"2026-04-12",protein:220,carbs:51,fat:105,calories:2520,weight:161,lifting:null,drinks:null,notes:"crab buffet, coconut water"}
   ]
 };
 
