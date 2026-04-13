@@ -895,7 +895,7 @@ function updateBodyCompChart(days) {
       return [` DXA measured point on ${d.scanLabel || d.date}`, stateNote, glycoNote, deltaNote].filter(Boolean);
     }
     return [
-      ` Estimated from DXA baseline (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
+      ` Estimated from dynamic DXA model (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
       glycoNote

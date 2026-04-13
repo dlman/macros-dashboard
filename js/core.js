@@ -872,6 +872,14 @@ const DXA_FAT_MASS = DXA_SCAN.totalMass * (DXA_SCAN.bodyFatPct / 100);
 const DXA_BONE_MASS = Math.max(DXA_SCAN.totalMass - DXA_SCAN.leanMass - DXA_FAT_MASS, 0);
 const DXA_FAT_FREE_MASS = DXA_SCAN.leanMass + DXA_BONE_MASS;
 const DXA_PREV_FAT_MASS = DXA_SCAN_PREV.totalMass * (DXA_SCAN_PREV.bodyFatPct / 100);
+const DXA_PREV_BONE_MASS = Math.max(DXA_SCAN_PREV.totalMass - DXA_SCAN_PREV.leanMass - DXA_PREV_FAT_MASS, 0);
+const DXA_PREV_FAT_FREE_MASS = DXA_SCAN_PREV.leanMass + DXA_PREV_BONE_MASS;
+
+function targetWeightFromFatFreeMass(targetBfPct, fatFreeMass) {
+  const fatFraction = 1 - (targetBfPct / 100);
+  if (!Number.isFinite(fatFreeMass) || fatFraction <= 0) return null;
+  return fatFreeMass / fatFraction;
+}
 
 function bodyCompModelShares(days = allDays) {
   const liftPerWeek = days.filter(d => d.lifting === 'Y').length / Math.max(days.length / 7, 1);
@@ -940,6 +948,33 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays) {
     fatHigh: Math.max(Math.max(...fatVals), fatHighFromBf),
     leanLow: Math.min(Math.min(...leanVals), leanLowFromBf),
     leanHigh: Math.max(Math.max(...leanVals), leanHighFromBf),
+    bodyFatPctLow,
+    bodyFatPctHigh,
+    confidence: projectionConfidence(confidenceScore),
+    confidenceScore
+  };
+}
+
+function scanAnchoredBodyCompRange(weight, fatFreeMass, boneMass, confidenceScore = bodyCompConfidenceScore(allDays)) {
+  const fat = Math.max(weight - fatFreeMass, 0);
+  const lean = Math.max(fatFreeMass - boneMass, 0);
+  const bodyFatPct = weight ? (fat / weight) * 100 : 0;
+  const minBfPad = 0.45 + ((1 - confidenceScore) * 0.55);
+  const bodyFatPctLow = Math.max(0, bodyFatPct - minBfPad);
+  const bodyFatPctHigh = Math.min(100, bodyFatPct + minBfPad);
+  const fatLow = weight * (bodyFatPctLow / 100);
+  const fatHigh = weight * (bodyFatPctHigh / 100);
+  const leanLow = Math.max(weight - fatHigh, 0);
+  const leanHigh = Math.max(weight - fatLow, 0);
+  return {
+    weight,
+    lean,
+    fat,
+    fatLow,
+    fatHigh,
+    leanLow,
+    leanHigh,
+    bodyFatPct,
     bodyFatPctLow,
     bodyFatPctHigh,
     confidence: projectionConfidence(confidenceScore),
@@ -1142,12 +1177,15 @@ function currentFedStateDelta(days = allDays) {
 }
 
 function scenarioProjectedBodyComp(weight, days = allDays) {
-  const cutState = estimateBodyCompRangeAtWeight(weight, days);
-  const { latestGlycogenDay, currentGlycogenState, delta } = currentFedStateDelta(days);
-  const fedState = applyBodyCompStateDelta({ ...cutState, date: latestGlycogenDay?.date || days[days.length - 1]?.date || DXA_SCAN.date }, delta, 'fed');
+  const confidenceScore = bodyCompConfidenceScore(days);
+  const cutState = scanAnchoredBodyCompRange(weight, DXA_FAT_FREE_MASS, DXA_BONE_MASS, confidenceScore);
+  const fedWeight = cutState.fat + DXA_PREV_FAT_FREE_MASS;
+  const fedState = scanAnchoredBodyCompRange(fedWeight, DXA_PREV_FAT_FREE_MASS, DXA_PREV_BONE_MASS, confidenceScore);
+  const { latestGlycogenDay, currentGlycogenState } = currentFedStateDelta(days);
+  const delta = +(fedState.weight - cutState.weight).toFixed(2);
   return {
-    cutState,
-    fedState,
+    cutState: { ...cutState, displayState: 'cut', stateDelta: 0, comparableWeight: cutState.weight },
+    fedState: { ...fedState, displayState: 'fed', stateDelta: delta, comparableWeight: fedState.weight },
     fedDelta: delta,
     latestGlycogenDay,
     currentGlycogenState
@@ -1221,11 +1259,13 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
   const highTdee = Number.isFinite(tdeeProfile.rangeHigh) ? tdeeProfile.rangeHigh : (tdeeProfile.maintenance + 150);
   const effectiveDeficitLow = lowTdee - values.calories - sleepPenalty - drinkPenalty;
   const effectiveDeficitHigh = highTdee - values.calories - sleepPenalty - drinkPenalty;
-  const { delta: fedDelta } = currentFedStateDelta(days);
-  const reboundFactor = fedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
+  const sampleFedDelta = scenarioProjectedBodyComp(currentWeight, days).fedDelta;
+  const reboundFactor = sampleFedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
   const reboundSeries = Array.from({ length: weeks + 1 }, (_, week) => {
     const day = week * 7;
-    return +(fedDelta * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
+    const cutWeight = +(currentWeight - ((effectiveDeficitMid * 7 * week) / 3500)).toFixed(2);
+    const fullFedGap = scenarioProjectedBodyComp(cutWeight, days).fedDelta;
+    return +(fullFedGap * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
   });
   const cutMid = Array.from({ length: weeks + 1 }, (_, week) => +(currentWeight - ((effectiveDeficitMid * 7 * week) / 3500)).toFixed(2));
   const cutLow = Array.from({ length: weeks + 1 }, (_, week) => +(currentWeight - ((effectiveDeficitHigh * 7 * week) / 3500)).toFixed(2));
@@ -1241,7 +1281,7 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
     effectiveDeficitMid,
     effectiveDeficitLow,
     effectiveDeficitHigh,
-    fedDelta,
+    fedDelta: sampleFedDelta,
     reboundFactor
   };
 }
@@ -1255,7 +1295,7 @@ function scenarioForecastSeries(label, values, days, sleep) {
     return projected;
   });
   const dates = Array.from({ length: weeks + 1 }, (_, week) => addDaysToDate(anchorDate, week * 7));
-  const bodyComp = weights.map(weight => estimateBodyCompRangeAtWeight(weight, days));
+  const bodyComp = weights.map(weight => scenarioProjectedBodyComp(weight, days).cutState);
   return {
     label,
     values,
@@ -2643,37 +2683,35 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
   const currentGlycogenState = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const fedStateDelta = currentGlycogenState ? +(glycogenRefState.massLbs - currentGlycogenState.massLbs).toFixed(2) : 0;
+  const cutStateTarget = targetWeightFromFatFreeMass(targetBfPct, DXA_FAT_FREE_MASS);
+  const fedStateTarget = targetWeightFromFatFreeMass(targetBfPct, DXA_PREV_FAT_FREE_MASS);
+  const targetWeight = cutStateTarget ?? current.weight;
+  const fedStateTargetWeight = fedStateTarget ?? +(targetWeight + fedStateDelta).toFixed(1);
   if (current.bodyFatPct <= targetBfPct) return {
     daysToTarget: 0,
     targetWeight: current.weight,
     cutStateTargetWeight: current.weight,
-    fedStateTargetWeight: +(current.weight + fedStateDelta).toFixed(1),
+    fedStateTargetWeight,
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     confidence: wp.confidence,
     currentGlycogenState,
-    fedStateDelta
+    fedStateDelta,
+    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2)
   };
-  // Binary search for the weight at which BF% hits target
-  let lo = 100, hi = currentWeight;
-  for (let i = 0; i < 50; i++) {
-    const mid = (lo + hi) / 2;
-    const est = estimateBodyCompAtWeight(mid, days);
-    if (est.bodyFatPct > targetBfPct) hi = mid; else lo = mid;
-  }
-  const targetWeight = (lo + hi) / 2;
   const weightToDrop = currentWeight - targetWeight;
   const daysToTarget = Math.ceil(weightToDrop / Math.abs(wp.dailySlope));
   return {
     daysToTarget,
     targetWeight,
     cutStateTargetWeight: +targetWeight.toFixed(1),
-    fedStateTargetWeight: +(targetWeight + fedStateDelta).toFixed(1),
+    fedStateTargetWeight: +fedStateTargetWeight.toFixed(1),
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
     currentGlycogenState,
     fedStateDelta,
+    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2),
     dailySlope: wp.dailySlope,
     confidence: wp.confidence
   };

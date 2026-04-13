@@ -624,10 +624,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-secondary">
           <div class="eyebrow">Time to ${bfTarget.targetBfPct}% BF</div>
           <div class="value">${bfTarget.daysToTarget === 0 ? 'Already there!' : `~${bfTarget.daysToTarget} days`}</div>
-          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, ${bfTarget.targetBfPct}% BF lands around ${weightLabel(bfTarget.cutStateTargetWeight)} cut-state or ~${weightLabel(bfTarget.fedStateTargetWeight)} at Jan 6-like glycogen. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (${weightLabel(bfTarget15.cutStateTargetWeight)} cut-state / ~${weightLabel(bfTarget15.fedStateTargetWeight)} fed-state)` : ''}</div>
+          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, ${bfTarget.targetBfPct}% BF lands around ${weightLabel(bfTarget.cutStateTargetWeight)} cut-state or ~${weightLabel(bfTarget.fedStateTargetWeight)} at Jan 6-like fullness. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (${weightLabel(bfTarget15.cutStateTargetWeight)} cut-state / ~${weightLabel(bfTarget15.fedStateTargetWeight)} fed-state)` : ''}</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
           <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
-          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk${bfTarget.currentGlycogenState ? ` · current glycogen ${bfTarget.currentGlycogenState.loadPct}% loaded (${bfTarget.fedStateDelta >= 0 ? '+' : ''}${weightLabel(bfTarget.fedStateDelta, 2)} vs Jan 6-like state)` : ''}${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% in cut-state terms` : ''}</div>
+          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk · Apr 8 DXA as cut-state and Jan 6 DXA as fuller-state bracket${bfTarget.scanStateGap ? ` · ~${weightLabel(bfTarget.scanStateGap, 2)} scan-state gap at ${bfTarget.targetBfPct}%` : ''}${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% in cut-state terms` : ''}</div>
         </div>
       `
       : `
@@ -1362,7 +1362,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
             return [`  DXA measured point on ${d.scanLabel || d.date}`, `  Total: ${weightLabel(d.weight)}`, glycoNote, deltaNote].filter(Boolean);
           }
           return [
-            `  Estimated from DXA baseline`,
+            `  Estimated from dynamic DXA model`,
             `  Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
             `  Total: ${weightLabel(d.weight)}`,
             glycoNote
@@ -2621,7 +2621,7 @@ function runScenarioPlanner() {
   let html = `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
   html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
   html += `<div>Tissue split: <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean · body fat <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%).</div>`;
-  html += `<div>Fed-state comparable: <strong>${weightLabel(fedEnd)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> if glycogen/hydration normalize, with about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound layered onto the cut-state path.</div>`;
+  html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
   html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
   document.getElementById('whatifResult').innerHTML = html;
 
@@ -2651,8 +2651,8 @@ function runScenarioPlanner() {
       sub: `Cut-state BF · likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}% from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
     },
     {
-      value: weightLabel(fedEnd),
-      sub: `Fed-state comparable endpoint · ~${projectedCompFed.bodyFatPct.toFixed(1)}% BF with ~+${weightLabel(reboundEnd, 1)} rebound`
+      value: weightLabel(projectedCompFed.weight),
+      sub: `Fed-state comparable endpoint on the fuller Jan-like DXA bracket · dashed line layers ~+${weightLabel(reboundEnd, 1)} toward it`
     },
     {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
@@ -2685,7 +2685,7 @@ function runScenarioPlanner() {
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the DXA-anchored model shown in Progress, and fed-state comparable output assumes glycogen/hydration returns to the Jan 6 reference.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state.`;
 }
 
 // =====================================================================
