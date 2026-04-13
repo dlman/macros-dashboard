@@ -377,6 +377,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .audit-item.warn { border-color: rgba(251,191,36,0.22); }
 .audit-item.bad { border-color: rgba(248,113,113,0.22); }
 .explore-note { font-size: 11px; color: var(--text-faint); margin: -6px 0 16px; }
+#exploreShell { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+#exploreShell .explore-module { margin-top: 0; }
 .explore-module { margin-top: 14px; border: 1px solid var(--border-card); border-radius: 14px; background: rgba(15,23,42,0.32); overflow: hidden; }
 .explore-module > summary { list-style: none; cursor: pointer; padding: 14px 16px; font-size: 13px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .explore-module > summary::-webkit-details-marker { display: none; }
@@ -829,7 +831,6 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .chart-card .trust-inline { display: none; }
   .scenario-btn,
   .jump-chip { padding: 10px 12px; min-height: 42px; }
-  #exploreShell > summary { padding: 13px 14px; min-height: 46px; }
   #exploreShell .explore-module > summary { padding: 13px 14px; min-height: 46px; }
   #exploreShell .explore-module-inner { padding: 12px; }
   #exploreShell .section-title { margin-top: 0; }

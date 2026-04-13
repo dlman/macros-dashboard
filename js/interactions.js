@@ -1571,8 +1571,22 @@ function refreshDashboard() {
 // =====================================================================
 // INIT
 // =====================================================================
-document.title = `Macros/Sleep Dashboard · Build ${BUILD_VERSION}`;
-document.getElementById('buildStamp').textContent = `Build ${BUILD_VERSION}`;
+function pageBuildVersion() {
+  const raw = document.lastModified;
+  if (!raw) return null;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return null;
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
+}
+
+const PAGE_BUILD_VERSION = pageBuildVersion();
+document.title = `Macros/Sleep Dashboard · Build ${PAGE_BUILD_VERSION || BUILD_VERSION}`;
+document.getElementById('buildStamp').textContent = PAGE_BUILD_VERSION && PAGE_BUILD_VERSION !== BUILD_VERSION
+  ? `Build ${PAGE_BUILD_VERSION} · Data ${BUILD_VERSION}`
+  : `Data ${BUILD_VERSION}`;
 attachChartZoomHandlers();
 renderAnnotations();
 syncSettingsForm();
