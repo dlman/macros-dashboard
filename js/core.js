@@ -1211,6 +1211,41 @@ function scenarioComparisonSnapshot(label, values, days = allDays, sleep = sleep
   };
 }
 
+function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
+  const weeks = Math.max(1, values.weeks);
+  const currentWeight = latestWeightForScenario(days);
+  const tdeeProfile = workingTDEEProfile(days);
+  const { sleepPenalty, drinkPenalty } = scenarioBehaviorPenalties(values.sleep, values.drinks, days, sleep);
+  const effectiveDeficitMid = tdeeProfile.maintenance - values.calories - sleepPenalty - drinkPenalty;
+  const lowTdee = Number.isFinite(tdeeProfile.rangeLow) ? tdeeProfile.rangeLow : (tdeeProfile.maintenance - 150);
+  const highTdee = Number.isFinite(tdeeProfile.rangeHigh) ? tdeeProfile.rangeHigh : (tdeeProfile.maintenance + 150);
+  const effectiveDeficitLow = lowTdee - values.calories - sleepPenalty - drinkPenalty;
+  const effectiveDeficitHigh = highTdee - values.calories - sleepPenalty - drinkPenalty;
+  const { delta: fedDelta } = currentFedStateDelta(days);
+  const reboundFactor = fedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
+  const reboundSeries = Array.from({ length: weeks + 1 }, (_, week) => {
+    const day = week * 7;
+    return +(fedDelta * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
+  });
+  const cutMid = Array.from({ length: weeks + 1 }, (_, week) => +(currentWeight - ((effectiveDeficitMid * 7 * week) / 3500)).toFixed(2));
+  const cutLow = Array.from({ length: weeks + 1 }, (_, week) => +(currentWeight - ((effectiveDeficitHigh * 7 * week) / 3500)).toFixed(2));
+  const cutHigh = Array.from({ length: weeks + 1 }, (_, week) => +(currentWeight - ((effectiveDeficitLow * 7 * week) / 3500)).toFixed(2));
+  const fedComparable = cutMid.map((weight, idx) => +(weight + reboundSeries[idx]).toFixed(2));
+  return {
+    cutMid,
+    cutLow,
+    cutHigh,
+    fedComparable,
+    reboundSeries,
+    tdeeProfile,
+    effectiveDeficitMid,
+    effectiveDeficitLow,
+    effectiveDeficitHigh,
+    fedDelta,
+    reboundFactor
+  };
+}
+
 function scenarioForecastSeries(label, values, days, sleep) {
   const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
   const weeks = Math.max(1, values.weeks);
@@ -1227,7 +1262,8 @@ function scenarioForecastSeries(label, values, days, sleep) {
     projection,
     dates,
     bodyComp,
-    data: weights.map(weight => weightValue(weight))
+    data: weights.map(weight => weightValue(weight)),
+    envelope: scenarioForecastEnvelope(values, days, sleep)
   };
 }
 
@@ -1957,6 +1993,38 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       pointRadius: 0,
       borderWidth: 3
     }]),
+    ...[{
+      label: '68% likely band',
+      data: activeSeries.envelope.cutHigh.map(weight => weightValue(weight)),
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      borderWidth: 0,
+      fill: false,
+      legendHidden: true,
+      tooltipHidden: true
+    }, {
+      label: '68% likely band',
+      data: activeSeries.envelope.cutLow.map(weight => weightValue(weight)),
+      borderColor: 'rgba(251,191,36,0.4)',
+      backgroundColor: 'rgba(251,191,36,0.12)',
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      borderWidth: 0,
+      fill: '-1',
+      legendHidden: false,
+      tooltipHidden: true
+    }, {
+      label: 'Fed-state comparable',
+      data: activeSeries.envelope.fedComparable.map(weight => weightValue(weight)),
+      borderColor: 'rgba(45,212,191,0.95)',
+      backgroundColor: 'transparent',
+      borderDash: [7, 5],
+      pointRadius: 0,
+      borderWidth: 2.2,
+      fill: false
+    }],
     ...comparisonKeys.map(key => {
       const values = { ...defaults[key], weeks };
       const series = scenarioForecastSeries(scenarioPresetLabel(key), values, days, sleep);
@@ -1991,6 +2059,8 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.scales.y.min = Math.floor(bounds.min);
   chart.options.scales.y.max = Math.ceil(bounds.max);
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
+  chart.options.plugins.legend.labels.filter = item => !chart.data.datasets[item.datasetIndex]?.legendHidden;
+  chart.options.plugins.tooltip.filter = ctx => !ctx.dataset.tooltipHidden;
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const bfPct = ctx.dataset.bodyFatPcts?.[ctx.dataIndex];
     const bfRange = ctx.dataset.bodyFatRanges?.[ctx.dataIndex];
@@ -2002,6 +2072,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     const point = items[0];
     if (!point) return '';
     if (point.dataIndex === 0) return 'Latest weigh-in in selected range';
+    if (point.dataset.label === 'Fed-state comparable') return 'Includes a glycogen/water rebound toward the Jan 6 reference.';
     return `Projected ${point.label.toLowerCase()} path using the DXA-anchored body-comp model`;
   };
   chart.update();

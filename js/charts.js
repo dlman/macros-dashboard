@@ -2606,10 +2606,16 @@ function runScenarioPlanner() {
   const currentStates = scenarioProjectedBodyComp(r.currentWeight, rangeDays);
   const projectedFatChange = +(currentStates.cutState.fat - projectedComp.fat).toFixed(1);
   const projectedLeanChange = +(projectedComp.lean - currentStates.cutState.lean).toFixed(1);
+  const envelope = scenarioForecastEnvelope({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
+  const cutLowEnd = envelope.cutLow[envelope.cutLow.length - 1];
+  const cutHighEnd = envelope.cutHigh[envelope.cutHigh.length - 1];
+  const fedEnd = envelope.fedComparable[envelope.fedComparable.length - 1];
+  const reboundEnd = envelope.reboundSeries[envelope.reboundSeries.length - 1];
 
   let html = `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
-  html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · tissue split <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean.</div>`;
-  html += `<div>Body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> cut-state (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%) · fed-state comparable <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong>.</div>`;
+  html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
+  html += `<div>Tissue split: <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean · body fat <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%).</div>`;
+  html += `<div>Fed-state comparable: <strong>${weightLabel(fedEnd)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> if glycogen/hydration normalize, with about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound layered onto the cut-state path.</div>`;
   html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
   document.getElementById('whatifResult').innerHTML = html;
 
@@ -2627,6 +2633,10 @@ function runScenarioPlanner() {
       sub: `Estimated fat change in cut-state terms · lean ${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}`
     },
     {
+      value: `${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}`,
+      sub: `Likely cut-state endpoint band from the active TDEE range`
+    },
+    {
       value: weightLabel(parseFloat(r.projectedWeight)),
       sub: `Cut-state endpoint from current ${weightLabel(r.currentWeight)}`
     },
@@ -2635,8 +2645,8 @@ function runScenarioPlanner() {
       sub: `Cut-state BF · likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}% from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
     },
     {
-      value: weightLabel(projectedCompFed.weight),
-      sub: `Fed-state comparable endpoint · ~${projectedCompFed.bodyFatPct.toFixed(1)}% BF if glycogen/hydration returns to the Jan 6 reference`
+      value: weightLabel(fedEnd),
+      sub: `Fed-state comparable endpoint · ~${projectedCompFed.bodyFatPct.toFixed(1)}% BF with ~+${weightLabel(reboundEnd, 1)} rebound`
     },
     {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
