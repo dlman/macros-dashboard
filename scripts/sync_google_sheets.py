@@ -231,6 +231,30 @@ def parse_existing_steps_data(path: Path) -> list[dict[str, Any]]:
     ]
 
 
+def parse_existing_recovery_data(path: Path) -> list[dict[str, Any]]:
+    src = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'\{date:"(?P<date>\d{4}-\d{2}-\d{2})"'
+        r',recovery:(?P<recovery>\d+)'
+        r',hrv:(?P<hrv>[0-9.]+|null)'
+        r',rhr:(?P<rhr>[0-9]+|null)'
+        r',spo2:(?P<spo2>[0-9.]+|null)\}'
+    )
+    rows = []
+    for m in pattern.finditer(src):
+        hrv  = m.group("hrv");  hrv  = float(hrv)  if hrv  != "null" else None
+        rhr  = m.group("rhr");  rhr  = int(rhr)    if rhr  != "null" else None
+        spo2 = m.group("spo2"); spo2 = float(spo2) if spo2 != "null" else None
+        rows.append({
+            "date":     m.group("date"),
+            "recovery": int(m.group("recovery")),
+            "hrv":      hrv,
+            "rhr":      rhr,
+            "spo2":     spo2,
+        })
+    return rows
+
+
 def extract_bayes_block(path: Path) -> str:
     src = path.read_text(encoding="utf-8")
     start = src.find("// BAYES_START")
@@ -277,10 +301,30 @@ def apply_csv_to_bucket(
     print(f"  {month_name}: {len(new_rows)} rows loaded from CSV")
 
 
+def _fmt_recovery_val(v: Any) -> str:
+    if v is None:         return "null"
+    if isinstance(v, int): return str(v)
+    f = float(v)
+    if f.is_integer():    return str(int(f))
+    return format(f, ".1f")
+
+
+def _serialize_recovery_row(row: dict) -> str:
+    return (
+        '{date:' + json.dumps(row["date"])
+        + ',recovery:' + str(int(row["recovery"]))
+        + ',hrv:'      + _fmt_recovery_val(row.get("hrv"))
+        + ',rhr:'      + _fmt_recovery_val(row.get("rhr"))
+        + ',spo2:'     + _fmt_recovery_val(row.get("spo2"))
+        + '}'
+    )
+
+
 def render_data_js(
     macro_buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
     sleep_rows: list[Any],
     steps_rows: list[Any],
+    recovery_rows: list[Any],
     bayes_block: str,
 ) -> str:
     macro_lines = []
@@ -289,15 +333,17 @@ def render_data_js(
         macro_lines.append(
             f"  {month}: [\n    {serialized}\n  ]" if serialized else f"  {month}: []"
         )
-    sleep_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
-    steps_ser = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
+    sleep_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
+    steps_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
+    recovery_ser = ",\n  ".join(_serialize_recovery_row(r) for r in recovery_rows)
 
     return (
         "(() => {\n// Raw data\nconst data = {\n"
         + ",\n".join(macro_lines)
         + "\n};\n\nconst sleepData = [\n  " + sleep_ser + "\n];\n\n"
         + "const stepsData = [\n  " + steps_ser + "\n];\n\n"
-        + "window.dashboardData = { data, sleepData, stepsData };\n"
+        + "const recoveryData = [\n  " + recovery_ser + "\n];\n\n"
+        + "window.dashboardData = { data, sleepData, stepsData, recoveryData };\n"
         + (bayes_block if bayes_block else "")
         + "\n})();\n"
     )
@@ -312,10 +358,11 @@ def main() -> None:
     output_path = Path(args.output).resolve()
 
     print("Reading existing data.js …")
-    macro_buckets = parse_existing_macro_data(output_path)
-    existing_sleep = parse_existing_sleep_data(output_path)
-    existing_steps = parse_existing_steps_data(output_path)
-    bayes_block = extract_bayes_block(output_path)
+    macro_buckets     = parse_existing_macro_data(output_path)
+    existing_sleep    = parse_existing_sleep_data(output_path)
+    existing_steps    = parse_existing_steps_data(output_path)
+    existing_recovery = parse_existing_recovery_data(output_path)
+    bayes_block       = extract_bayes_block(output_path)
 
     print(f"\nFetching {len(PUBLISHED_CSV_URLS)} published CSV tab(s) …")
     for month_name, url in PUBLISHED_CSV_URLS.items():
@@ -325,7 +372,7 @@ def main() -> None:
         rows = fetch_csv(url, f"{month_name} Macros")
         apply_csv_to_bucket(macro_buckets, rows, month_name)
 
-    output = render_data_js(macro_buckets, existing_sleep, existing_steps, bayes_block)
+    output = render_data_js(macro_buckets, existing_sleep, existing_steps, existing_recovery, bayes_block)
 
     if args.dry_run:
         print("\n--- DRY RUN: would write ---")
@@ -335,7 +382,7 @@ def main() -> None:
     output_path.write_text(output, encoding="utf-8")
     macro_count = sum(len(v) for v in macro_buckets.values())
     print(f"\n✓ Wrote {macro_count} macro rows, {len(existing_sleep)} sleep rows, "
-          f"{len(existing_steps)} step rows → {output_path}")
+          f"{len(existing_steps)} step rows, {len(existing_recovery)} recovery rows → {output_path}")
     print("Next: run  python update_bayes.py js/data.js  to refresh Bayesian estimates.")
 
 

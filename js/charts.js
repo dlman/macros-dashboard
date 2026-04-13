@@ -2027,24 +2027,33 @@ allCharts.foodFreqChart = new Chart(document.getElementById('foodFreqChart'), {
 // =====================================================================
 // RECOVERY SCORE CHART
 // =====================================================================
-const recoveryScores = sleepData.map(d => recoveryScore(d));
+const recoveryScores  = sleepData.map(d => recoveryScore(d));
+const whoopHrvData    = sleepData.map(d => recoveryByDate[d.date]?.hrv ?? null);
+const hasWhoopHrv     = whoopHrvData.some(v => v !== null);
 allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
   type: 'line',
   data: {
     labels: sleepData.map(d => d.date.slice(5)),
     datasets: [
       {
-        label:'Recovery Score',
+        label: 'Recovery Score',
         data: recoveryScores,
         borderColor: '#34d399',
         pointRadius: sleepData.map((d,i) => recoveryScores[i] < 30 || recoveryScores[i] > 75 ? 6 : 3),
         pointBackgroundColor: recoveryScores.map(s => perfColor(s)),
-        tension: 0.3, fill: false
+        tension: 0.3, fill: false, yAxisID: 'y'
       },
       {
         label: '7-day Avg',
         data: rollingAvg(recoveryScores, 7),
-        borderColor: 'rgba(251,191,36,0.6)', borderDash:[6,3], pointRadius:0, tension:0.4, fill:false, borderWidth:2
+        borderColor: 'rgba(251,191,36,0.6)', borderDash:[6,3], pointRadius:0, tension:0.4, fill:false, borderWidth:2, yAxisID: 'y'
+      },
+      {
+        label: 'HRV (ms)',
+        data: whoopHrvData,
+        borderColor: 'rgba(139,92,246,0.7)',
+        pointRadius: 2, pointBackgroundColor: 'rgba(139,92,246,0.7)',
+        tension: 0.3, fill: false, yAxisID: 'yHrv', spanGaps: true
       }
     ]
   },
@@ -2055,12 +2064,22 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
       title: ctx => sleepData[ctx[0].dataIndex].date,
       label: ctx => {
         if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
+        if (ctx.datasetIndex === 2) return ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`;
         const d = sleepData[ctx.dataIndex];
         const prev = prevDay(d.date);
         return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
       }
     }}},
-    scales: { x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:20}}, y:{...chartDefaults().scales.y,min:0,max:100,ticks:{...TICK(),stepSize:10}} }
+    scales: {
+      x:    { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:20} },
+      y:    { ...chartDefaults().scales.y, min:0, max:100, ticks:{...TICK(),stepSize:10} },
+      yHrv: {
+        type: 'linear', position: 'right', display: hasWhoopHrv,
+        grid: { drawOnChartArea: false },
+        ticks: { ...TICK(), callback: v => v + ' ms' },
+        title: { display: hasWhoopHrv, text: 'HRV (ms)', color: 'rgba(139,92,246,0.8)', font: { size: 11 } }
+      }
+    }
   }
 });
 

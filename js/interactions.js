@@ -1210,6 +1210,11 @@ function updateSleepCharts(days) {
   recoveryChart.data.datasets[0].pointRadius = scores.map(s => compact ? (s < 30 || s > 75 ? 4.5 : 2) : (s < 30 || s > 75 ? 6 : 3));
   recoveryChart.data.datasets[0].pointBackgroundColor = scores.map(s => perfColor(s));
   recoveryChart.data.datasets[1].data = rollingAvg(scores, 7);
+  const hrvData = days.map(d => recoveryByDate[d.date]?.hrv ?? null);
+  recoveryChart.data.datasets[2].data = hrvData;
+  const hasHrv = hrvData.some(v => v !== null);
+  recoveryChart.options.scales.yHrv.display = hasHrv;
+  recoveryChart.options.scales.yHrv.title.display = hasHrv;
   recoveryChart.options.plugins.legend.display = !compact;
   recoveryChart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
   recoveryChart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
@@ -1218,6 +1223,7 @@ function updateSleepCharts(days) {
   recoveryChart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
   recoveryChart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
+    if (ctx.datasetIndex === 2) return ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`;
     const d = days[ctx.dataIndex];
     const prev = prevDay(d.date);
     return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
