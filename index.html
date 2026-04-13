@@ -446,7 +446,12 @@
   <div class="chart-row full">
     <div class="chart-card">
       <button class="export-btn" data-chart="recoveryChart">📸</button>
-      <div class="card-header"><h3>💪 Daily Recovery Score (composite: sleep + efficiency + resp + drink penalty)</h3></div>
+      <div class="card-header with-meta">
+        <div class="card-heading">
+          <h3>💪 Recovery + WHOOP HRV</h3>
+          <div class="card-subtitle" id="recoverySubtitle">Recovery line uses WHOOP recovery when present, otherwise your custom composite. HRV is shown against a 21-day baseline when enough data is available.</div>
+        </div>
+      </div>
       <div class="chart-wrapper tall"><canvas id="recoveryChart"></canvas></div>
     </div>
   </div>

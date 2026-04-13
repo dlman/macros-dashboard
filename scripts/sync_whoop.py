@@ -4,8 +4,9 @@ Sync WHOOP sleep data into js/data.js.
 
 Reads WHOOP_REFRESH_TOKEN from the environment (or .env.local for local dev),
 fetches sleep records via the WHOOP v2 API, maps them to the dashboard schema,
-and overwrites the sleepData array in js/data.js.  After a successful token
-refresh the new refresh token is persisted automatically:
+and overwrites the sleepData array in js/data.js. After a successful token
+refresh the new refresh token is always persisted immediately so subsequent
+runs do not get stranded with a stale token:
   - In CI (GitHub Actions): written back to the WHOOP_REFRESH_TOKEN secret
   - Locally: written back to .env.local in the project root
 
@@ -20,7 +21,7 @@ Required only in CI (for GitHub Secrets rotation):
 
 Usage:
   python scripts/sync_whoop.py            # works locally with .env.local
-  python scripts/sync_whoop.py --dry-run  # preview without writing
+  python scripts/sync_whoop.py --dry-run  # preview data.js changes only
 """
 
 from __future__ import annotations
@@ -539,7 +540,7 @@ def patch_recovery_data(path: Path, rows: list[dict], dry_run: bool = False) -> 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync WHOOP sleep data into js/data.js")
-    parser.add_argument("--dry-run", action="store_true", help="Print what would change without writing")
+    parser.add_argument("--dry-run", action="store_true", help="Preview data.js changes without writing them")
     args = parser.parse_args()
 
     # ── Load .env.local for local dev (no-op in CI where secrets are injected) ─
@@ -560,8 +561,15 @@ def main() -> None:
     refresh_token = require_env("WHOOP_REFRESH_TOKEN")
     gh_pat        = optional_env("GH_PAT")
     gh_repo       = optional_env("GH_REPO")
+    in_ci         = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
 
-    # Detect local vs CI mode
+    # Detect local vs CI mode. Partial GitHub config is always a misconfiguration:
+    # we never want CI to silently behave like a local run and drop the rotated token.
+    if bool(gh_pat) ^ bool(gh_repo):
+        sys.exit("Both GH_PAT and GH_REPO must be set together, or neither.")
+    if in_ci and not (gh_pat and gh_repo):
+        sys.exit("CI mode requires GH_PAT and GH_REPO so rotated WHOOP tokens can be persisted.")
+
     is_local = not (gh_pat and gh_repo)
     if is_local:
         print("Running in LOCAL mode — rotated tokens will be saved to .env.local")
@@ -587,16 +595,10 @@ def main() -> None:
     if new_refresh_token != refresh_token:
         if is_local:
             print("Refresh token rotated — saving to .env.local …")
-            if not args.dry_run:
-                persist_token_locally(new_refresh_token)
-            else:
-                print("  DRY RUN — would update WHOOP_REFRESH_TOKEN in .env.local")
+            persist_token_locally(new_refresh_token)
         else:
             print("Refresh token rotated — updating GitHub secret …")
-            if not args.dry_run:
-                update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
-            else:
-                print("  DRY RUN — would update WHOOP_REFRESH_TOKEN secret")
+            update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
 
     # ── Fetch sleep data ──────────────────────────────────────────────────────
     print(f"Fetching WHOOP sleep data since {FETCH_FROM} …")

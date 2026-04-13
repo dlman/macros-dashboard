@@ -2027,9 +2027,10 @@ allCharts.foodFreqChart = new Chart(document.getElementById('foodFreqChart'), {
 // =====================================================================
 // RECOVERY SCORE CHART
 // =====================================================================
-const recoveryScores  = sleepData.map(d => recoveryScore(d));
-const whoopHrvData    = sleepData.map(d => recoveryByDate[d.date]?.hrv ?? null);
-const hasWhoopHrv     = whoopHrvData.some(v => v !== null);
+const recoveryScores      = sleepData.map(d => recoveryScore(d));
+const whoopHrvData        = sleepData.map(d => recoveryByDate[d.date]?.hrv ?? null);
+const hrvBaselineData     = rollingAvgMin(whoopHrvData, 21, 7);
+const hasWhoopHrv         = whoopHrvData.some(v => v !== null);
 allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
   type: 'line',
   data: {
@@ -2054,6 +2055,18 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
         borderColor: 'rgba(139,92,246,0.7)',
         pointRadius: 2, pointBackgroundColor: 'rgba(139,92,246,0.7)',
         tension: 0.3, fill: false, yAxisID: 'yHrv', spanGaps: true
+      },
+      {
+        label: 'HRV 21d baseline',
+        data: hrvBaselineData,
+        borderColor: 'rgba(139,92,246,0.35)',
+        borderDash: [5, 4],
+        pointRadius: 0,
+        tension: 0.25,
+        fill: false,
+        borderWidth: 2,
+        yAxisID: 'yHrv',
+        spanGaps: true
       }
     ]
   },
@@ -2064,10 +2077,18 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
       title: ctx => sleepData[ctx[0].dataIndex].date,
       label: ctx => {
         if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
-        if (ctx.datasetIndex === 2) return ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`;
+        if (ctx.datasetIndex === 2) {
+          const baseline = hrvBaselineData[ctx.dataIndex];
+          const delta = baseline != null && ctx.parsed.y != null ? ctx.parsed.y - baseline : null;
+          return delta == null
+            ? ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`
+            : [` HRV: ${ctx.parsed.y.toFixed(1)} ms`, ` vs 21d baseline: ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ms`];
+        }
+        if (ctx.datasetIndex === 3) return ` HRV 21d baseline: ${ctx.parsed.y?.toFixed(1)} ms`;
         const d = sleepData[ctx.dataIndex];
         const prev = prevDay(d.date);
-        return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
+        const source = recoveryByDate[d.date]?.recovery != null ? 'WHOOP' : 'Custom';
+        return [` ${source} recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
       }
     }}},
     scales: {

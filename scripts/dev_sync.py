@@ -17,7 +17,7 @@ Setup (one-time):
 
 Usage:
   python scripts/dev_sync.py              # full sync
-  python scripts/dev_sync.py --dry-run    # preview only, no writes
+  python scripts/dev_sync.py --dry-run    # preview dashboard data changes
   python scripts/dev_sync.py --skip-whoop # sheets + bayes only
   python scripts/dev_sync.py --skip-bayes # sheets + whoop only
 """
@@ -48,7 +48,7 @@ def run(cmd: list[str], label: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local dashboard sync (mirrors CI pipeline)")
-    parser.add_argument("--dry-run",    action="store_true", help="Preview changes without writing files")
+    parser.add_argument("--dry-run",    action="store_true", help="Preview dashboard data changes without writing them")
     parser.add_argument("--skip-whoop", action="store_true", help="Skip WHOOP sleep sync")
     parser.add_argument("--skip-bayes", action="store_true", help="Skip Bayesian rebuild")
     args = parser.parse_args()
@@ -99,7 +99,8 @@ def main() -> None:
         sys.exit(1)
     else:
         if args.dry_run:
-            print("\nDry run complete — no files were modified.")
+            print("\nDry run complete — dashboard files were not modified.")
+            print("WHOOP auth tokens may still have rotated and been persisted.")
         else:
             print("\nAll done! Open index.html in your browser to verify.")
             print("Tip: python -m http.server 8000  →  http://localhost:8000")

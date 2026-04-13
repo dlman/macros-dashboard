@@ -1205,13 +1205,16 @@ function updateSleepCharts(days) {
   const compact = isCompactMobileViewport();
   const recoveryChart = allCharts.recoveryChart;
   const scores = days.map(d => recoveryScore(d));
+  const hasWhoopRecovery = days.some(d => recoveryByDate[d.date]?.recovery != null);
   recoveryChart.data.labels = days.map(d => d.date.slice(5));
   recoveryChart.data.datasets[0].data = scores;
   recoveryChart.data.datasets[0].pointRadius = scores.map(s => compact ? (s < 30 || s > 75 ? 4.5 : 2) : (s < 30 || s > 75 ? 6 : 3));
   recoveryChart.data.datasets[0].pointBackgroundColor = scores.map(s => perfColor(s));
   recoveryChart.data.datasets[1].data = rollingAvg(scores, 7);
   const hrvData = days.map(d => recoveryByDate[d.date]?.hrv ?? null);
+  const hrvBaseline = rollingAvgMin(hrvData, 21, 7);
   recoveryChart.data.datasets[2].data = hrvData;
+  recoveryChart.data.datasets[3].data = hrvBaseline;
   const hasHrv = hrvData.some(v => v !== null);
   recoveryChart.options.scales.yHrv.display = hasHrv;
   recoveryChart.options.scales.yHrv.title.display = hasHrv;
@@ -1223,12 +1226,37 @@ function updateSleepCharts(days) {
   recoveryChart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
   recoveryChart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
-    if (ctx.datasetIndex === 2) return ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`;
+    if (ctx.datasetIndex === 2) {
+      const baseline = hrvBaseline[ctx.dataIndex];
+      const delta = baseline != null && ctx.parsed.y != null ? ctx.parsed.y - baseline : null;
+      return delta == null
+        ? ` HRV: ${ctx.parsed.y?.toFixed(1)} ms`
+        : [` HRV: ${ctx.parsed.y.toFixed(1)} ms`, ` vs 21d baseline: ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ms`];
+    }
+    if (ctx.datasetIndex === 3) return ` HRV 21d baseline: ${ctx.parsed.y?.toFixed(1)} ms`;
     const d = days[ctx.dataIndex];
     const prev = prevDay(d.date);
-    return [` Recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
+    const source = recoveryByDate[d.date]?.recovery != null ? 'WHOOP' : 'Custom';
+    return [` ${source} recovery: ${ctx.parsed.y}`, ` Sleep: ${d.perf}% perf, ${d.hours}h`, drinkDates.has(prev) ? ' 🍹 drank prev night' : ''];
   };
   recoveryChart.update();
+
+  const recoveryTitle = document.querySelector('#recoveryChart')?.closest('.chart-card')?.querySelector('h3');
+  if (recoveryTitle) recoveryTitle.textContent = compact ? '💪 Recovery + HRV' : '💪 Recovery + WHOOP HRV';
+  const recoverySubtitle = document.getElementById('recoverySubtitle');
+  if (recoverySubtitle) {
+    const latestHrvIdx = [...hrvData.keys()].reverse().find(i => hrvData[i] != null);
+    const latestHrv = latestHrvIdx != null ? hrvData[latestHrvIdx] : null;
+    const latestBaseline = latestHrvIdx != null ? hrvBaseline[latestHrvIdx] : null;
+    const delta = latestHrv != null && latestBaseline != null ? latestHrv - latestBaseline : null;
+    const sourceCopy = hasWhoopRecovery ? 'Recovery line uses WHOOP recovery when present, otherwise your custom composite.' : 'Recovery line uses your custom composite score.';
+    const hrvCopy = latestHrv == null
+      ? 'HRV line appears when WHOOP HRV data is available.'
+      : delta == null
+        ? `Latest HRV: ${latestHrv.toFixed(1)} ms.`
+        : `Latest HRV: ${latestHrv.toFixed(1)} ms (${delta >= 0 ? '+' : ''}${delta.toFixed(1)} vs 21d baseline).`;
+    recoverySubtitle.textContent = compact ? hrvCopy : `${sourceCopy} ${hrvCopy}`;
+  }
 
   const sleepPerfChart = allCharts.sleepPerfChart;
   sleepPerfChart.data.labels = days.map(d => d.date.slice(5));
@@ -1511,7 +1539,7 @@ function refreshDashboard() {
   const bodyCompTitle = document.querySelector('#bodyCompChart')?.closest('.chart-card')?.querySelector('h3');
   if (bodyCompTitle) bodyCompTitle.textContent = compact ? 'DXA Body Composition Estimate' : 'DXA-Anchored Body Composition Estimate (Fat vs Lean Mass)';
   const recoveryTitle = document.querySelector('#recoveryChart')?.closest('.chart-card')?.querySelector('h3');
-  if (recoveryTitle) recoveryTitle.textContent = compact ? '💪 Daily Recovery Score' : '💪 Daily Recovery Score (composite: sleep + efficiency + resp + drink penalty)';
+  if (recoveryTitle) recoveryTitle.textContent = compact ? '💪 Recovery + HRV' : '💪 Recovery + WHOOP HRV';
   attachChartZoomHandlers();
   const scenarioDefaults = getScenarioDefaults(getRangeDays(), getSleepForDaysUnfiltered(getRangeDays()));
   if (!scenarioFormInitialized) {

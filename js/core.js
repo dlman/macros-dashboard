@@ -244,6 +244,14 @@ function rollingAvg(arr, window) {
   });
 }
 
+function rollingAvgMin(arr, window, minCount = 1) {
+  return arr.map((v, i) => {
+    const start = Math.max(0, i - window + 1);
+    const slice = arr.slice(start, i + 1).filter(x => x != null);
+    return slice.length >= minCount ? slice.reduce((a,b)=>a+b,0)/slice.length : null;
+  });
+}
+
 // Recovery score: configurable weights
 let recoveryWeights = { ...DEFAULT_RECOVERY_WEIGHTS };
 function recoveryScore(sleepDay) {
