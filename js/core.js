@@ -2372,6 +2372,26 @@ function tdeeStabilityProfile() {
   };
 }
 
+function tdeeShiftSummary(days = getAnalyticsDays()) {
+  const timeline = window.dashboardData?.bayesian?.tdeeTimeline;
+  if (!Array.isArray(timeline) || timeline.length < 2 || !days.length) return null;
+  const latestDate = days[days.length - 1]?.date;
+  const latestPoint = bayesianTimelinePointForDate(latestDate);
+  if (!latestPoint || latestPoint.date !== latestDate) return null;
+  const compareIdx = Math.max(0, timeline.findIndex(point => point.date === latestPoint.date) - 7);
+  const previousPoint = timeline[compareIdx];
+  if (!previousPoint || previousPoint.date === latestPoint.date) return null;
+  const delta = latestPoint.mean - previousPoint.mean;
+  const direction = Math.abs(delta) < 25 ? 'flat' : delta > 0 ? 'up' : 'down';
+  return {
+    latest: latestPoint,
+    previous: previousPoint,
+    delta,
+    direction,
+    daysApart: Math.max(1, Math.round((new Date(`${latestPoint.date}T00:00:00`).getTime() - new Date(`${previousPoint.date}T00:00:00`).getTime()) / 86400000))
+  };
+}
+
 function tdeeActivityTerms(days = getAnalyticsDays()) {
   const fullPosterior = freshBayesianPosterior(getAnalyticsDays());
   if (fullPosterior?.activityTerms) return fullPosterior.activityTerms;
@@ -2390,14 +2410,14 @@ function freshBayesianPosterior(days = allDays) {
   const posterior = window.dashboardData?.bayesian?.tdeePosterior;
   const latestBayesDate = latestHistoricalBayesDate();
   const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
-  if (!posterior || !latestBayesDate || latestBayesDate !== latestAnalyticsDate) return null;
+  if (!posterior || !latestBayesDate || !latestAnalyticsDate || latestBayesDate < latestAnalyticsDate) return null;
   return posterior;
 }
 
 function freshBayesianTimelinePoint(days = allDays) {
   const latestBayesDate = latestHistoricalBayesDate();
   const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
-  if (!latestBayesDate || latestBayesDate !== latestAnalyticsDate || !days.length) return null;
+  if (!latestBayesDate || !latestAnalyticsDate || latestBayesDate < latestAnalyticsDate || !days.length) return null;
   const endDate = days[days.length - 1]?.date;
   const point = bayesianTimelinePointForDate(endDate);
   if (!point || point.date !== endDate) return null;

@@ -6,6 +6,7 @@ Runs the same three steps as update-data.yml, in order:
   1. sync_google_sheets.py  — pull macro data from Google Sheets CSVs
   2. sync_whoop.py          — pull sleep data from WHOOP API
   3. update_bayes.py        — rebuild Bayesian TDEE estimates
+  4. validate_dashboard_build.py — catch broken generated assets before publish
 
 Credentials are read from .env.local in the project root (for WHOOP).
 Google Sheets sync needs no credentials (public CSV URLs).
@@ -84,6 +85,13 @@ def main() -> None:
             print("\n⏭  Skipping Bayesian rebuild in --dry-run mode")
     else:
         print("\n⏭  Skipping Bayesian rebuild (--skip-bayes)")
+
+    # ── Step 4: Validation ───────────────────────────────────────────────────
+    if not args.dry_run:
+        ok = run([python, "scripts/validate_dashboard_build.py"], "Validate generated dashboard assets")
+        results["validate"] = ok
+    else:
+        print("\n⏭  Skipping validation in --dry-run mode")
 
     # ── Summary ──────────────────────────────────────────────────────────────
     print(f"\n{'═' * 60}")

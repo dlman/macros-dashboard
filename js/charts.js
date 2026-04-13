@@ -734,6 +734,7 @@ function renderExecutiveSummary() {
   const fullBayesTdee = freshBayesianPosterior(analyticsRangeDays);
   const rollingBayesTdee = freshBayesianTimelinePoint(analyticsRangeDays);
   const tdeeStability = tdeeStabilityProfile();
+  const tdeeShift = tdeeShiftSummary(analyticsRangeDays);
   const activityTerms = tdeeActivityTerms(analyticsRangeDays);
   const activeTdeeSource = activeTdeeProfile.source === 'bayesian'
     ? 'full-range Bayesian posterior'
@@ -826,6 +827,10 @@ function renderExecutiveSummary() {
         <div class="confidence-pill ${tdeeStability ? tdeeStability.confidence.cls : 'low'}">${tdeeStability ? tdeeStability.confidence.label : 'Low confidence'}</div>
         <div class="tiny">${tdeeStability ? `${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs the full-range posterior · ${tdeeStability.drift >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.drift))} drift across the recent window` : 'Stability becomes more useful once we have a longer rolling Bayesian timeline.'}</div>
       </div>
+    </div>
+    <div class="tdee-detail-note">
+      <strong>Recent TDEE shift</strong>
+      <p>${tdeeShift ? `The rolling Bayesian estimate is ${tdeeShift.direction === 'flat' ? 'roughly flat' : `${tdeeShift.delta >= 0 ? 'up' : 'down'} ${energyLabel(Math.abs(tdeeShift.delta))}` } versus ${formatShortDate(tdeeShift.previous.date)} (${energyLabel(tdeeShift.previous.mean)} → ${energyLabel(tdeeShift.latest.mean)} over ${tdeeShift.daysApart} days).` : 'Need at least two recent rolling Bayesian points to summarize how maintenance is moving.'}</p>
     </div>
     <div class="tdee-detail-note">
       <strong>How to read the different estimates</strong>

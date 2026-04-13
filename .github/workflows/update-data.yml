@@ -44,6 +44,9 @@ jobs:
       - name: Rebuild Bayesian artifacts
         run: python update_bayes.py js/data.js
 
+      - name: Validate generated dashboard artifacts
+        run: python scripts/validate_dashboard_build.py
+
       - name: Show generated diff
         run: git diff --stat js/data.js || true
 
