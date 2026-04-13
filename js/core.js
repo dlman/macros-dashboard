@@ -956,6 +956,11 @@ function applyBodyCompState(point, state = 'cut') {
   if (!point || state !== 'fed') return { ...point, displayState: 'cut', stateDelta: 0, comparableWeight: point?.weight ?? null };
   const stateDelta = glycogenComparableDelta(point.date);
   if (!stateDelta) return { ...point, displayState: 'fed', stateDelta: 0, comparableWeight: point.weight };
+  return applyBodyCompStateDelta(point, stateDelta, 'fed');
+}
+
+function applyBodyCompStateDelta(point, stateDelta = 0, displayState = 'fed') {
+  if (!point || !stateDelta) return { ...point, displayState, stateDelta: stateDelta || 0, comparableWeight: point?.weight ?? null };
   const weight = +(point.weight + stateDelta).toFixed(2);
   const lean = +(point.lean + stateDelta).toFixed(2);
   const leanLow = +(point.leanLow + stateDelta).toFixed(2);
@@ -975,7 +980,7 @@ function applyBodyCompState(point, state = 'cut') {
     bodyFatPct: weight ? (fat / weight) * 100 : 0,
     bodyFatPctLow: weight ? (fatLow / weight) * 100 : 0,
     bodyFatPctHigh: weight ? (fatHigh / weight) * 100 : 0,
-    displayState: 'fed',
+    displayState,
     stateDelta,
     comparableWeight: weight
   };
@@ -1124,6 +1129,29 @@ function latestWeightPointForScenario(days = allDays) {
 
 function latestWeightForScenario(days = allDays) {
   return latestWeightPointForScenario(days)?.weight ?? 162;
+}
+
+function currentFedStateDelta(days = allDays) {
+  const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
+  const currentGlycogenState = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  return {
+    latestGlycogenDay,
+    currentGlycogenState,
+    delta: currentGlycogenState ? +(glycogenRefState.massLbs - currentGlycogenState.massLbs).toFixed(2) : 0
+  };
+}
+
+function scenarioProjectedBodyComp(weight, days = allDays) {
+  const cutState = estimateBodyCompRangeAtWeight(weight, days);
+  const { latestGlycogenDay, currentGlycogenState, delta } = currentFedStateDelta(days);
+  const fedState = applyBodyCompStateDelta({ ...cutState, date: latestGlycogenDay?.date || days[days.length - 1]?.date || DXA_SCAN.date }, delta, 'fed');
+  return {
+    cutState,
+    fedState,
+    fedDelta: delta,
+    latestGlycogenDay,
+    currentGlycogenState
+  };
 }
 
 function addDaysToDate(dateStr, daysToAdd) {
@@ -1845,21 +1873,21 @@ function getScenarioDefaults(days, sleep) {
   return {
     current: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     maintain: { calories: Math.round(maintenanceFoodCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    mild_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 350) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    aggressive_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 650) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    better_sleep: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +Math.min(8, Math.max(goals.sleep, avgSleep + 1)).toFixed(1), drinks: drinkPerWeek },
+    mild_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 300) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    aggressive_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 575) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    better_sleep: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +Math.min(8, Math.max(goals.sleep, avgSleep + 1)).toFixed(1), drinks: Math.max(0, +(drinkPerWeek - 0.5).toFixed(1)) },
     no_drinks: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: 0 }
   };
 }
 
 function scenarioPresetLabel(key) {
   const labels = {
-    current: 'Current pace',
-    maintain: 'Maintain',
-    mild_cut: 'Mild cut',
+    current: 'Current setup',
+    maintain: 'True maintenance',
+    mild_cut: 'Lean cut',
     aggressive_cut: 'Aggressive cut',
-    better_sleep: 'Better sleep',
-    no_drinks: 'No drinks'
+    better_sleep: 'Recovery focus',
+    no_drinks: 'Dry cut'
   };
   return labels[key] || 'Active scenario';
 }

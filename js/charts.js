@@ -2600,13 +2600,16 @@ function runScenarioPlanner() {
   const baseline = calculateWhatIf(currentAvgCalories, weeks, currentAvgSleep, currentDrinkNights, rangeDays, rangeSleep);
   const deltaVsBaseline = parseFloat(r.weightChange) - parseFloat(baseline.weightChange);
   const dir = parseFloat(r.weightChange) >= 0 ? 'lose' : 'gain';
-  const projectedComp = estimateBodyCompRangeAtWeight(parseFloat(r.projectedWeight), rangeDays);
+  const projectedStates = scenarioProjectedBodyComp(parseFloat(r.projectedWeight), rangeDays);
+  const projectedComp = projectedStates.cutState;
+  const projectedCompFed = projectedStates.fedState;
 
   let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong>, the model still uses about <strong>${energyLabel(r.tdee)}</strong> as maintenance.`;
   html += `<br>That creates an effective <strong>${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong> after behavior drag.`;
-  html += `<br>Projected weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
-  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%)`;
-  html += `<br>Projected composition: ~${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean (range: ${weightLabel(projectedComp.fatLow, 1)}–${weightLabel(projectedComp.fatHigh, 1)} fat)`;
+  html += `<br>Projected cut-state weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
+  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> cut-state (likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%)`;
+  html += `<br>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at ~<strong>${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> BF if glycogen/hydration normalizes to the Jan 6 reference`;
+  html += `<br>Projected composition: ~${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean cut-state · fed-state lean ~${weightLabel(projectedCompFed.lean, 1)}`;
   html += `<br>Compared with your last-7-day setup, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
   document.getElementById('whatifResult').innerHTML = html;
 
@@ -2621,11 +2624,15 @@ function runScenarioPlanner() {
     },
     {
       value: weightLabel(parseFloat(r.projectedWeight)),
-      sub: `Projected endpoint from current ${weightLabel(r.currentWeight)}`
+      sub: `Cut-state endpoint from current ${weightLabel(r.currentWeight)}`
     },
     {
       value: `~${projectedComp.bodyFatPct.toFixed(1)}%`,
-      sub: `Likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}% from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
+      sub: `Cut-state BF · likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}% from ~${weightLabel(projectedComp.fat, 1)} fat and ~${weightLabel(projectedComp.lean, 1)} lean`
+    },
+    {
+      value: weightLabel(projectedCompFed.weight),
+      sub: `Fed-state comparable endpoint · ~${projectedCompFed.bodyFatPct.toFixed(1)}% BF if glycogen/hydration returns to the Jan 6 reference`
     },
     {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
@@ -2645,7 +2652,7 @@ function runScenarioPlanner() {
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, and projected body fat uses the same DXA-anchored body-comp model shown in Progress with a likely range rather than a single exact point.`;
+  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the DXA-anchored model shown in Progress, and fed-state comparable output assumes glycogen/hydration returns to the Jan 6 reference.`;
 }
 
 // =====================================================================

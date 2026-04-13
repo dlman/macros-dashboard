@@ -527,6 +527,53 @@
   <details class="advanced-shell" id="exploreShell" open data-tab-section="explore">
     <summary>Explore More</summary>
     <div class="advanced-inner">
+      <details class="explore-module" id="exploreScenarioModule" open>
+        <summary>🔮 Scenario Planner</summary>
+        <div class="explore-module-inner">
+          <div class="section-title" id="exploreScenarioSection" style="margin-top:0;">🔮 Scenario Planner</div>
+          <div class="whatif-card">
+            <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
+            <div class="trust-row trust-inline" style="margin-bottom:12px;">
+              <span class="trust-pill projected">Projected</span>
+              <span class="trust-pill estimated">Estimated maintenance and penalties</span>
+            </div>
+            <div class="scenario-presets" id="scenarioPresetRow">
+              <button class="scenario-btn" data-preset="current">Current Setup</button>
+              <button class="scenario-btn" data-preset="maintain">True Maintenance</button>
+              <button class="scenario-btn" data-preset="mild_cut">Lean Cut</button>
+              <button class="scenario-btn" data-preset="aggressive_cut">Aggressive Cut</button>
+              <button class="scenario-btn" data-preset="better_sleep">Recovery Focus</button>
+              <button class="scenario-btn" data-preset="no_drinks">Dry Cut</button>
+            </div>
+            <div class="whatif-inputs">
+              <div class="whatif-field"><label>Daily Calories</label><input type="number" id="whatifCal" value="1900"></div>
+              <div class="whatif-field"><label>Weeks</label><input type="number" id="whatifWeeks" value="4"></div>
+              <div class="whatif-field"><label>Avg Sleep (hrs)</label><input type="number" id="whatifSleep" value="6" step="0.5"></div>
+              <div class="whatif-field"><label>Drink Nights / Week</label><input type="number" id="whatifDrinks" value="1" step="0.5" class="wide"></div>
+              <button class="hdr-btn" id="whatifCalcBtn" style="margin-bottom:0;">Calculate</button>
+            </div>
+            <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
+            <div class="scenario-grid" id="scenarioResultGrid"></div>
+            <div class="scenario-forecast-wrap">
+              <div class="scenario-forecast-head">
+                <div>
+                  <h4>Projected Weight Over Time</h4>
+                  <p>Starts from the latest weigh-in inside the selected range and compares your active scenario with current pace and core preset paths.</p>
+                </div>
+                <div class="trust-row trust-inline">
+                  <span class="trust-pill projected">Projected</span>
+                  <span class="trust-pill logged">Range-anchored start</span>
+                </div>
+              </div>
+              <div class="scenario-forecast-canvas">
+                <canvas id="scenarioForecastChart"></canvas>
+              </div>
+            </div>
+            <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
+          </div>
+        </div>
+      </details>
+
       <details class="explore-module" id="exploreCorrModule" open>
         <summary>📊 Full Correlation Matrix</summary>
         <div class="explore-module-inner">
@@ -587,53 +634,6 @@
           <div class="section-title" id="exploreFoodSection" style="margin-top:0;">🍽️ Food Associations</div>
           <p class="explore-note" id="foodAssocNote">Foods are ranked by overrepresentation in the selected range, using repeated appearances rather than one-off entries.</p>
           <div class="food-assoc-grid" id="foodAssociationGrid"></div>
-        </div>
-      </details>
-
-      <details class="explore-module" id="exploreScenarioModule" open>
-        <summary>🔮 Scenario Planner</summary>
-        <div class="explore-module-inner">
-          <div class="section-title" id="exploreScenarioSection" style="margin-top:0;">🔮 Scenario Planner</div>
-          <div class="whatif-card">
-            <h3>Test maintenance, cut, sleep, and no-drink scenarios against your current trend.</h3>
-            <div class="trust-row trust-inline" style="margin-bottom:12px;">
-              <span class="trust-pill projected">Projected</span>
-              <span class="trust-pill estimated">Estimated maintenance and penalties</span>
-            </div>
-            <div class="scenario-presets" id="scenarioPresetRow">
-              <button class="scenario-btn" data-preset="current">Current Setup</button>
-              <button class="scenario-btn" data-preset="maintain">Maintain</button>
-              <button class="scenario-btn" data-preset="mild_cut">Mild Cut</button>
-              <button class="scenario-btn" data-preset="aggressive_cut">Aggressive Cut</button>
-              <button class="scenario-btn" data-preset="better_sleep">Better Sleep</button>
-              <button class="scenario-btn" data-preset="no_drinks">No Drinks</button>
-            </div>
-            <div class="whatif-inputs">
-              <div class="whatif-field"><label>Daily Calories</label><input type="number" id="whatifCal" value="1900"></div>
-              <div class="whatif-field"><label>Weeks</label><input type="number" id="whatifWeeks" value="4"></div>
-              <div class="whatif-field"><label>Avg Sleep (hrs)</label><input type="number" id="whatifSleep" value="6" step="0.5"></div>
-              <div class="whatif-field"><label>Drink Nights / Week</label><input type="number" id="whatifDrinks" value="1" step="0.5" class="wide"></div>
-              <button class="hdr-btn" id="whatifCalcBtn" style="margin-bottom:0;">Calculate</button>
-            </div>
-            <div class="whatif-result" id="whatifResult">Enter values and click Calculate.</div>
-            <div class="scenario-grid" id="scenarioResultGrid"></div>
-            <div class="scenario-forecast-wrap">
-              <div class="scenario-forecast-head">
-                <div>
-                  <h4>Projected Weight Over Time</h4>
-                  <p>Starts from the latest weigh-in inside the selected range and compares your active scenario with current pace and core preset paths.</p>
-                </div>
-                <div class="trust-row trust-inline">
-                  <span class="trust-pill projected">Projected</span>
-                  <span class="trust-pill logged">Range-anchored start</span>
-                </div>
-              </div>
-              <div class="scenario-forecast-canvas">
-                <canvas id="scenarioForecastChart"></canvas>
-              </div>
-            </div>
-            <div class="scenario-note" id="scenarioAssumptions">Scenarios use your estimated maintenance, current weight, and the observed intake/sleep/drink penalties from the selected range.</div>
-          </div>
         </div>
       </details>
     </div>
