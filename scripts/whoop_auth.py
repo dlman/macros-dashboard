@@ -5,30 +5,30 @@ One-time WHOOP OAuth flow — run this locally to get your initial refresh token
 Usage:
   python scripts/whoop_auth.py
 
-You will be prompted for your WHOOP client_id and client_secret, then your
-browser will open for you to log in and authorise the app. The script catches
-the redirect automatically and prints your refresh token.
+Your browser will open for you to log in and authorise the app. The script:
+  - Catches the redirect automatically
+  - Writes WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET, WHOOP_REFRESH_TOKEN to .env.local
+  - Prints the values for copy-pasting into GitHub Actions secrets
 
-After running this once:
-  1. Add WHOOP_CLIENT_ID      as a GitHub Actions secret
-  2. Add WHOOP_CLIENT_SECRET  as a GitHub Actions secret
-  3. Add WHOOP_REFRESH_TOKEN  as a GitHub Actions secret  (the token printed here)
-  4. Add GH_PAT               as a GitHub Actions secret  (PAT with secrets:write)
-  5. Add GH_REPO              as a GitHub Actions secret  (e.g. "dicksonluong/macros-dashboard")
+Run this again any time your refresh token is stale (401 errors during sync).
 """
 
 from __future__ import annotations
 
 import json
+import os
+import secrets
 import sys
 import threading
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-import secrets
+from pathlib import Path
 
 import requests
+
+ROOT      = Path(__file__).resolve().parents[1]
+ENV_LOCAL = ROOT / ".env.local"
 
 REDIRECT_URI = "http://localhost:8080/callback"
 TOKEN_URL    = "https://api.prod.whoop.com/oauth/oauth2/token"
@@ -104,10 +104,63 @@ def exchange_code(client_id: str, client_secret: str, code: str) -> dict:
     return resp.json()
 
 
+def _read_env_local() -> dict[str, str]:
+    """Return key→value pairs from .env.local (if it exists)."""
+    result: dict[str, str] = {}
+    if not ENV_LOCAL.exists():
+        return result
+    with ENV_LOCAL.open() as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            result[key.strip()] = val.strip().strip('"').strip("'")
+    return result
+
+
+def write_env_local(updates: dict[str, str]) -> None:
+    """
+    Upsert keys into .env.local.  Existing lines for those keys are replaced;
+    keys not already present are appended.  Comment lines are preserved.
+    """
+    lines: list[str] = []
+    replaced: set[str] = set()
+
+    if ENV_LOCAL.exists():
+        for raw in ENV_LOCAL.read_text().splitlines():
+            line = raw.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key = line.partition("=")[0].strip()
+                if key in updates:
+                    lines.append(f"{key}={updates[key]}")
+                    replaced.add(key)
+                    continue
+            lines.append(raw.rstrip())
+
+    for key, val in updates.items():
+        if key not in replaced:
+            lines.append(f"{key}={val}")
+
+    ENV_LOCAL.write_text("\n".join(lines) + "\n")
+
+
 def main() -> None:
     print("=== WHOOP One-Time OAuth Setup ===\n")
-    client_id     = input("Paste your WHOOP client_id:     ").strip()
-    client_secret = input("Paste your WHOOP client_secret: ").strip()
+
+    # Pre-fill from .env.local so re-auth doesn't require re-typing credentials
+    existing = _read_env_local()
+
+    def prompt(label: str, env_key: str) -> str:
+        current = existing.get(env_key, "").strip()
+        if current:
+            print(f"{label} [found in .env.local, press Enter to keep]: ", end="", flush=True)
+            entered = input().strip()
+            return entered if entered else current
+        return input(f"{label}: ").strip()
+
+    client_id     = prompt("WHOOP client_id    ", "WHOOP_CLIENT_ID")
+    client_secret = prompt("WHOOP client_secret", "WHOOP_CLIENT_SECRET")
 
     if not client_id or not client_secret:
         sys.exit("Both client_id and client_secret are required.")
@@ -145,16 +198,22 @@ def main() -> None:
         print(json.dumps(tokens, indent=2))
         sys.exit("No refresh_token in response — did you include the 'offline' scope?")
 
-    print("\n" + "=" * 60)
-    print("SUCCESS — save these as GitHub Actions secrets:")
+    # ── Write credentials to .env.local ──────────────────────────────────────
+    write_env_local({
+        "WHOOP_CLIENT_ID":     client_id,
+        "WHOOP_CLIENT_SECRET": client_secret,
+        "WHOOP_REFRESH_TOKEN": refresh_token,
+    })
+    print(f"\n✓  Credentials written to .env.local")
+    print(f"   You can now run:  python scripts/dev_sync.py\n")
+
+    print("=" * 60)
+    print("Also update these GitHub Actions secrets (if not already set):")
     print("=" * 60)
     print(f"\n  WHOOP_CLIENT_ID      = {client_id}")
     print(f"  WHOOP_CLIENT_SECRET  = {client_secret}")
     print(f"  WHOOP_REFRESH_TOKEN  = {refresh_token}")
-    print(f"\n  (access token expires in {expires_in}s — the sync script rotates it automatically)")
-    print("\nAlso add:")
-    print("  GH_PAT   = a GitHub PAT with repo + secrets:write scopes")
-    print("  GH_REPO  = owner/repo  e.g. dicksonluong/macros-dashboard")
+    print(f"\n  (access token expires in {expires_in}s — sync script rotates it automatically)")
     print("=" * 60)
 
 
