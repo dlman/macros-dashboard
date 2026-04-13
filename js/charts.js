@@ -644,6 +644,7 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const activeTdeeProfile = workingTDEEProfile(filteredDays);
   const fullBayesTdee = freshBayesianPosterior(getAnalyticsDays());
   const tdeeStability = tdeeStabilityProfile();
+  const agreement = modelAgreementSummary(filteredDays, filteredSleep);
   const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
   const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const gap = trendReality?.gap ?? null;
@@ -695,6 +696,12 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
       <div class="value">${maintenanceValue}</div>
       <div class="sub">${maintenanceSub}</div>
       <div class="tiny">${maintenanceTiny}</div>
+    </div>
+    <div class="coach-card ${agreement.cls}">
+      <div class="eyebrow">Model Agreement</div>
+      <div class="value">${agreement.value}</div>
+      <div class="sub">${agreement.sub}</div>
+      <div class="tiny">${agreement.tiny}</div>
     </div>
   `;
 }

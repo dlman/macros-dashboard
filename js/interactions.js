@@ -2,6 +2,7 @@
 // DAY DETAIL PANEL (enhanced with sleep data + food pills + keyboard nav)
 // =====================================================================
 let currentPanelDate = null;
+let bodyCompState = 'cut';
 
 function findDay(dateStr) {
   for (const m of ACTIVE_MONTHS) {
@@ -487,6 +488,13 @@ document.querySelectorAll('.scenario-btn').forEach(btn => {
     runScenarioPlanner();
   });
 });
+document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    bodyCompState = btn.dataset.bodyCompState || 'cut';
+    document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(el => el.classList.toggle('active', el === btn));
+    updateBodyCompChart(getFilteredDays());
+  });
+});
 ['whatifCal', 'whatifWeeks', 'whatifSleep', 'whatifDrinks'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => {
     scenarioPreset = '';
@@ -839,7 +847,7 @@ function updateGlycogenChart(days) {
 function updateBodyCompChart(days) {
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
-  const bodyComp = bodyCompEstimate(days);
+  const bodyComp = bodyCompEstimate(days, bodyCompState);
   const fatVals = bodyComp.map(d => weightValue(d.fat));
   const leanVals = bodyComp.map(d => weightValue(d.lean));
   const fatLowVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatLow));
@@ -881,10 +889,13 @@ function updateBodyCompChart(days) {
     if (d.measured) {
       const scanDelta = gs ? (gs.loadPct - glycogenRefState.loadPct).toFixed(1) : null;
       const deltaNote = scanDelta !== null ? `  vs Jan 6 reference: ${scanDelta > 0 ? '+' : ''}${scanDelta}% glycogen load` : '';
-      return [` DXA measured point on ${d.scanLabel || d.date}`, ` Total: ${weightLabel(d.weight)}`, glycoNote, deltaNote].filter(Boolean);
+      const stateNote = bodyCompState === 'fed' && d.stateDelta
+        ? ` Fed-state comparable: ${weightLabel(d.weight)} (${d.stateDelta >= 0 ? '+' : ''}${weightLabel(d.stateDelta, 2)} vs cut-state)`
+        : ` Total: ${weightLabel(d.weight)}`;
+      return [` DXA measured point on ${d.scanLabel || d.date}`, stateNote, glycoNote, deltaNote].filter(Boolean);
     }
     return [
-      ` Estimated from DXA baseline`,
+      ` Estimated from DXA baseline (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
       glycoNote
@@ -911,8 +922,10 @@ function updateBodyCompChart(days) {
   if (bodyCompRangeNote) {
     bodyCompRangeNote.textContent = latestEstimated
       ? compact
-        ? `Latest est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · likely range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
-        : `Latest estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
+        ? `Latest ${bodyCompState}-state est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
+        : bodyCompState === 'fed'
+          ? `Fed-state comparable estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% after restoring Jan 6-like glycogen/hydration into lean mass.`
+          : `Cut-state estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
       : 'Latest estimated body fat range will appear here once the selected range has weigh-ins.';
   }
 }

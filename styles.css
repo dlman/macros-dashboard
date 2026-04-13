@@ -96,7 +96,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .forecast-card .value { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .forecast-card .sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
 .forecast-card .tiny { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
-.coach-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: -4px 0 18px; }
+.coach-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: -4px 0 18px; }
 .coach-card { background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(56,189,248,0.06)); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
 .coach-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
 .coach-card .value { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }

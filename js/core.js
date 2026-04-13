@@ -940,8 +940,42 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays) {
   };
 }
 
+function glycogenComparableDelta(dateStr) {
+  const state = glycogenByDate[dateStr];
+  return state ? +(glycogenRefState.massLbs - state.massLbs).toFixed(2) : 0;
+}
+
+function applyBodyCompState(point, state = 'cut') {
+  if (!point || state !== 'fed') return { ...point, displayState: 'cut', stateDelta: 0, comparableWeight: point?.weight ?? null };
+  const stateDelta = glycogenComparableDelta(point.date);
+  if (!stateDelta) return { ...point, displayState: 'fed', stateDelta: 0, comparableWeight: point.weight };
+  const weight = +(point.weight + stateDelta).toFixed(2);
+  const lean = +(point.lean + stateDelta).toFixed(2);
+  const leanLow = +(point.leanLow + stateDelta).toFixed(2);
+  const leanHigh = +(point.leanHigh + stateDelta).toFixed(2);
+  const fat = point.fat;
+  const fatLow = point.fatLow;
+  const fatHigh = point.fatHigh;
+  return {
+    ...point,
+    weight,
+    lean,
+    leanLow,
+    leanHigh,
+    fat,
+    fatLow,
+    fatHigh,
+    bodyFatPct: weight ? (fat / weight) * 100 : 0,
+    bodyFatPctLow: weight ? (fatLow / weight) * 100 : 0,
+    bodyFatPctHigh: weight ? (fatHigh / weight) * 100 : 0,
+    displayState: 'fed',
+    stateDelta,
+    comparableWeight: weight
+  };
+}
+
 // Body composition estimate anchored to the Apr 8, 2026 DXA scan.
-function bodyCompEstimate(days = allDays) {
+function bodyCompEstimate(days = allDays, state = 'cut') {
   const weightDays = days.filter(d => d.weight);
   // DXA scan points are ground-truth measurements — show them whenever their date
   // falls within the selected range window, regardless of analytics cutoff or
@@ -991,7 +1025,24 @@ function bodyCompEstimate(days = allDays) {
       scanLabel: 'Jan 6, 2026'
     });
   }
-  return points.sort((a, b) => a.date.localeCompare(b.date));
+  return points.sort((a, b) => a.date.localeCompare(b.date)).map(point => applyBodyCompState(point, state));
+}
+
+function adjustedWeightReality(days) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return null;
+  const first = weightDays[0];
+  const last = weightDays[weightDays.length - 1];
+  const firstAdjusted = first.weight + glycogenComparableDelta(first.date);
+  const lastAdjusted = last.weight + glycogenComparableDelta(last.date);
+  return {
+    firstDate: first.date,
+    lastDate: last.date,
+    firstAdjusted,
+    lastAdjusted,
+    adjustedLoss: +(firstAdjusted - lastAdjusted).toFixed(2),
+    latestDelta: glycogenComparableDelta(last.date)
+  };
 }
 
 // Sleep debt
@@ -2482,6 +2533,72 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     fedStateDelta,
     dailySlope: wp.dailySlope,
     confidence: wp.confidence
+  };
+}
+
+function directionalSignal(value, threshold = 0.25) {
+  if (!Number.isFinite(value)) return 'unknown';
+  if (value > threshold) return 'down';
+  if (value < -threshold) return 'up';
+  return 'flat';
+}
+
+function modelAgreementSummary(days, sleep) {
+  const trendReality = weightTrendReality(days);
+  const adjustedReality = adjustedWeightReality(days);
+  const activeTdee = workingTDEEProfile(days);
+  const fullBayes = freshBayesianPosterior(getAnalyticsDays());
+  const stability = tdeeStabilityProfile();
+  const signals = [
+    { label: 'Deficit math', value: trendReality?.expectedLoss ?? null },
+    { label: 'Filtered trend', value: trendReality?.actualLoss ?? null },
+    { label: 'Fed-state trend', value: adjustedReality?.adjustedLoss ?? null }
+  ].map(signal => ({ ...signal, direction: directionalSignal(signal.value) }))
+   .filter(signal => signal.direction !== 'unknown');
+
+  if (signals.length < 2) {
+    return {
+      cls: 'warn',
+      value: 'Need more data',
+      sub: 'Need at least two weigh-ins before the models can be compared.',
+      tiny: 'Agreement uses deficit-implied loss, filtered trend, fed-state comparable trend, and the active TDEE anchor.'
+    };
+  }
+
+  const counts = signals.reduce((acc, signal) => {
+    acc[signal.direction] = (acc[signal.direction] || 0) + 1;
+    return acc;
+  }, {});
+  const majorityDirection = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  const aligned = signals.filter(signal => signal.direction === majorityDirection).length;
+  const fullGap = fullBayes ? activeTdee.maintenance - fullBayes.mean : null;
+  const tdeeAligned = !fullBayes || Math.abs(fullGap) <= 180 || activeTdee.source === 'bayesian';
+
+  let cls = 'warn';
+  let value = 'Mixed';
+  if (aligned === signals.length && tdeeAligned) {
+    cls = 'good';
+    value = majorityDirection === 'down' ? 'Strongly aligned' : majorityDirection === 'flat' ? 'Broadly flat' : 'Aligned upward';
+  } else if (aligned <= 1 || (!tdeeAligned && aligned === 2 && signals.length === 2)) {
+    cls = 'bad';
+    value = 'Divergent';
+  }
+
+  const directionCopy = majorityDirection === 'down'
+    ? 'cut is still trending down'
+    : majorityDirection === 'flat'
+      ? 'range looks mostly flat'
+      : 'recent range is drifting up';
+  const signalLine = signals.map(signal => `${signal.label}: ${signal.direction}`).join(' · ');
+  const tdeeLine = fullBayes
+    ? `Active TDEE ${energyLabel(activeTdee.maintenance)} vs full-range Bayes ${fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(fullGap))}`
+    : `Active TDEE source: ${activeTdee.source}`;
+
+  return {
+    cls,
+    value,
+    sub: `${directionCopy}; ${aligned}/${signals.length} core signals point the same way.`,
+    tiny: `${signalLine} · ${tdeeLine}${stability ? ` · ${stability.status}` : ''}`
   };
 }
 
