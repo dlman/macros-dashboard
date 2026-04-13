@@ -736,6 +736,7 @@ function renderExecutiveSummary() {
   const tdeeStability = tdeeStabilityProfile();
   const tdeeShift = tdeeShiftSummary(analyticsRangeDays);
   const activityTerms = tdeeActivityTerms(analyticsRangeDays);
+  const coachTdee = endpointTDEEProfile(analyticsRangeDays);
   const activeTdeeSource = activeTdeeProfile.source === 'bayesian'
     ? 'full-range Bayesian posterior'
     : activeTdeeProfile.source === 'bayesian_timeline'
@@ -831,6 +832,10 @@ function renderExecutiveSummary() {
     <div class="tdee-detail-note">
       <strong>Recent TDEE shift</strong>
       <p>${tdeeShift ? `The rolling Bayesian estimate is ${tdeeShift.direction === 'flat' ? 'roughly flat' : `${tdeeShift.delta >= 0 ? 'up' : 'down'} ${energyLabel(Math.abs(tdeeShift.delta))}` } versus ${formatShortDate(tdeeShift.previous.date)} (${energyLabel(tdeeShift.previous.mean)} → ${energyLabel(tdeeShift.latest.mean)} over ${tdeeShift.daysApart} days).` : 'Need at least two recent rolling Bayesian points to summarize how maintenance is moving.'}</p>
+    </div>
+    <div class="tdee-detail-note">
+      <strong>Coach estimate vs Bayesian</strong>
+      <p>${fullBayesTdee ? `A simple coach-style estimate from recency-weighted intake plus endpoint weight change lands around ${energyLabel(coachTdee.maintenance)}, versus the Bayesian full-range anchor at ~${energyLabel(fullBayesTdee.mean)} (${coachTdee.maintenance >= fullBayesTdee.mean ? '+' : '−'}${energyLabel(Math.abs(coachTdee.maintenance - fullBayesTdee.mean))}).` : `A simple coach-style estimate from recency-weighted intake plus endpoint weight change lands around ${energyLabel(coachTdee.maintenance)}. The Bayesian anchor will show up here when the cached posterior is available for the current analytics range.`}</p>
     </div>
     <div class="tdee-detail-note">
       <strong>How to read the different estimates</strong>
