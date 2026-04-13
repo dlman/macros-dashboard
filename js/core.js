@@ -1194,6 +1194,23 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
   };
 }
 
+function scenarioComparisonSnapshot(label, values, days = allDays, sleep = sleepData) {
+  const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
+  const projectedStates = scenarioProjectedBodyComp(parseFloat(projection.projectedWeight), days);
+  const currentStates = scenarioProjectedBodyComp(projection.currentWeight, days);
+  return {
+    label,
+    values,
+    projection,
+    cutState: projectedStates.cutState,
+    fedState: projectedStates.fedState,
+    fedDelta: projectedStates.fedDelta,
+    scaleChange: parseFloat(projection.weightChange),
+    fatChange: +(currentStates.cutState.fat - projectedStates.cutState.fat).toFixed(1),
+    leanChange: +(projectedStates.cutState.lean - currentStates.cutState.lean).toFixed(1)
+  };
+}
+
 function scenarioForecastSeries(label, values, days, sleep) {
   const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
   const weeks = Math.max(1, values.weeks);
@@ -1873,7 +1890,7 @@ function getScenarioDefaults(days, sleep) {
   return {
     current: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     maintain: { calories: Math.round(maintenanceFoodCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
-    mild_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 300) / 25) * 25, weeks: 6, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
+    mild_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 300) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     aggressive_cut: { calories: Math.round(Math.max(1000, maintenanceFoodCalories - 575) / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: drinkPerWeek },
     better_sleep: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +Math.min(8, Math.max(goals.sleep, avgSleep + 1)).toFixed(1), drinks: Math.max(0, +(drinkPerWeek - 0.5).toFixed(1)) },
     no_drinks: { calories: Math.round(avgCalories / 25) * 25, weeks: 4, sleep: +avgSleep.toFixed(1), drinks: 0 }

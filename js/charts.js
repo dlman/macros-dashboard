@@ -2603,14 +2603,14 @@ function runScenarioPlanner() {
   const projectedStates = scenarioProjectedBodyComp(parseFloat(r.projectedWeight), rangeDays);
   const projectedComp = projectedStates.cutState;
   const projectedCompFed = projectedStates.fedState;
+  const currentStates = scenarioProjectedBodyComp(r.currentWeight, rangeDays);
+  const projectedFatChange = +(currentStates.cutState.fat - projectedComp.fat).toFixed(1);
+  const projectedLeanChange = +(projectedComp.lean - currentStates.cutState.lean).toFixed(1);
 
-  let html = `At <strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong>, the model still uses about <strong>${energyLabel(r.tdee)}</strong> as maintenance.`;
-  html += `<br>That creates an effective <strong>${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}/day</strong> after behavior drag.`;
-  html += `<br>Projected cut-state weight: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} ~<strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong>)`;
-  html += `<br>Projected body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> cut-state (likely ${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%)`;
-  html += `<br>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at ~<strong>${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> BF if glycogen/hydration normalizes to the Jan 6 reference`;
-  html += `<br>Projected composition: ~${weightLabel(projectedComp.fat, 1)} fat / ${weightLabel(projectedComp.lean, 1)} lean cut-state · fed-state lean ~${weightLabel(projectedCompFed.lean, 1)}`;
-  html += `<br>Compared with your last-7-day setup, that is <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.`;
+  let html = `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
+  html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · tissue split <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean.</div>`;
+  html += `<div>Body fat: <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> cut-state (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%) · fed-state comparable <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong>.</div>`;
+  html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
   document.getElementById('whatifResult').innerHTML = html;
 
   document.getElementById('scenarioResultGrid').innerHTML = [
@@ -2620,7 +2620,11 @@ function runScenarioPlanner() {
     },
     {
       value: weightLabel(Math.abs(parseFloat(r.weightChange)), 1),
-      sub: `${dir === 'lose' ? 'Projected loss' : 'Projected gain'} over ${weeks} week${weeks === 1 ? '' : 's'}`
+      sub: `${dir === 'lose' ? 'Projected scale loss' : 'Projected scale gain'} over ${weeks} week${weeks === 1 ? '' : 's'}`
+    },
+    {
+      value: `${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}`,
+      sub: `Estimated fat change in cut-state terms · lean ${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}`
     },
     {
       value: weightLabel(parseFloat(r.projectedWeight)),
@@ -2644,6 +2648,19 @@ function runScenarioPlanner() {
       <div class="sub">${card.sub}</div>
     </div>
   `).join('');
+
+  const defaults = getScenarioDefaults(rangeDays, rangeSleep);
+  const compareRows = ['current', 'maintain', 'mild_cut', 'aggressive_cut', 'better_sleep', 'no_drinks'].map(key => {
+    const snapshot = scenarioComparisonSnapshot(scenarioPresetLabel(key), defaults[key], rangeDays, rangeSleep);
+    return `
+      <div class="compare-card${scenarioPreset === key ? ' active-scenario-compare' : ''}">
+        <div class="eyebrow">${snapshot.label}</div>
+        <div class="delta">${weightLabel(snapshot.cutState.weight)} cut</div>
+        <div class="tiny">${snapshot.scaleChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.scaleChange), 1)} scale · ${snapshot.fatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.fatChange), 1)} fat · ${weightLabel(snapshot.fedState.weight)} fed</div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('scenarioCompareGrid').innerHTML = compareRows;
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
   const scenarioTdee = workingTDEEProfile(rangeDays);
