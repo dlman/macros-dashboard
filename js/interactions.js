@@ -476,6 +476,31 @@ document.getElementById('weeklyMarkdownExportBtn').addEventListener('click', () 
 // =====================================================================
 // WHAT-IF CALCULATOR
 // =====================================================================
+function syncScenarioModeUi() {
+  document.querySelectorAll('#whatifModeTabs .mtab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.whatifMode === scenarioPlannerMode);
+  });
+  document.querySelectorAll('.whatif-field[data-whatif-mode]').forEach(el => {
+    el.hidden = el.dataset.whatifMode !== scenarioPlannerMode;
+  });
+}
+
+function bindScenarioFieldPair(inputId, sliderId) {
+  const input = document.getElementById(inputId);
+  const slider = document.getElementById(sliderId);
+  if (!input || !slider) return;
+  const syncValue = (source, target) => {
+    target.value = source.value;
+    scenarioPreset = '';
+    syncScenarioPresetButtons();
+  };
+  input.addEventListener('input', () => syncValue(input, slider));
+  slider.addEventListener('input', () => {
+    syncValue(slider, input);
+    runScenarioPlanner();
+  });
+}
+
 document.getElementById('whatifCalcBtn').addEventListener('click', runScenarioPlanner);
 document.querySelectorAll('.scenario-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -488,6 +513,13 @@ document.querySelectorAll('.scenario-btn').forEach(btn => {
     runScenarioPlanner();
   });
 });
+document.querySelectorAll('#whatifModeTabs .mtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    scenarioPlannerMode = btn.dataset.whatifMode || 'horizon';
+    syncScenarioModeUi();
+    runScenarioPlanner();
+  });
+});
 document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(btn => {
   btn.addEventListener('click', () => {
     bodyCompState = btn.dataset.bodyCompState || 'cut';
@@ -495,12 +527,20 @@ document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(btn => {
     updateBodyCompChart(getFilteredDays());
   });
 });
-['whatifCal', 'whatifWeeks', 'whatifSleep', 'whatifDrinks'].forEach(id => {
+['whatifCal', 'whatifWeeks', 'whatifGoalBf', 'whatifSleep', 'whatifDrinks'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => {
     scenarioPreset = '';
     syncScenarioPresetButtons();
   });
 });
+[
+  ['whatifCal', 'whatifCalSlider'],
+  ['whatifWeeks', 'whatifWeeksSlider'],
+  ['whatifGoalBf', 'whatifGoalBfSlider'],
+  ['whatifSleep', 'whatifSleepSlider'],
+  ['whatifDrinks', 'whatifDrinksSlider']
+].forEach(([inputId, sliderId]) => bindScenarioFieldPair(inputId, sliderId));
+syncScenarioModeUi();
 
 function syncSettingsForm() {
   document.getElementById('goalCalories').value = goals.calories;

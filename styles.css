@@ -349,10 +349,12 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 /* ===== WHAT-IF CALCULATOR ===== */
 .whatif-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 22px; margin-bottom: 16px; }
 .whatif-card h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; }
+.whatif-mode-tabs { width: fit-content; }
 .whatif-inputs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
 .whatif-field { display: flex; flex-direction: column; gap: 4px; }
 .whatif-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-faint); }
-.whatif-field input { width: 100px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 6px 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.whatif-field input[type=number] { width: 100px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 6px 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.whatif-field input[type=range] { width: 100%; min-width: 120px; accent-color: #38bdf8; }
 .whatif-field input.wide { width: 132px; }
 .whatif-result { font-size: 13px; color: var(--text-secondary); line-height: 1.55; padding: 10px 14px; background: var(--bg-input); border-radius: 8px; }
 .whatif-result > div + div { margin-top: 6px; }
@@ -831,6 +833,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .chart-card .trust-inline { display: none; }
   .scenario-btn,
   .jump-chip { padding: 10px 12px; min-height: 42px; }
+  .whatif-field { min-width: 0; width: 100%; }
+  .whatif-field input[type=number],
+  .whatif-field input.wide { width: 100%; }
   #exploreShell .explore-module > summary { padding: 13px 14px; min-height: 46px; }
   #exploreShell .explore-module-inner { padding: 12px; }
   #exploreShell .section-title { margin-top: 0; }

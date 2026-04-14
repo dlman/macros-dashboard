@@ -1232,6 +1232,73 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
   };
 }
 
+function scenarioTimeToBodyFatGoal(values, targetBfPct = 18, days = allDays, sleep = sleepData) {
+  const scenario = calculateWhatIf(values.calories, 1, values.sleep, values.drinks, days, sleep);
+  const currentWeight = scenario.currentWeight;
+  const currentStates = scenarioProjectedBodyComp(currentWeight, days);
+  const cutTargetWeight = targetWeightFromFatFreeMass(targetBfPct, DXA_FAT_FREE_MASS);
+  const fedTargetWeight = targetWeightFromFatFreeMass(targetBfPct, DXA_PREV_FAT_FREE_MASS);
+  const dailyPace = scenario.effectiveDeficit / 3500;
+  const targetStates = scenarioProjectedBodyComp(cutTargetWeight, days);
+  if (!Number.isFinite(cutTargetWeight) || !Number.isFinite(fedTargetWeight)) return null;
+  if (currentStates.cutState.bodyFatPct <= targetBfPct) {
+    return {
+      achievable: true,
+      alreadyThere: true,
+      targetBfPct,
+      currentWeight,
+      currentBfPct: currentStates.cutState.bodyFatPct,
+      currentFedBfPct: currentStates.fedState.bodyFatPct,
+      cutTargetWeight,
+      fedTargetWeight,
+      daysToTarget: 0,
+      weeksToTarget: 0,
+      dailyPace,
+      weeklyPace: dailyPace * 7,
+      effectiveDeficit: scenario.effectiveDeficit,
+      currentStates,
+      targetStates
+    };
+  }
+  if (!Number.isFinite(dailyPace) || dailyPace <= 0) {
+    return {
+      achievable: false,
+      alreadyThere: false,
+      targetBfPct,
+      currentWeight,
+      currentBfPct: currentStates.cutState.bodyFatPct,
+      currentFedBfPct: currentStates.fedState.bodyFatPct,
+      cutTargetWeight,
+      fedTargetWeight,
+      daysToTarget: null,
+      weeksToTarget: null,
+      dailyPace,
+      weeklyPace: dailyPace * 7,
+      effectiveDeficit: scenario.effectiveDeficit,
+      currentStates,
+      targetStates
+    };
+  }
+  const daysToTarget = Math.max(0, Math.ceil((currentWeight - cutTargetWeight) / dailyPace));
+  return {
+    achievable: true,
+    alreadyThere: false,
+    targetBfPct,
+    currentWeight,
+    currentBfPct: currentStates.cutState.bodyFatPct,
+    currentFedBfPct: currentStates.fedState.bodyFatPct,
+    cutTargetWeight,
+    fedTargetWeight,
+    daysToTarget,
+    weeksToTarget: +(daysToTarget / 7).toFixed(1),
+    dailyPace,
+    weeklyPace: dailyPace * 7,
+    effectiveDeficit: scenario.effectiveDeficit,
+    currentStates,
+    targetStates
+  };
+}
+
 function scenarioComparisonSnapshot(label, values, days = allDays, sleep = sleepData) {
   const projection = calculateWhatIf(values.calories, values.weeks, values.sleep, values.drinks, days, sleep);
   const projectedStates = scenarioProjectedBodyComp(parseFloat(projection.projectedWeight), days);
@@ -1423,6 +1490,7 @@ let compareMode = persistedState.compareMode || 'equal_span';
 let eventFilter = persistedState.eventFilter || 'all';
 let activeTab = persistedState.activeTab || 'overview';
 let scenarioPreset = 'current';
+let scenarioPlannerMode = 'horizon';
 let scenarioFormInitialized = false;
 let suppressEventFilter = false;
 
@@ -1988,6 +2056,7 @@ function scenarioPresetLabel(key) {
 function updateScenarioForecastChart(activeValues, days, sleep) {
   const chart = allCharts.scenarioForecastChart;
   const weeks = Math.max(1, activeValues.weeks);
+  const targetBfPct = activeValues.targetBfPct ?? 18;
   const recentWindow = scenarioRecentWindow(days, sleep, 7);
   const avgCalories = avgFoodCalories(recentWindow.days) ?? goals.calories;
   const avgSleep = avgOrNull(recentWindow.sleep, 'hours') ?? goals.sleep;
@@ -1995,6 +2064,9 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   const defaults = getScenarioDefaults(days, sleep);
   const activeLabel = scenarioPreset ? scenarioPresetLabel(scenarioPreset) : 'Active scenario';
   const activeSeries = scenarioForecastSeries(activeLabel, { ...activeValues, weeks }, days, sleep);
+  const goalProjection = scenarioPlannerMode === 'goal'
+    ? scenarioTimeToBodyFatGoal({ ...activeValues, weeks }, targetBfPct, days, sleep)
+    : null;
   const currentSeries = scenarioForecastSeries('Current pace', { calories: avgCalories, weeks, sleep: avgSleep, drinks: avgDrinks }, days, sleep);
   const comparisonKeys = ['maintain', 'mild_cut', 'aggressive_cut'].filter(key => key !== scenarioPreset);
   const isCurrentEquivalent =
@@ -2101,6 +2173,15 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.plugins.legend.labels.filter = item => !chart.data.datasets[item.datasetIndex]?.legendHidden;
   chart.options.plugins.tooltip.filter = ctx => !ctx.dataset.tooltipHidden;
+  chart.options.plugins.scenarioGoalMarker = scenarioPlannerMode === 'goal' && goalProjection?.achievable
+    ? {
+        enabled: true,
+        targetWeek: (goalProjection.daysToTarget || 0) / 7,
+        targetDate: addDaysToDate(activeSeries.dates[0], goalProjection.daysToTarget || 0),
+        targetWeight: weightValue(goalProjection.cutTargetWeight),
+        targetBfPct
+      }
+    : { enabled: false };
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const bfPct = ctx.dataset.bodyFatPcts?.[ctx.dataIndex];
     const bfRange = ctx.dataset.bodyFatRanges?.[ctx.dataIndex];
@@ -2113,6 +2194,14 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     if (!point) return '';
     if (point.dataIndex === 0) return 'Latest weigh-in in selected range';
     if (point.dataset.label === 'Fed-state comparable') return 'Includes a glycogen/water rebound toward the Jan 6 reference.';
+    if (scenarioPlannerMode === 'goal' && goalProjection?.achievable) {
+      const goalWeek = (goalProjection.daysToTarget || 0) / 7;
+      const pointWeek = point.dataIndex;
+      if (Math.abs(pointWeek - goalWeek) < 0.6) {
+        const goalDate = addDaysToDate(activeSeries.dates[0], goalProjection.daysToTarget || 0);
+        return `Goal marker: ~${goalProjection.daysToTarget} days to ${targetBfPct.toFixed(1)}% BF (${goalDate})`;
+      }
+    }
     return `Projected ${point.label.toLowerCase()} path using the DXA-anchored body-comp model`;
   };
   chart.update();

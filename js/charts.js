@@ -13,6 +13,62 @@ function chartDefaults() {
 // Store all charts for crosshair sync
 const allCharts = {};
 
+const scenarioGoalMarkerPlugin = {
+  id: 'scenarioGoalMarker',
+  afterDatasetsDraw(chart) {
+    const config = chart?.options?.plugins?.scenarioGoalMarker;
+    if (!config?.enabled) return;
+    const xScale = chart.scales?.x;
+    const yScale = chart.scales?.y;
+    if (!xScale || !yScale) return;
+    const labels = chart.data?.labels || [];
+    if (!labels.length) return;
+
+    const maxIndex = Math.max(0, labels.length - 1);
+    const targetWeek = Math.max(0, Math.min(maxIndex, config.targetWeek ?? 0));
+    const floorIdx = Math.floor(targetWeek);
+    const ceilIdx = Math.min(maxIndex, Math.ceil(targetWeek));
+    const startX = xScale.getPixelForValue(floorIdx);
+    const endX = xScale.getPixelForValue(ceilIdx);
+    const frac = ceilIdx === floorIdx ? 0 : (targetWeek - floorIdx) / (ceilIdx - floorIdx);
+    const x = startX + ((endX - startX) * frac);
+    const y = yScale.getPixelForValue(config.targetWeight);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(251,191,36,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = 'rgba(251,191,36,1)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const label = `${config.targetBfPct?.toFixed?.(1) ?? config.targetBfPct}% goal`;
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    const textWidth = ctx.measureText(label).width;
+    const boxX = Math.min(Math.max(chartArea.left, x + 10), chartArea.right - textWidth - 16);
+    const boxY = Math.max(chartArea.top + 6, y - 24);
+    ctx.fillStyle = 'rgba(15,23,42,0.92)';
+    ctx.fillRect(boxX - 6, boxY - 14, textWidth + 12, 20);
+    ctx.fillStyle = 'rgba(251,191,36,0.98)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, boxX, boxY - 4);
+    ctx.restore();
+  }
+};
+
 function sparklineOptions(color, min = undefined, max = undefined) {
   return {
     responsive: true,
@@ -81,6 +137,7 @@ allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioFor
     elements: { line: { tension: 0.25, borderWidth: 2.2 }, point: { radius: 0, hoverRadius: 4 } },
     plugins: {
       ...chartDefaults().plugins,
+      scenarioGoalMarker: { enabled: false },
       legend: {
         display: true,
         labels: {
@@ -96,7 +153,8 @@ allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioFor
       x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
       y: { ...chartDefaults().scales.y, ticks: { ...TICK(), callback: v => `${v} ${weightUnit()}` } }
     }
-  }
+  },
+  plugins: [scenarioGoalMarkerPlugin]
 });
 
 // =====================================================================
@@ -2579,10 +2637,23 @@ function renderExploreDiagnostics() {
 }
 
 function setScenarioInputs(values) {
-  document.getElementById('whatifCal').value = values.calories;
-  document.getElementById('whatifWeeks').value = values.weeks;
-  document.getElementById('whatifSleep').value = values.sleep;
-  document.getElementById('whatifDrinks').value = values.drinks;
+  const pairs = [
+    ['whatifCal', values.calories],
+    ['whatifCalSlider', values.calories],
+    ['whatifWeeks', values.weeks],
+    ['whatifWeeksSlider', values.weeks],
+    ['whatifSleep', values.sleep],
+    ['whatifSleepSlider', values.sleep],
+    ['whatifDrinks', values.drinks],
+    ['whatifDrinksSlider', values.drinks]
+  ];
+  if (values.targetBfPct != null) {
+    pairs.push(['whatifGoalBf', values.targetBfPct], ['whatifGoalBfSlider', values.targetBfPct]);
+  }
+  pairs.forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
 }
 
 function syncScenarioPresetButtons() {
@@ -2596,9 +2667,17 @@ function runScenarioPlanner() {
   const recentDays = recentWindow.days;
   const recentSleepDays = recentWindow.sleep;
   const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
-  const weeks = Math.max(1, parseInt(document.getElementById('whatifWeeks').value) || 4);
+  const weeksInput = Math.max(1, parseInt(document.getElementById('whatifWeeks').value) || 4);
   const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
   const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
+  const targetBfPct = parseFloat(document.getElementById('whatifGoalBf').value) || 18;
+  const activeValues = { calories: cal, weeks: weeksInput, sleep: sleepHours, drinks: drinkNights, targetBfPct };
+  const goalProjection = scenarioPlannerMode === 'goal'
+    ? scenarioTimeToBodyFatGoal(activeValues, targetBfPct, rangeDays, rangeSleep)
+    : null;
+  const weeks = scenarioPlannerMode === 'goal'
+    ? Math.max(4, Math.min(24, Math.ceil(((goalProjection?.daysToTarget ?? (weeksInput * 7)) / 7)) + 2))
+    : weeksInput;
   const r = calculateWhatIf(cal, weeks, sleepHours, drinkNights, rangeDays, rangeSleep);
   const currentAvgCalories = avgFoodCalories(recentDays) ?? goals.calories;
   const currentAvgSleep = avgOrNull(recentSleepDays, 'hours') ?? goals.sleep;
@@ -2615,17 +2694,29 @@ function runScenarioPlanner() {
   const envelope = scenarioForecastEnvelope({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
   const cutLowEnd = envelope.cutLow[envelope.cutLow.length - 1];
   const cutHighEnd = envelope.cutHigh[envelope.cutHigh.length - 1];
-  const fedEnd = envelope.fedComparable[envelope.fedComparable.length - 1];
   const reboundEnd = envelope.reboundSeries[envelope.reboundSeries.length - 1];
 
-  let html = `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
-  html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
-  html += `<div>Tissue split: <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean · body fat <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%).</div>`;
-  html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
-  html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
+  let html = '';
+  if (scenarioPlannerMode === 'goal') {
+    if (!goalProjection?.achievable) {
+      html += `<div><strong>${energyLabel(cal)}/day</strong> gives an effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>, which is not enough to project a reliable path to <strong>${targetBfPct.toFixed(1)}% BF</strong>.</div>`;
+      html += `<div>Try lower calories, higher sleep, or fewer drink nights to create a stronger downward pace.</div>`;
+    } else {
+      html += `<div><strong>${energyLabel(cal)}/day</strong> with <strong>${sleepHours.toFixed(1)}h</strong> sleep and <strong>${drinkNights.toFixed(1)}</strong> drink nights/week points to <strong>${targetBfPct.toFixed(1)}% BF</strong> in about <strong>${goalProjection.daysToTarget} days</strong> (${goalProjection.weeksToTarget} weeks).</div>`;
+      html += `<div>Target weights: <strong>${weightLabel(goalProjection.cutTargetWeight)}</strong> cut-state or <strong>${weightLabel(goalProjection.fedTargetWeight)}</strong> fuller fed-state at the same BF.</div>`;
+      html += `<div>Current pace under this setup is about <strong>${weightLabel(Math.abs(goalProjection.weeklyPace), 2)}/week</strong> with an effective ${goalProjection.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(goalProjection.effectiveDeficit)}/day</strong>.</div>`;
+      html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the first ${weeks}-week chart window.</div>`;
+    }
+  } else {
+    html += `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
+    html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(parseFloat(r.weightChange)), 1)}</strong> on the scale) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
+    html += `<div>Tissue split: <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean · body fat <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%).</div>`;
+    html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
+    html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
+  }
   document.getElementById('whatifResult').innerHTML = html;
 
-  document.getElementById('scenarioResultGrid').innerHTML = [
+  const horizonCards = [
     {
       value: `${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}`,
       sub: `Effective daily deficit after ${energyLabel(r.sleepPenalty)} sleep drag and ${energyLabel(r.drinkPenalty)} drink-day calorie drag`
@@ -2658,7 +2749,45 @@ function runScenarioPlanner() {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
       sub: r.drinkSleepPenalty ? `Historical next-morning sleep hit after drink nights` : 'No strong drink-related sleep penalty in the current range'
     }
-  ].map(card => `
+  ];
+  const goalCards = goalProjection?.achievable ? [
+    {
+      value: `${goalProjection.daysToTarget}`,
+      sub: `Estimated days to ${targetBfPct.toFixed(1)}% BF at this setup`
+    },
+    {
+      value: `${goalProjection.weeksToTarget}`,
+      sub: `Weeks to target at ~${weightLabel(Math.abs(goalProjection.weeklyPace), 2)}/week`
+    },
+    {
+      value: weightLabel(goalProjection.cutTargetWeight),
+      sub: `Cut-state target weight at ${targetBfPct.toFixed(1)}% BF`
+    },
+    {
+      value: weightLabel(goalProjection.fedTargetWeight),
+      sub: `Fuller fed-state target weight at the same BF`
+    },
+    {
+      value: `~${goalProjection.currentBfPct.toFixed(1)}%`,
+      sub: `Current cut-state BF estimate from the DXA bracket`
+    },
+    {
+      value: `${goalProjection.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(goalProjection.effectiveDeficit)}`,
+      sub: `Effective daily deficit driving the goal timeline`
+    },
+    {
+      value: weightLabel(Math.abs(goalProjection.cutTargetWeight - goalProjection.currentWeight), 1),
+      sub: `Cut-state scale distance from current ${weightLabel(goalProjection.currentWeight)}`
+    },
+    {
+      value: weightLabel(Math.abs(goalProjection.fedTargetWeight - goalProjection.cutTargetWeight), 1),
+      sub: `Fed-state lift above cut-state target from fuller-body-state assumptions`
+    }
+  ] : [{
+      value: 'Need a cut',
+      sub: `This setup does not create a reliable path to ${targetBfPct.toFixed(1)}% BF`
+    }].concat(horizonCards.slice(0, 3));
+  document.getElementById('scenarioResultGrid').innerHTML = (scenarioPlannerMode === 'goal' ? goalCards : horizonCards).map(card => `
     <div class="score-card">
       <div class="value">${card.value}</div>
       <div class="sub">${card.sub}</div>
@@ -2667,6 +2796,16 @@ function runScenarioPlanner() {
 
   const defaults = getScenarioDefaults(rangeDays, rangeSleep);
   const compareRows = ['current', 'maintain', 'mild_cut', 'aggressive_cut', 'better_sleep', 'no_drinks'].map(key => {
+    if (scenarioPlannerMode === 'goal') {
+      const goalSnap = scenarioTimeToBodyFatGoal({ ...defaults[key], targetBfPct }, targetBfPct, rangeDays, rangeSleep);
+      return `
+        <div class="compare-card${scenarioPreset === key ? ' active-scenario-compare' : ''}">
+          <div class="eyebrow">${scenarioPresetLabel(key)}</div>
+          <div class="delta">${goalSnap?.achievable ? `~${goalSnap.daysToTarget} days` : 'No path'}</div>
+          <div class="tiny">${goalSnap?.achievable ? `${weightLabel(goalSnap.cutTargetWeight)} cut · ${weightLabel(goalSnap.fedTargetWeight)} fed · ${weightLabel(Math.abs(goalSnap.weeklyPace), 2)}/wk` : 'Current setup does not create a reliable downward pace to target.'}</div>
+        </div>
+      `;
+    }
     const snapshot = scenarioComparisonSnapshot(scenarioPresetLabel(key), defaults[key], rangeDays, rangeSleep);
     return `
       <div class="compare-card${scenarioPreset === key ? ' active-scenario-compare' : ''}">
@@ -2678,14 +2817,22 @@ function runScenarioPlanner() {
   }).join('');
   document.getElementById('scenarioCompareGrid').innerHTML = compareRows;
 
-  updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
+  updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights, targetBfPct }, rangeDays, rangeSleep);
   const scenarioTdee = workingTDEEProfile(rangeDays);
   const scenarioSourceText = scenarioTdee.source === 'bayesian_timeline'
     ? `a rolling Bayesian, steps-aware maintenance estimate ending ${rangeDays[rangeDays.length - 1]?.date}`
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
-  document.getElementById('scenarioAssumptions').textContent = `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state.`;
+  document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
+    ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path.`
+    : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state.`;
+  const forecastCopy = document.getElementById('scenarioForecastCopy');
+  if (forecastCopy) {
+    forecastCopy.textContent = scenarioPlannerMode === 'goal'
+      ? `Auto-extends to show a plausible path toward ${targetBfPct.toFixed(1)}% BF, with your active setup compared against core preset timelines.`
+      : 'Starts from the latest weigh-in inside the selected range and compares your active scenario with current pace and core preset paths.';
+  }
 }
 
 // =====================================================================
