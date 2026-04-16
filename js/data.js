@@ -308,7 +308,7 @@ const stepsData = [
   {date:"2026-03-23",steps:5494},
   {date:"2026-03-24",steps:4349},
   {date:"2026-03-25",steps:9536},
-  {date:"2026-03-26",steps:2313},
+  {date:"2026-03-26",steps:10148},
   {date:"2026-03-27",steps:12643},
   {date:"2026-03-28",steps:6510},
   {date:"2026-03-29",steps:3751},
@@ -318,7 +318,17 @@ const stepsData = [
   {date:"2026-04-02",steps:3355},
   {date:"2026-04-03",steps:2431},
   {date:"2026-04-04",steps:6271},
-  {date:"2026-04-05",steps:11898}
+  {date:"2026-04-05",steps:11898},
+  {date:"2026-04-06",steps:4311},
+  {date:"2026-04-07",steps:6066},
+  {date:"2026-04-08",steps:9402},
+  {date:"2026-04-09",steps:9076},
+  {date:"2026-04-10",steps:9268},
+  {date:"2026-04-11",steps:6770},
+  {date:"2026-04-12",steps:2715},
+  {date:"2026-04-13",steps:11150},
+  {date:"2026-04-14",steps:7761},
+  {date:"2026-04-15",steps:9040}
 ];
 
 const recoveryData = [
