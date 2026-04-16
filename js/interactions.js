@@ -1509,8 +1509,8 @@ function renderStepsCorrelations(days) {
     if (delta != null && Math.abs(delta) > 20) {
       badges.push(`<div class="insight-badge">
         <span class="badge-icon">🔥</span>
-        <span><strong>Step-adjusted TDEE (${lastDay.date.slice(5)}): ~${energyLabel(adjustedTDEE)}</strong>
-        — ${delta > 0 ? '+' : ''}${Math.round(delta)} ${energyUnit()} vs base estimate (avg ${corr.avgSteps.toLocaleString()} steps/day)
+        <span><strong>Steps activity term (${lastDay.date.slice(5)}): ${delta > 0 ? '+' : ''}${Math.round(delta)} ${energyUnit()}/day</strong>
+        — based on ${getStepForDate(lastDay.date)?.toLocaleString() ?? '—'} steps that day vs your ${corr.avgSteps.toLocaleString()} average, and already factored into the ~${energyLabel(baseTDEE)} TDEE
         </span>
       </div>`);
     }
