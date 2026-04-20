@@ -115,8 +115,9 @@ const data = {
     {date:"2026-04-15",protein:212,carbs:116,fat:64,calories:1995,weight:158.3,lifting:"Y",drinks:null,notes:"protein shake 2x, turkey jerkey 4x, greek yogurt, chinese lunch buffet, string cheese, larb gai, banana"},
     {date:"2026-04-16",protein:178,carbs:190,fat:108,calories:2540,weight:159,lifting:null,drinks:null,notes:"protein shake, 2x turkey jerkey, mexican lunch plate, edamame snack, blackberries, 2 pizza slices"},
     {date:"2026-04-17",protein:153,carbs:131,fat:33,calories:1440,weight:160.1,lifting:null,drinks:"8 drinks",notes:"protein shake, gummies, protein chips, lunch pho, edamame snack, chicken breast, protein pretzels"},
-    {date:"2026-04-18",protein:170,carbs:190,fat:110,calories:2600,weight:157.6,lifting:null,drinks:"3 drinks",notes:"protein ramen, chicken breast, edamame snack, mexican omakase"},
-    {date:"2026-04-19",protein:142,carbs:135,fat:59,calories:1830,weight:null,lifting:null,drinks:null,notes:"taco bell, protein shake, chicken soup, peruvian chicken plate"}
+    {date:"2026-04-18",protein:170,carbs:190,fat:190,calories:2600,weight:157.6,lifting:null,drinks:"3 drinks",notes:"protein ramen, chicken breast, edamame snack, mexican omakase"},
+    {date:"2026-04-19",protein:172,carbs:135,fat:59,calories:1980,weight:null,lifting:"Y",drinks:null,notes:"taco bell, protein shake 2x, chicken soup, peruvian chicken plate"},
+    {date:"2026-04-20",protein:30,carbs:null,fat:null,calories:150,weight:160.7,lifting:null,drinks:null,notes:"protein shake"}
   ]
 };
 
@@ -228,7 +229,8 @@ const sleepData = [
   {date:"2026-04-16",perf:82,hours:6.76,bedtime:"1:29 AM",bedtime_hour:1.48,deep:1.82,rem:1.06,light:3.88,efficiency:93,resp:14.5},
   {date:"2026-04-17",perf:53,hours:4.91,bedtime:"2:34 AM",bedtime_hour:2.57,deep:1.37,rem:1.12,light:2.42,efficiency:79,resp:14.5},
   {date:"2026-04-18",perf:29,hours:6.57,bedtime:"4:20 AM",bedtime_hour:4.33,deep:1.79,rem:2.36,light:2.42,efficiency:85,resp:15.4},
-  {date:"2026-04-19",perf:29,hours:4.16,bedtime:"1:58 AM",bedtime_hour:1.97,deep:0.6,rem:0.31,light:3.25,efficiency:85,resp:15.7}
+  {date:"2026-04-19",perf:29,hours:4.16,bedtime:"1:58 AM",bedtime_hour:1.97,deep:0.6,rem:0.31,light:3.25,efficiency:85,resp:15.7},
+  {date:"2026-04-20",perf:79,hours:8.12,bedtime:"12:57 AM",bedtime_hour:0.95,deep:2.14,rem:1.54,light:4.44,efficiency:96,resp:14.2}
 ];
 
 const stepsData = [
@@ -447,7 +449,8 @@ const recoveryData = [
   {date:"2026-04-16",recovery:70,hrv:65.4,rhr:51,spo2:98.1},
   {date:"2026-04-17",recovery:56,hrv:69.8,rhr:55,spo2:97.6},
   {date:"2026-04-18",recovery:9,hrv:13,rhr:80,spo2:96.3},
-  {date:"2026-04-19",recovery:25,hrv:46.8,rhr:66,spo2:96.1}
+  {date:"2026-04-19",recovery:25,hrv:46.8,rhr:66,spo2:96.1},
+  {date:"2026-04-20",recovery:84,hrv:74.2,rhr:51,spo2:97.1}
 ];
 
 window.dashboardData = { data, sleepData, stepsData, recoveryData };
