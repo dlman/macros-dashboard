@@ -689,9 +689,11 @@ function updateWeightChart(days) {
   }));
   const vals = points.map(p => weightValue(p.value));
   const rolling = rollingAvg(points.map(p => p.value), 7).map(v => v == null ? null : weightValue(v));
+  const dateKeys = points.map(p => p.date);
   chart.data.labels = points.map(p => p.label);
   chart.data.datasets[0].data = vals;
   chart.data.datasets[1].data = rolling;
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   // Linear regression line
   const validIndices = vals.map((v, i) => v != null ? i : null).filter(v => v !== null);
   const validVals = validIndices.map(i => vals[i]);
@@ -793,14 +795,17 @@ function updateAdjustedWeightViewChart(days) {
   if (!points.length) {
     chart.data.labels = [];
     chart.data.datasets.forEach(ds => { ds.data = []; });
+    chart.options.plugins.rangeHighlights = { enabled: false, ranges: [], dateKeys: [] };
     chart.update();
     if (noteEl) noteEl.textContent = 'This view needs weigh-ins inside the selected range.';
     return;
   }
+  const dateKeys = points.map(p => p.date);
   chart.data.labels = points.map(p => p.date.slice(5));
   chart.data.datasets[0].data = points.map(p => p.actual);
   chart.data.datasets[1].data = points.map(p => p.adjusted);
   chart.data.datasets[2].data = points.map(p => p.delta);
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   chart.data.datasets[2].backgroundColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
   chart.data.datasets[2].borderColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
   chart.data.datasets[0].pointRadius = compact ? 1.5 : 2.5;
@@ -888,11 +893,13 @@ function updateBodyCompChart(days) {
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days, bodyCompState);
+  const dateKeys = bodyComp.map(d => d.date);
   const fatVals = bodyComp.map(d => weightValue(d.fat));
   const leanVals = bodyComp.map(d => weightValue(d.lean));
   const fatLowVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatLow));
   const fatHighVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatHigh));
   chart.data.labels = bodyComp.map(d => d.date.slice(5));
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   chart.data.datasets[0].data = fatHighVals;
   chart.data.datasets[0].pointHoverRadius = 0;
   chart.data.datasets[0].pointHitRadius = 0;
@@ -1524,6 +1531,7 @@ function refreshDashboard() {
   let usingFallback = false;
   let filteredDays = getFilteredDays();
   let filteredSleep = getFilteredSleep();
+  const rangeVacation = vacationRangeSummary(getRangeDays());
   if (!filteredDays.length) {
     suppressEventFilter = true;
     filteredDays = getFilteredDays();
@@ -1536,8 +1544,8 @@ function refreshDashboard() {
   document.getElementById('macroChartTitle').textContent = metricLabels[currentMetric];
   document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; compared with ${previousDays.length || 0} prior days from ${compareModeLabel()} &nbsp;|&nbsp; Click any data point for details`;
   document.getElementById('controlSummary').textContent = usingFallback
-    ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.`
-    : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.`;
+    ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`
+    : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
   function safe(fn, label) { try { fn(); } catch (e) { console.error(`[Dashboard] ${label} failed:`, e); } }
   safe(() => renderExecutiveSummary(), 'Executive Summary');
   safe(() => renderStatCards(), 'Stat Cards');
@@ -1561,7 +1569,8 @@ function refreshDashboard() {
   // Update TDEE display
   {
     const overallProfile = workingTDEEProfile(getAnalyticsDays());
-    const cuttingProfile = workingTDEEProfile(getAnalyticsDays().filter(d => !isInDietBreak(d.date)));
+    const baselineDays = baselineAnalyticsDays(getAnalyticsDays());
+    const cuttingProfile = workingTDEEProfile(baselineDays.length ? baselineDays : getAnalyticsDays());
     const usingBayes = overallProfile.source === 'bayesian';
     const activeRange = usingBayes
       ? { low: overallProfile.rangeLow, high: overallProfile.rangeHigh }
@@ -1574,8 +1583,8 @@ function refreshDashboard() {
         ? `Cumulative Calorie Deficit · Bayes TDEE ~${energyLabel(overallProfile.maintenance)}`
         : `Cumulative Calorie Deficit · TDEE ~${energyLabel(overallProfile.maintenance)}`)
       : (usingBayes
-        ? `Cumulative Calorie Deficit (Bayesian TDEE: ~${energyLabel(overallProfile.maintenance)}, 68% range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)}, cutting-phase fallback: ~${energyLabel(cuttingProfile.maintenance)})`
-        : `Cumulative Calorie Deficit (TDEE: ~${energyLabel(overallProfile.maintenance)}, cutting phase: ~${energyLabel(cuttingProfile.maintenance)}, range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)})`);
+        ? `Cumulative Calorie Deficit (Bayesian TDEE: ~${energyLabel(overallProfile.maintenance)}, 68% range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)}, baseline-cut fallback: ~${energyLabel(cuttingProfile.maintenance)})`
+        : `Cumulative Calorie Deficit (TDEE: ~${energyLabel(overallProfile.maintenance)}, baseline-cut fallback: ~${energyLabel(cuttingProfile.maintenance)}, range: ${energyLabel(activeRange.low)}–${energyLabel(activeRange.high)})`);
   }
   safe(() => updateMacroChart(months), 'Macro Chart');
   safe(() => updateMacroStackedChart(filteredDays), 'Macro Stacked Chart');

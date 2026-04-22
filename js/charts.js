@@ -69,6 +69,81 @@ const scenarioGoalMarkerPlugin = {
   }
 };
 
+const rangeHighlightPlugin = {
+  id: 'rangeHighlight',
+  beforeDatasetsDraw(chart) {
+    const config = chart?.options?.plugins?.rangeHighlights;
+    if (!config?.enabled || !Array.isArray(config.ranges) || !config.ranges.length) return;
+    const xScale = chart.scales?.x;
+    const chartArea = chart.chartArea;
+    if (!xScale || !chartArea) return;
+    const dateKeys = config.dateKeys || chart.data?.labels || [];
+    if (!dateKeys.length) return;
+
+    const getBandEdges = idx => {
+      const center = xScale.getPixelForValue(idx);
+      if (!Number.isFinite(center)) return null;
+      const prev = idx > 0 ? xScale.getPixelForValue(idx - 1) : null;
+      const next = idx < dateKeys.length - 1 ? xScale.getPixelForValue(idx + 1) : null;
+      const left = Number.isFinite(prev) ? (prev + center) / 2 : chartArea.left;
+      const right = Number.isFinite(next) ? (center + next) / 2 : chartArea.right;
+      return { left, right, center };
+    };
+
+    const { ctx } = chart;
+    ctx.save();
+    for (const range of config.ranges) {
+      const firstIdx = dateKeys.findIndex(date => date >= range.start && date <= range.end);
+      if (firstIdx < 0) continue;
+      let lastIdx = firstIdx;
+      while (lastIdx + 1 < dateKeys.length && dateKeys[lastIdx + 1] >= range.start && dateKeys[lastIdx + 1] <= range.end) lastIdx++;
+      const firstEdge = getBandEdges(firstIdx);
+      const lastEdge = getBandEdges(lastIdx);
+      if (!firstEdge || !lastEdge) continue;
+
+      ctx.fillStyle = range.color || 'rgba(251,191,36,0.08)';
+      ctx.fillRect(firstEdge.left, chartArea.top, lastEdge.right - firstEdge.left, chartArea.bottom - chartArea.top);
+
+      ctx.strokeStyle = range.borderColor || 'rgba(251,191,36,0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(firstEdge.left, chartArea.top);
+      ctx.lineTo(firstEdge.left, chartArea.bottom);
+      ctx.moveTo(lastEdge.right, chartArea.top);
+      ctx.lineTo(lastEdge.right, chartArea.bottom);
+      ctx.stroke();
+
+      if (range.label) {
+        const labelX = Math.max(chartArea.left + 6, Math.min((firstEdge.left + lastEdge.right) / 2, chartArea.right - 6));
+        ctx.fillStyle = range.labelColor || 'rgba(251,191,36,0.9)';
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(range.label, labelX, chartArea.top + 6);
+      }
+    }
+    ctx.restore();
+  }
+};
+
+Chart.register(rangeHighlightPlugin);
+
+function vacationHighlightConfig(dateKeys) {
+  if (!Array.isArray(dateKeys) || !dateKeys.length) return { enabled: false, ranges: [], dateKeys: [] };
+  const vacationDays = dateKeys
+    .filter(date => isVacationDate(date))
+    .map(date => ({ date }));
+  if (!vacationDays.length) return { enabled: false, ranges: [], dateKeys };
+  const ranges = contiguousDateRanges(vacationDays).map(span => ({
+    start: span[0].date,
+    end: span[span.length - 1].date,
+    label: span.length === 1 ? 'Vacation' : `Vacation ${span.length}d`,
+    color: 'rgba(251,191,36,0.08)',
+    borderColor: 'rgba(251,191,36,0.22)'
+  }));
+  return { enabled: true, dateKeys, ranges };
+}
+
 function sparklineOptions(color, min = undefined, max = undefined) {
   return {
     responsive: true,
@@ -544,14 +619,18 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const energyBalance = energyBalanceSummary(filteredDays);
   const analyticsDays = getAnalyticsDays();
   const workingProfile = workingTDEEProfile(analyticsDays);
+  const baselineDays = baselineAnalyticsDays(analyticsDays);
+  const baselineProfile = workingTDEEProfile(baselineDays.length ? baselineDays : analyticsDays);
   const trendProfile = estimateTDEEProfile(analyticsDays);
   const bayesPosterior = freshBayesianPosterior(analyticsDays);
   const bayesTimelineLatest = freshBayesianTimelinePoint(analyticsDays);
   const tdeeStability = tdeeStabilityProfile();
   const activityTerms = tdeeActivityTerms(analyticsDays);
+  const baselineExclusions = baselineExclusionSummary(analyticsDays);
+  const vacationSummary = vacationRangeSummary(getRangeDays());
   const tdeeBand = {
-    low: Math.min(workingProfile.rangeLow, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeLow),
-    high: Math.max(workingProfile.rangeHigh, workingTDEEProfile(analyticsDays.filter(d => !isInDietBreak(d.date))).rangeHigh)
+    low: Math.min(workingProfile.rangeLow, baselineProfile.rangeLow),
+    high: Math.max(workingProfile.rangeHigh, baselineProfile.rangeHigh)
   };
   const latestDay = filteredDays[filteredDays.length - 1] || null;
   const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
@@ -633,13 +712,13 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
         <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>
         <div class="tiny">${activityTerms ? `Activity-associated deltas (${activityTerms.confidence} confidence): ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal/1k steps · ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} lift-day · ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} drink-day` : 'Activity deltas will appear once the Bayesian interval model has enough weight spans.'}</div>
-        <div class="tiny">${tdeeStability ? `Stability: ${tdeeStability.status} · 7-point rolling SD ${energyLabel(tdeeStability.recentSd)} · ${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs full-range posterior` : 'Stability score will appear once the rolling Bayesian timeline has enough points.'}</div>`;
+        <div class="tiny">${tdeeStability ? `Stability: ${tdeeStability.status} · 7-point rolling SD ${energyLabel(tdeeStability.recentSd)} · ${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs full-range posterior` : 'Stability score will appear once the rolling Bayesian timeline has enough points.'}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>`;
           }
           return `<div class="value">${energyLabel(tdeeBand.low)}–${energyLabel(tdeeBand.high)}</div>
         <div class="sub">Maintenance likely sits in this band, based on your full-cut weight trend and logged intake.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Estimated maintenance band</span></div>
         <div class="confidence-pill ${workingProfile.confidence.cls}">${workingProfile.confidence.label}</div>
-        <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(workingProfile.maintenance)}</div>`;
+        <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(workingProfile.maintenance)}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>`;
         })()}
       </div>
     `,
@@ -662,6 +741,17 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="tiny">Range-based estimate</div>
         </div>
       `,
+    vacationSummary
+      ? `
+        <div class="forecast-card mobile-secondary">
+          <div class="eyebrow">Vacation Range</div>
+          <div class="value">${vacationSummary.days} day${vacationSummary.days === 1 ? '' : 's'}</div>
+          <div class="sub">${vacationSummary.spanText}${vacationSummary.spans.length > 1 ? ` across ${vacationSummary.spans.length} spans` : ''}. These tagged days stay visible in-range but sit outside the baseline-cut maintenance fallback.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill logged">Sheet note tag</span></div>
+          <div class="tiny">${vacationSummary.avgCalories != null ? `Avg intake ${energyLabel(vacationSummary.avgCalories)} · ` : ''}${vacationSummary.drinkNights} drink night${vacationSummary.drinkNights === 1 ? '' : 's'}${vacationSummary.weightChange != null ? ` · scale ${vacationSummary.weightChange > 0 ? '+' : ''}${weightLabel(vacationSummary.weightChange, 1)}` : ''}${vacationSummary.avgSleepPerf != null ? ` · sleep ${Math.round(vacationSummary.avgSleepPerf)}%` : ''}</div>
+        </div>
+      `
+      : '',
     `
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Latest Snapshot</div>
@@ -711,6 +801,8 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const agreement = modelAgreementSummary(filteredDays, filteredSleep);
   const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
   const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  const baselineExclusions = baselineExclusionSummary(getAnalyticsDays());
+  const vacationSummary = vacationRangeSummary(getRangeDays());
   const gap = trendReality?.gap ?? null;
   const scaleContextValue = gap == null
     ? 'Need more weigh-ins'
@@ -759,8 +851,16 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
       <div class="eyebrow">Maintenance Confidence</div>
       <div class="value">${maintenanceValue}</div>
       <div class="sub">${maintenanceSub}</div>
-      <div class="tiny">${maintenanceTiny}</div>
+      <div class="tiny">${maintenanceTiny}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>
     </div>
+    ${vacationSummary ? `
+    <div class="coach-card warn">
+      <div class="eyebrow">Vacation Impact</div>
+      <div class="value">${vacationSummary.days}d tagged</div>
+      <div class="sub">${vacationSummary.spanText}${vacationSummary.weightChange != null ? ` · scale ${vacationSummary.weightChange > 0 ? '+' : ''}${weightLabel(vacationSummary.weightChange, 1)}` : ''}</div>
+      <div class="tiny">${vacationSummary.avgCalories != null ? `Vacation avg ${energyLabel(vacationSummary.avgCalories)} · ` : ''}${vacationSummary.drinkNights} drink night${vacationSummary.drinkNights === 1 ? '' : 's'}${vacationSummary.avgSleepPerf != null ? ` · sleep ${Math.round(vacationSummary.avgSleepPerf)}%` : ''}</div>
+    </div>
+    ` : ''}
     <div class="coach-card ${agreement.cls}">
       <div class="eyebrow">Model Agreement</div>
       <div class="value">${agreement.value}</div>
@@ -800,6 +900,7 @@ function renderExecutiveSummary() {
   const tdeeStability = tdeeStabilityProfile();
   const tdeeShift = tdeeShiftSummary(analyticsRangeDays);
   const activityTerms = tdeeActivityTerms(analyticsRangeDays);
+  const baselineExclusions = baselineExclusionSummary(analyticsRangeDays);
   const coachTdee = endpointTDEEProfile(analyticsRangeDays);
   const activeTdeeSource = activeTdeeProfile.source === 'bayesian'
     ? 'full-range Bayesian posterior'
@@ -903,7 +1004,7 @@ function renderExecutiveSummary() {
     </div>
     <div class="tdee-detail-note">
       <strong>How to read the different estimates</strong>
-      <p>The full-range Bayesian row is the broadest cut-wide anchor. The recent-window Bayesian row tracks the latest 35-day behavior more closely. The active-range value is what the current view is actually using right now, and it falls back to the simpler endpoint estimate when a Bayesian point is not available for that exact range end.</p>
+      <p>The full-range Bayesian row is the broadest cut-wide anchor. The recent-window Bayesian row tracks the latest 35-day behavior more closely. The active-range value is what the current view is actually using right now, and it falls back to the simpler endpoint estimate when a Bayesian point is not available for that exact range end.${baselineExclusions ? ` Baseline-cut cross-checks exclude ${baselineExclusions.text} so those tagged spans do not redefine the normal cutting baseline.` : ''}</p>
     </div>
     <div class="tdee-detail-note">
       <strong>Activity-associated deltas</strong>
@@ -1580,15 +1681,12 @@ allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
 // WATERFALL DEFICIT (uses estimated TDEE based on actual weight loss)
 // =====================================================================
 // Estimate TDEE from recency-weighted effective intake plus the state-space filtered weight trend.
-const DIET_BREAK_START = '2026-02-27';
-const DIET_BREAK_END = '2026-03-07';
-function isInDietBreak(date) { return date >= DIET_BREAK_START && date <= DIET_BREAK_END; }
 // Exclude today from all TDEE analytics — partial days skew velocity estimates
 const analyticsDays = getAnalyticsDays();
-const cuttingDays = analyticsDays.filter(d => !isInDietBreak(d.date));
-const breakDays = analyticsDays.filter(d => isInDietBreak(d.date));
+const cutBaselineDays = baselineAnalyticsDays(analyticsDays);
+const breakDays = analyticsDays.filter(isDietBreakDay);
 const overallTDEEProfile = estimateTDEEProfile(analyticsDays);
-const cuttingTDEEProfile = workingTDEEProfile(cuttingDays);
+const baselineCutTDEEProfile = workingTDEEProfile(cutBaselineDays.length ? cutBaselineDays : analyticsDays);
 const overallWorkingTDEEProfile = workingTDEEProfile(analyticsDays);
 const overallTDEEEnsemble = tdeeEnsembleProfile(analyticsDays);
 // Endpoint method: simple (first weight → last weight) / span — more stable than Kalman velocity
@@ -1597,7 +1695,6 @@ const endpointProfile = endpointTDEEProfile(analyticsDays);
 // Use the endpoint estimate as the anchor — it correctly reads ~2,450 kcal from the 81-day trend
 // The Kalman-velocity method inflates this to ~2,900+ when recent weight swings are large
 const estimatedTDEE = overallWorkingTDEEProfile.maintenance;
-const cuttingTDEE = cuttingTDEEProfile.maintenance;
 const breakAvgIntake = breakDays.length ? Math.round(breakDays.reduce((s,d) => s + effectiveCalories(d), 0) / breakDays.length) : null;
 // Fixed ±150 kcal range — reflects real-world calorie tracking + measurement uncertainty,
 // not model disagreement between estimation methods
@@ -1607,8 +1704,8 @@ const tdeeRange = overallWorkingTDEEProfile.source === 'bayesian'
       high: overallWorkingTDEEProfile.rangeHigh
     }
   : {
-      low: Math.min(overallWorkingTDEEProfile.rangeLow, cuttingTDEEProfile.rangeLow),
-      high: Math.max(overallWorkingTDEEProfile.rangeHigh, cuttingTDEEProfile.rangeHigh)
+      low: Math.min(overallWorkingTDEEProfile.rangeLow, baselineCutTDEEProfile.rangeLow),
+      high: Math.max(overallWorkingTDEEProfile.rangeHigh, baselineCutTDEEProfile.rangeHigh)
     };
 
 let cumDeficit = 0;
@@ -2457,9 +2554,10 @@ function renderExploreDiagnostics() {
   const lag = getLagMetrics(rangeDays, rangeSleep);
   const quality = qualityAudit(rangeDays, rangeSleep);
   const foodPatterns = foodPatternSummary(rangeDays);
+  const baselineExclusions = baselineExclusionSummary(rangeDays);
   document.getElementById('exploreScopeNote').textContent = eventFilter === 'all'
-    ? 'Explore diagnostics use the full selected date range.'
-    : `Explore diagnostics use the full selected date range before the "${filterLabel()}" filter so the math stays stable.`;
+    ? `Explore diagnostics use the full selected date range.${baselineExclusions ? ` Tagged diet-break / vacation days remain visible here, but baseline-cut maintenance cross-checks exclude ${baselineExclusions.text}.` : ''}`
+    : `Explore diagnostics use the full selected date range before the "${filterLabel()}" filter so the math stays stable.${baselineExclusions ? ` Tagged diet-break / vacation days remain visible here, but baseline-cut maintenance cross-checks exclude ${baselineExclusions.text}.` : ''}`;
 
   if (decomp) {
     const posterior = plateau.posterior;
@@ -2663,7 +2761,7 @@ function syncScenarioPresetButtons() {
 function runScenarioPlanner() {
   const rangeDays = getRangeDays();
   const rangeSleep = getSleepForDaysUnfiltered(rangeDays);
-  const recentWindow = scenarioRecentWindow(rangeDays, rangeSleep, 7);
+  const recentWindow = currentSetupWindow(rangeDays, rangeSleep, 7);
   const recentDays = recentWindow.days;
   const recentSleepDays = recentWindow.sleep;
   const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
@@ -2819,14 +2917,15 @@ function runScenarioPlanner() {
 
   updateScenarioForecastChart({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights, targetBfPct }, rangeDays, rangeSleep);
   const scenarioTdee = workingTDEEProfile(rangeDays);
+  const scenarioBaselineExclusions = baselineExclusionSummary(rangeDays);
   const scenarioSourceText = scenarioTdee.source === 'bayesian_timeline'
     ? `a rolling Bayesian, steps-aware maintenance estimate ending ${rangeDays[rangeDays.length - 1]?.date}`
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
   document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
-    ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path.`
-    : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state.`;
+    ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path. Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`
+    : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;
   const forecastCopy = document.getElementById('scenarioForecastCopy');
   if (forecastCopy) {
     forecastCopy.textContent = scenarioPlannerMode === 'goal'

@@ -161,6 +161,12 @@ const recoveryByDate = {};
 recoveryData.forEach(d => { recoveryByDate[d.date] = d; });
 const drinkDates = new Set(allDays.filter(d => d.drinks).map(d => d.date));
 const liftDates = new Set(allDays.filter(d => d.lifting === 'Y').map(d => d.date));
+const DIET_BREAK_FALLBACK_START = '2026-02-27';
+const DIET_BREAK_FALLBACK_END = '2026-03-07';
+const NOTE_TAG_PATTERNS = {
+  diet_break: /\bdiet\s*break\b/i,
+  vacation: /\bvacation\b/i
+};
 
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
@@ -290,6 +296,128 @@ function parseFoods(notes) {
   return items;
 }
 
+function notesContainTag(notes, tag) {
+  const pattern = NOTE_TAG_PATTERNS[tag];
+  return !!(pattern && typeof notes === 'string' && pattern.test(notes));
+}
+
+function stripKnownNoteTags(text) {
+  if (!text) return text;
+  return text
+    .replace(/^\s*diet\s*break\b[\s.:,-]*/i, '')
+    .replace(/^\s*vacation\b[\s.:,-]*/i, '')
+    .trim();
+}
+
+function isDietBreakDay(day) {
+  if (!day) return false;
+  return notesContainTag(day.notes, 'diet_break')
+    || (day.date >= DIET_BREAK_FALLBACK_START && day.date <= DIET_BREAK_FALLBACK_END);
+}
+
+function isVacationDay(day) {
+  return !!day && notesContainTag(day.notes, 'vacation');
+}
+
+function isInDietBreak(dateStr) {
+  const day = macroByDate[dateStr];
+  return day ? isDietBreakDay(day) : (dateStr >= DIET_BREAK_FALLBACK_START && dateStr <= DIET_BREAK_FALLBACK_END);
+}
+
+function isVacationDate(dateStr) {
+  const day = macroByDate[dateStr];
+  return day ? isVacationDay(day) : false;
+}
+
+function isBaselineExcludedDay(day) {
+  return isDietBreakDay(day) || isVacationDay(day);
+}
+
+function baselineAnalyticsDays(days = getAnalyticsDays()) {
+  return days.filter(d => !isBaselineExcludedDay(d));
+}
+
+function contiguousDateRanges(days) {
+  if (!days.length) return [];
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const ranges = [];
+  let current = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].date === nextDayStr(sorted[i - 1].date)) current.push(sorted[i]);
+    else {
+      ranges.push(current);
+      current = [sorted[i]];
+    }
+  }
+  ranges.push(current);
+  return ranges;
+}
+
+function formatDateSpan(startDate, endDate) {
+  return startDate === endDate ? formatShortDate(startDate) : `${formatShortDate(startDate)}–${formatShortDate(endDate)}`;
+}
+
+function taggedRangeSummary(days, predicate, label) {
+  const taggedDays = days.filter(predicate);
+  if (!taggedDays.length) return null;
+  const taggedSleep = getSleepForDays(taggedDays);
+  const summary = summarizeRange(taggedDays, taggedSleep);
+  const spans = contiguousDateRanges(taggedDays).map(span => ({
+    start: span[0].date,
+    end: span[span.length - 1].date,
+    days: span.length,
+    label: formatDateSpan(span[0].date, span[span.length - 1].date)
+  }));
+  return {
+    label,
+    days: taggedDays.length,
+    firstDate: taggedDays[0].date,
+    lastDate: taggedDays[taggedDays.length - 1].date,
+    spans,
+    spanText: spans.map(span => span.label).join(', '),
+    avgCalories: summary.avgCalories,
+    avgSleepPerf: summary.avgSleepPerf,
+    avgSleepHours: summary.avgSleepHours,
+    drinkNights: summary.drinkNights,
+    liftCount: summary.liftCount,
+    weightChange: summary.weightChange
+  };
+}
+
+function vacationRangeSummary(days = getRangeDays()) {
+  return taggedRangeSummary(days, isVacationDay, 'Vacation');
+}
+
+function currentSetupWindow(days = allDays, sleep = sleepData, count = 7) {
+  const baselineDays = days.filter(d => !isVacationDay(d));
+  const activeDays = baselineDays.length >= Math.min(count, days.length) ? baselineDays : days;
+  const recentDays = activeDays.slice(-Math.max(1, count));
+  const recentDates = new Set(recentDays.map(d => d.date));
+  return {
+    days: recentDays,
+    sleep: sleep.filter(d => recentDates.has(d.date)),
+    source: activeDays === baselineDays ? 'non_vacation' : 'all_days'
+  };
+}
+
+function baselineExclusionSummary(days = getAnalyticsDays()) {
+  const excluded = days.filter(isBaselineExcludedDay);
+  if (!excluded.length) return null;
+  const dietBreakDays = excluded.filter(isDietBreakDay).length;
+  const vacationDays = excluded.filter(isVacationDay).length;
+  const spans = contiguousDateRanges(excluded).map(span => formatDateSpan(span[0].date, span[span.length - 1].date));
+  const parts = [];
+  if (dietBreakDays) parts.push(`${dietBreakDays} diet-break day${dietBreakDays === 1 ? '' : 's'}`);
+  if (vacationDays) parts.push(`${vacationDays} vacation day${vacationDays === 1 ? '' : 's'}`);
+  return {
+    days: excluded.length,
+    dietBreakDays,
+    vacationDays,
+    spanText: spans.join(', '),
+    text: parts.join(' + ')
+  };
+}
+
 const FOOD_REPLACEMENTS = [
   [/protein shake(?:s)?/g, 'protein shake'],
   [/greek yogurts?/g, 'greek yogurt'],
@@ -302,7 +430,7 @@ const FOOD_REPLACEMENTS = [
 
 function normalizeFoodItem(item) {
   let norm = item.replace(/\d+x\s*/g,'').replace(/^\d+\s*/,'').replace(/\s*\d+x$/,'').trim();
-  norm = norm.replace(/^(diet break\.?\s*)/i, '').trim();
+  norm = stripKnownNoteTags(norm);
   FOOD_REPLACEMENTS.forEach(([pattern, value]) => { norm = norm.replace(pattern, value); });
   norm = norm.replace(/\s{2,}/g, ' ').trim();
   return norm.length >= 3 ? norm : null;
@@ -1572,7 +1700,8 @@ function filterLabel() {
     lift_days: 'lift days',
     alcohol: 'alcohol-affected days',
     weekends: 'weekends',
-    clean_days: 'clean days'
+    clean_days: 'clean days',
+    vacation: 'vacation-tagged days'
   })[eventFilter] || 'all days';
 }
 
@@ -1592,6 +1721,7 @@ function matchesDayEvent(day) {
     case 'alcohol': return !!day.drinks;
     case 'weekends': return isWeekendDate(day.date);
     case 'clean_days': return !day.drinks;
+    case 'vacation': return isVacationDay(day);
     default: return true;
   }
 }
@@ -1603,6 +1733,7 @@ function matchesSleepEvent(day) {
     case 'alcohol': return drinkDates.has(prevDay(day.date));
     case 'weekends': return isWeekendDate(day.date);
     case 'clean_days': return !drinkDates.has(prevDay(day.date));
+    case 'vacation': return isVacationDate(day.date);
     default: return true;
   }
 }
@@ -2022,7 +2153,7 @@ function historicalDrinkEffects(days, sleep) {
 }
 
 function getScenarioDefaults(days, sleep) {
-  const recentWindow = scenarioRecentWindow(days, sleep, 7);
+  const recentWindow = currentSetupWindow(days, sleep, 7);
   const recentDays = recentWindow.days;
   const recentSleep = recentWindow.sleep;
   const avgCalories = avgFoodCalories(recentDays) ?? goals.calories;
@@ -2057,7 +2188,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   const chart = allCharts.scenarioForecastChart;
   const weeks = Math.max(1, activeValues.weeks);
   const targetBfPct = activeValues.targetBfPct ?? 18;
-  const recentWindow = scenarioRecentWindow(days, sleep, 7);
+  const recentWindow = currentSetupWindow(days, sleep, 7);
   const avgCalories = avgFoodCalories(recentWindow.days) ?? goals.calories;
   const avgSleep = avgOrNull(recentWindow.sleep, 'hours') ?? goals.sleep;
   const avgDrinks = drinkNightsPerWeek(recentWindow.days);
