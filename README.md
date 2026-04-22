@@ -80,3 +80,74 @@ Sleep and steps tabs are also alias-based, but should at least include `date` pl
 If your workbook is split into monthly macro tabs like `Jan Macros`, `Feb Macros`, and `March Macros`, set `GOOGLE_SHEET_MACROS_TABS` instead of `GOOGLE_SHEET_MACROS_TAB`.
 
 To add a new month, publish its Google Sheet tab and add its URL to `PUBLISHED_CSV_URLS` in `scripts/sync_google_sheets.py`. The dashboard derives everything from `ACTIVE_MONTHS` (the months present in `data`), so no other code changes are needed — stat cards, donut charts, toggle buttons, and all chart datasets update automatically.
+
+## Apple Health Steps Sync
+
+The repo includes [scripts/sync_steps.py](/Users/dickson/Desktop/macros-dashboard/scripts/sync_steps.py) plus the GitHub Actions workflow `.github/workflows/sync-steps.yml` so Apple Health steps can be pushed into [js/data.js](/Users/dickson/Desktop/macros-dashboard/js/data.js) without a manual export/import step every day.
+
+### What the workflow accepts
+
+You can trigger the workflow in either mode:
+
+- Single day:
+  - `date`
+  - `steps`
+- Backfill payload:
+  - `payload_json`
+  - JSON object or array of `{ "date": "YYYY-MM-DD", "steps": 12345 }`
+
+If both are provided, the payload rows are merged first and the single-day row is merged after that.
+
+### Local examples
+
+```bash
+python3 scripts/sync_steps.py --date 2026-04-21 --steps 8450
+python3 scripts/sync_steps.py --payload-json '[{"date":"2026-04-20","steps":7544},{"date":"2026-04-21","steps":8450}]'
+python3 update_bayes.py js/data.js
+```
+
+### Apple Shortcut → GitHub Actions
+
+The workflow name is `sync-steps.yml`.
+
+GitHub API endpoint:
+
+```text
+POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/sync-steps.yml/dispatches
+```
+
+Headers:
+
+- `Authorization: Bearer <GH_PAT>`
+- `Accept: application/vnd.github+json`
+- `Content-Type: application/json`
+
+Single-day request body:
+
+```json
+{
+  "ref": "main",
+  "inputs": {
+    "date": "2026-04-21",
+    "steps": "8450"
+  }
+}
+```
+
+Backfill request body:
+
+```json
+{
+  "ref": "main",
+  "inputs": {
+    "payload_json": "[{\"date\":\"2026-04-20\",\"steps\":7544},{\"date\":\"2026-04-21\",\"steps\":8450}]"
+  }
+}
+```
+
+The workflow then:
+
+1. merges the steps into `js/data.js`
+2. rebuilds Bayesian artifacts
+3. validates the dashboard
+4. commits and pushes if anything changed
