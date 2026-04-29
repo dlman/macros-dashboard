@@ -37,7 +37,7 @@ DATA_JS_PATH = ROOT / "js" / "data.js"
 # File → Share → Publish to web → select the sheet tab → CSV → Copy link
 PUBLISHED_CSV_URLS: dict[str, str] = {
     "Apr": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
-    # "May": "https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv",
+    "May": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,14 @@ MONTH_BUCKETS = OrderedDict([
     ("Feb",   "2026-02"),
     ("March", "2026-03"),
     ("Apr",   "2026-04"),
+    ("May",   "2026-05"),
+    ("Jun",   "2026-06"),
+    ("Jul",   "2026-07"),
+    ("Aug",   "2026-08"),
+    ("Sep",   "2026-09"),
+    ("Oct",   "2026-10"),
+    ("Nov",   "2026-11"),
+    ("Dec",   "2026-12"),
 ])
 
 MACRO_ALIASES = {
