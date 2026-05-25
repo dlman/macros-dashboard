@@ -117,6 +117,20 @@ const rangeHighlightPlugin = {
       ctx.fillStyle = range.color || 'rgba(251,191,36,0.08)';
       ctx.fillRect(bandLeft, chartArea.top, bandRight - bandLeft, chartArea.bottom - chartArea.top);
 
+      const barTop = chartArea.top + 4;
+      const barHeight = 16;
+      ctx.fillStyle = range.accentColor || 'rgba(251,191,36,0.18)';
+      ctx.fillRect(bandLeft, barTop, bandRight - bandLeft, barHeight);
+
+      ctx.strokeStyle = range.innerStripeColor || 'rgba(251,191,36,0.12)';
+      ctx.lineWidth = 1;
+      for (let x = bandLeft + 8; x < bandRight; x += 10) {
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+      }
+
       ctx.strokeStyle = range.borderColor || 'rgba(251,191,36,0.2)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -128,11 +142,11 @@ const rangeHighlightPlugin = {
 
       if (range.label) {
         const labelX = Math.max(chartArea.left + 6, Math.min((bandLeft + bandRight) / 2, chartArea.right - 6));
-        ctx.fillStyle = range.labelColor || 'rgba(251,191,36,0.9)';
+        ctx.fillStyle = range.labelColor || 'rgba(255,232,166,0.98)';
         ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(range.label, labelX, chartArea.top + 6);
+        ctx.fillText(range.label, labelX, barTop + 3);
       }
     }
     ctx.restore();
@@ -161,8 +175,10 @@ function vacationHighlightConfig(dateKeys) {
       start: span.start,
       end: span.end,
       label: span.days === 1 ? 'Vacation' : `Vacation ${span.days}d`,
-      color: 'rgba(251,191,36,0.08)',
-      borderColor: 'rgba(251,191,36,0.22)'
+      color: 'rgba(251,191,36,0.12)',
+      accentColor: 'rgba(251,191,36,0.22)',
+      innerStripeColor: 'rgba(251,191,36,0.08)',
+      borderColor: 'rgba(251,191,36,0.34)'
     }));
   return { enabled: !!ranges.length, dateKeys, ranges };
 }
