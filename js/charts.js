@@ -91,20 +91,14 @@ const rangeHighlightPlugin = {
         const center = xScale.getPixelForValue(0);
         return Number.isFinite(center) ? center : null;
       }
-      if (dayValue <= dateValues[0]) return chartArea.left;
-      if (dayValue >= dateValues[dateValues.length - 1]) return chartArea.right;
-      for (let i = 1; i < dateValues.length; i++) {
-        const leftDay = dateValues[i - 1];
-        const rightDay = dateValues[i];
-        if (!Number.isFinite(leftDay) || !Number.isFinite(rightDay) || rightDay <= leftDay) continue;
-        if (dayValue > rightDay) continue;
-        const leftX = xScale.getPixelForValue(i - 1);
-        const rightX = xScale.getPixelForValue(i);
-        if (!Number.isFinite(leftX) || !Number.isFinite(rightX)) return null;
-        const frac = Math.max(0, Math.min(1, (dayValue - leftDay) / (rightDay - leftDay)));
-        return leftX + ((rightX - leftX) * frac);
+      const startDay = dateValues[0];
+      const endDay = dateValues[dateValues.length - 1];
+      if (!Number.isFinite(startDay) || !Number.isFinite(endDay) || endDay <= startDay) {
+        const center = xScale.getPixelForValue(0);
+        return Number.isFinite(center) ? center : null;
       }
-      return chartArea.right;
+      const frac = Math.max(0, Math.min(1, (dayValue - startDay) / (endDay - startDay)));
+      return chartArea.left + ((chartArea.right - chartArea.left) * frac);
     };
 
     const { ctx } = chart;
