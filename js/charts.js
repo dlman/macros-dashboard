@@ -841,7 +841,6 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
   const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const baselineExclusions = baselineExclusionSummary(getAnalyticsDays());
-  const vacationSummary = vacationRangeSummary(getRangeDays());
   const gap = trendReality?.gap ?? null;
   const scaleContextValue = gap == null
     ? 'Need more weigh-ins'
@@ -892,14 +891,6 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
       <div class="sub">${maintenanceSub}</div>
       <div class="tiny">${maintenanceTiny}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>
     </div>
-    ${vacationSummary ? `
-    <div class="coach-card warn">
-      <div class="eyebrow">Vacation Impact</div>
-      <div class="value">${vacationSummary.days}d tagged</div>
-      <div class="sub">${vacationSummary.spanText}${vacationSummary.weightChange != null ? ` · scale ${vacationSummary.weightChange > 0 ? '+' : ''}${weightLabel(vacationSummary.weightChange, 1)}` : ''}</div>
-      <div class="tiny">${vacationSummary.avgCalories != null ? `Vacation avg ${energyLabel(vacationSummary.avgCalories)} · ` : ''}${vacationSummary.drinkNights} drink night${vacationSummary.drinkNights === 1 ? '' : 's'}${vacationSummary.avgSleepPerf != null ? ` · sleep ${Math.round(vacationSummary.avgSleepPerf)}%` : ''}</div>
-    </div>
-    ` : ''}
     <div class="coach-card ${agreement.cls}">
       <div class="eyebrow">Model Agreement</div>
       <div class="value">${agreement.value}</div>
