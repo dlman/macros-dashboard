@@ -693,7 +693,7 @@ function updateWeightChart(days) {
   chart.data.labels = points.map(p => p.label);
   chart.data.datasets[0].data = vals;
   chart.data.datasets[1].data = rolling;
-  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys, days);
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   // Linear regression line
   const validIndices = vals.map((v, i) => v != null ? i : null).filter(v => v !== null);
   const validVals = validIndices.map(i => vals[i]);
@@ -805,7 +805,7 @@ function updateAdjustedWeightViewChart(days) {
   chart.data.datasets[0].data = points.map(p => p.actual);
   chart.data.datasets[1].data = points.map(p => p.adjusted);
   chart.data.datasets[2].data = points.map(p => p.delta);
-  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys, days);
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   chart.data.datasets[2].backgroundColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
   chart.data.datasets[2].borderColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
   chart.data.datasets[0].pointRadius = compact ? 1.5 : 2.5;
@@ -899,7 +899,7 @@ function updateBodyCompChart(days) {
   const fatLowVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatLow));
   const fatHighVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatHigh));
   chart.data.labels = bodyComp.map(d => d.date.slice(5));
-  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys, days);
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   chart.data.datasets[0].data = fatHighVals;
   chart.data.datasets[0].pointHoverRadius = 0;
   chart.data.datasets[0].pointHitRadius = 0;

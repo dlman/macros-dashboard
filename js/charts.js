@@ -147,14 +147,14 @@ const rangeHighlightPlugin = {
 
 Chart.register(rangeHighlightPlugin);
 
-function vacationHighlightConfig(dateKeys, sourceDays = []) {
+function vacationHighlightConfig(dateKeys) {
   if (!Array.isArray(dateKeys) || !dateKeys.length) return { enabled: false, ranges: [], dateKeys: [] };
   const chartStart = dateKeys[0];
   const chartEnd = dateKeys[dateKeys.length - 1];
-  const fallbackDays = dateKeys.map(date => ({ date, notes: macroByDate[date]?.notes || '' }));
-  const vacationDays = (Array.isArray(sourceDays) && sourceDays.length ? sourceDays : fallbackDays)
-    .filter(day => !!day?.date && isVacationDay(day))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const vacationDays = [];
+  for (let cursor = chartStart; cursor <= chartEnd; cursor = nextDayStr(cursor)) {
+    if (isVacationDate(cursor)) vacationDays.push({ date: cursor });
+  }
   if (!vacationDays.length) return { enabled: false, ranges: [], dateKeys };
   const ranges = contiguousDateRanges(vacationDays)
     .map(span => ({

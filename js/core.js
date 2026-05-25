@@ -143,13 +143,16 @@ const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].leng
 // Flatten all days
 const allDays = ACTIVE_MONTHS.flatMap(m => data[m.key]);
 const allDates = allDays.map(d => d.date);
-const BUILD_VERSION = (() => {
-  const candidates = [
+const allTrackedDates = [
+  ...new Set([
     ...allDates,
     ...sleepData.map(d => d.date).filter(Boolean),
-    ...stepsData.map(d => d.date).filter(Boolean)
-  ].filter(Boolean).sort();
-  const latest = candidates.at(-1);
+    ...stepsData.map(d => d.date).filter(Boolean),
+    ...recoveryData.map(d => d.date).filter(Boolean)
+  ])
+].sort();
+const BUILD_VERSION = (() => {
+  const latest = allTrackedDates.at(-1);
   return latest ? latest.replace(/-/g, '.') : 'unknown';
 })();
 const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
@@ -315,8 +318,29 @@ function isDietBreakDay(day) {
     || (day.date >= DIET_BREAK_FALLBACK_START && day.date <= DIET_BREAK_FALLBACK_END);
 }
 
-function isVacationDay(day) {
+function hasExplicitVacationTag(day) {
   return !!day && notesContainTag(day.notes, 'vacation');
+}
+
+const inferredVacationDateSet = (() => {
+  const dates = new Set();
+  const sortedMacroDays = [...allDays].sort((a, b) => a.date.localeCompare(b.date));
+  sortedMacroDays.forEach((day, idx) => {
+    if (!hasExplicitVacationTag(day)) return;
+    let spanEnd = day.date;
+    const nextMacroDate = sortedMacroDays[idx + 1]?.date || null;
+    if (nextMacroDate && nextMacroDate > nextDayStr(day.date)) {
+      spanEnd = prevDay(nextMacroDate);
+    }
+    for (let cursor = day.date; cursor <= spanEnd; cursor = nextDayStr(cursor)) {
+      dates.add(cursor);
+    }
+  });
+  return dates;
+})();
+
+function isVacationDay(day) {
+  return !!day && inferredVacationDateSet.has(day.date);
 }
 
 function isInDietBreak(dateStr) {
@@ -325,8 +349,7 @@ function isInDietBreak(dateStr) {
 }
 
 function isVacationDate(dateStr) {
-  const day = macroByDate[dateStr];
-  return day ? isVacationDay(day) : false;
+  return inferredVacationDateSet.has(dateStr);
 }
 
 function isBaselineExcludedDay(day) {
