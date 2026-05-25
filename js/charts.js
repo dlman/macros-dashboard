@@ -2984,9 +2984,14 @@ function renderHeatmap() {
   grid.innerHTML = '';
   legend.innerHTML = '';
 
-  const months = ACTIVE_MONTHS.map(m => ({ label: m.label, days: data[m.key] }));
+  const months = ACTIVE_MONTHS.map(m => ({ label: m.label, key: m.key, num: m.num, days: data[m.key] }));
   const heatmapRangeDays = getRangeDays();
   const heatmapMaintenance = workingTDEEProfile(heatmapRangeDays).maintenance;
+  const { start, end } = getRangeState();
+  const rangeStart = allDates[start] || '2026-01-01';
+  const rangeEnd = allDates[end] || YESTERDAY_ISO;
+  const isCalendarDateInRange = dateStr => dateStr >= rangeStart && dateStr <= rangeEnd;
+  const daysInMonth = monthNum => new Date(2026, parseInt(monthNum, 10), 0).getDate();
 
   // Ranges for color scaling
   const ranges = {
@@ -3020,13 +3025,17 @@ function renderHeatmap() {
     row.className = 'heatmap-row';
     row.innerHTML = `<span class="row-label">${mo.label}</span>`;
 
-    mo.days.forEach(d => {
-      const inRange = isDateInRange(d.date);
+    for (let dayNum = 1; dayNum <= daysInMonth(mo.num); dayNum++) {
+      const date = `2026-${mo.num}-${String(dayNum).padStart(2, '0')}`;
+      const d = macroByDate[date] || null;
+      const sleep = sleepByDate[date] || null;
+      const inferredVacation = !d && isVacationDate(date);
+      const inRange = isCalendarDateInRange(date);
       let val = null;
-      if (heatmapMetric === 'calories') val = effectiveCalories(d) - heatmapMaintenance;
-      else if (heatmapMetric === 'protein') val = d.protein;
-      else if (heatmapMetric === 'sleepPerf') { const s = sleepByDate[d.date]; if (s) val = s.perf; }
-      else if (heatmapMetric === 'weight') {
+      if (d && heatmapMetric === 'calories') val = effectiveCalories(d) - heatmapMaintenance;
+      else if (d && heatmapMetric === 'protein') val = d.protein;
+      else if (heatmapMetric === 'sleepPerf') { if (sleep) val = sleep.perf; }
+      else if (d && heatmapMetric === 'weight') {
         // Weight delta from previous logged weight
         const idx = allDays.indexOf(d);
         if (d.weight && idx > 0) {
@@ -3036,26 +3045,39 @@ function renderHeatmap() {
       }
 
       const cell = document.createElement('div');
-      cell.className = 'heatmap-cell' + (val == null ? ' empty' : '') + (inRange ? '' : ' out-of-range');
+      cell.className = 'heatmap-cell'
+        + (val == null ? ' empty' : '')
+        + (inRange ? '' : ' out-of-range')
+        + (inferredVacation ? ' vacation-gap' : '');
       const bg = cellColor(val);
       if (bg) cell.style.background = bg;
-      cell.title = `${d.date}: ${val != null ? val : 'no data'}`;
-      cell.dataset.date = d.date;
+      cell.title = `${date}: ${val != null ? val : inferredVacation ? 'vacation' : 'no data'}`;
+      cell.dataset.date = date;
 
       if (val != null) {
-        cell.addEventListener('click', () => openPanel(d.date));
+        if (d) cell.addEventListener('click', () => openPanel(d.date));
         cell.addEventListener('mouseenter', (e) => {
           const tt = document.getElementById('hmTooltip');
           let label = '';
-          if (heatmapMetric === 'calories') {
+          if (heatmapMetric === 'calories' && d) {
             const effective = effectiveCalories(d);
             const delta = effective - heatmapMaintenance;
             label = `${energyLabel(effective)} effective (${delta > 0 ? '+' : ''}${energyLabel(delta)} vs maint)`;
           }
-          else if (heatmapMetric === 'protein') label = `${d.protein}g protein`;
+          else if (heatmapMetric === 'protein' && d) label = `${d.protein}g protein`;
           else if (heatmapMetric === 'sleepPerf') label = `${val}% sleep`;
           else if (heatmapMetric === 'weight') label = `${val > 0 ? '+' : ''}${weightValue(Math.abs(val))} ${weightUnit()}`;
-          tt.textContent = `${d.date.slice(5)} — ${label}`;
+          if (inferredVacation && !d) label += `${label ? ' · ' : ''}Vacation day`;
+          tt.textContent = `${date.slice(5)} — ${label}`;
+          tt.style.display = 'block';
+          tt.style.left = e.clientX + 12 + 'px';
+          tt.style.top = e.clientY - 30 + 'px';
+        });
+        cell.addEventListener('mouseleave', () => { document.getElementById('hmTooltip').style.display = 'none'; });
+      } else if (inferredVacation) {
+        cell.addEventListener('mouseenter', (e) => {
+          const tt = document.getElementById('hmTooltip');
+          tt.textContent = `${date.slice(5)} — Vacation day (inferred across logging gap)`;
           tt.style.display = 'block';
           tt.style.left = e.clientX + 12 + 'px';
           tt.style.top = e.clientY - 30 + 'px';
@@ -3063,12 +3085,6 @@ function renderHeatmap() {
         cell.addEventListener('mouseleave', () => { document.getElementById('hmTooltip').style.display = 'none'; });
       }
       row.appendChild(cell);
-    });
-    // Pad to 31
-    for (let i = mo.days.length; i < 31; i++) {
-      const empty = document.createElement('div');
-      empty.className = 'heatmap-cell empty';
-      row.appendChild(empty);
     }
     grid.appendChild(row);
   });
