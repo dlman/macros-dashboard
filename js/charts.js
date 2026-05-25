@@ -80,41 +80,60 @@ const rangeHighlightPlugin = {
     const dateKeys = config.dateKeys || chart.data?.labels || [];
     if (!dateKeys.length) return;
 
-    const getBandEdges = idx => {
-      const center = xScale.getPixelForValue(idx);
-      if (!Number.isFinite(center)) return null;
-      const prev = idx > 0 ? xScale.getPixelForValue(idx - 1) : null;
-      const next = idx < dateKeys.length - 1 ? xScale.getPixelForValue(idx + 1) : null;
-      const left = Number.isFinite(prev) ? (prev + center) / 2 : chartArea.left;
-      const right = Number.isFinite(next) ? (center + next) / 2 : chartArea.right;
-      return { left, right, center };
+    const dayNumber = dateStr => {
+      const t = Date.parse(`${dateStr}T12:00:00`);
+      return Number.isFinite(t) ? t / 86400000 : NaN;
+    };
+    const dateValues = dateKeys.map(dayNumber);
+    const pixelForDayValue = dayValue => {
+      if (!dateValues.length || !Number.isFinite(dayValue)) return null;
+      if (dateValues.length === 1) {
+        const center = xScale.getPixelForValue(0);
+        return Number.isFinite(center) ? center : null;
+      }
+      if (dayValue <= dateValues[0]) return chartArea.left;
+      if (dayValue >= dateValues[dateValues.length - 1]) return chartArea.right;
+      for (let i = 1; i < dateValues.length; i++) {
+        const leftDay = dateValues[i - 1];
+        const rightDay = dateValues[i];
+        if (!Number.isFinite(leftDay) || !Number.isFinite(rightDay) || rightDay <= leftDay) continue;
+        if (dayValue > rightDay) continue;
+        const leftX = xScale.getPixelForValue(i - 1);
+        const rightX = xScale.getPixelForValue(i);
+        if (!Number.isFinite(leftX) || !Number.isFinite(rightX)) return null;
+        const frac = Math.max(0, Math.min(1, (dayValue - leftDay) / (rightDay - leftDay)));
+        return leftX + ((rightX - leftX) * frac);
+      }
+      return chartArea.right;
     };
 
     const { ctx } = chart;
     ctx.save();
     for (const range of config.ranges) {
-      const firstIdx = dateKeys.findIndex(date => date >= range.start && date <= range.end);
-      if (firstIdx < 0) continue;
-      let lastIdx = firstIdx;
-      while (lastIdx + 1 < dateKeys.length && dateKeys[lastIdx + 1] >= range.start && dateKeys[lastIdx + 1] <= range.end) lastIdx++;
-      const firstEdge = getBandEdges(firstIdx);
-      const lastEdge = getBandEdges(lastIdx);
-      if (!firstEdge || !lastEdge) continue;
+      const startDay = dayNumber(range.start);
+      const endDay = dayNumber(range.end);
+      if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) continue;
+      const leftEdge = pixelForDayValue(startDay - 0.5);
+      const rightEdge = pixelForDayValue(endDay + 0.5);
+      if (!Number.isFinite(leftEdge) || !Number.isFinite(rightEdge)) continue;
+      const bandLeft = Math.max(chartArea.left, Math.min(leftEdge, rightEdge));
+      const bandRight = Math.min(chartArea.right, Math.max(leftEdge, rightEdge));
+      if (bandRight <= bandLeft) continue;
 
       ctx.fillStyle = range.color || 'rgba(251,191,36,0.08)';
-      ctx.fillRect(firstEdge.left, chartArea.top, lastEdge.right - firstEdge.left, chartArea.bottom - chartArea.top);
+      ctx.fillRect(bandLeft, chartArea.top, bandRight - bandLeft, chartArea.bottom - chartArea.top);
 
       ctx.strokeStyle = range.borderColor || 'rgba(251,191,36,0.2)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(firstEdge.left, chartArea.top);
-      ctx.lineTo(firstEdge.left, chartArea.bottom);
-      ctx.moveTo(lastEdge.right, chartArea.top);
-      ctx.lineTo(lastEdge.right, chartArea.bottom);
+      ctx.moveTo(bandLeft, chartArea.top);
+      ctx.lineTo(bandLeft, chartArea.bottom);
+      ctx.moveTo(bandRight, chartArea.top);
+      ctx.lineTo(bandRight, chartArea.bottom);
       ctx.stroke();
 
       if (range.label) {
-        const labelX = Math.max(chartArea.left + 6, Math.min((firstEdge.left + lastEdge.right) / 2, chartArea.right - 6));
+        const labelX = Math.max(chartArea.left + 6, Math.min((bandLeft + bandRight) / 2, chartArea.right - 6));
         ctx.fillStyle = range.labelColor || 'rgba(251,191,36,0.9)';
         ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.textAlign = 'center';
@@ -128,20 +147,30 @@ const rangeHighlightPlugin = {
 
 Chart.register(rangeHighlightPlugin);
 
-function vacationHighlightConfig(dateKeys) {
+function vacationHighlightConfig(dateKeys, sourceDays = []) {
   if (!Array.isArray(dateKeys) || !dateKeys.length) return { enabled: false, ranges: [], dateKeys: [] };
-  const vacationDays = dateKeys
-    .filter(date => isVacationDate(date))
-    .map(date => ({ date }));
+  const chartStart = dateKeys[0];
+  const chartEnd = dateKeys[dateKeys.length - 1];
+  const fallbackDays = dateKeys.map(date => ({ date, notes: macroByDate[date]?.notes || '' }));
+  const vacationDays = (Array.isArray(sourceDays) && sourceDays.length ? sourceDays : fallbackDays)
+    .filter(day => !!day?.date && isVacationDay(day))
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (!vacationDays.length) return { enabled: false, ranges: [], dateKeys };
-  const ranges = contiguousDateRanges(vacationDays).map(span => ({
-    start: span[0].date,
-    end: span[span.length - 1].date,
-    label: span.length === 1 ? 'Vacation' : `Vacation ${span.length}d`,
-    color: 'rgba(251,191,36,0.08)',
-    borderColor: 'rgba(251,191,36,0.22)'
-  }));
-  return { enabled: true, dateKeys, ranges };
+  const ranges = contiguousDateRanges(vacationDays)
+    .map(span => ({
+      start: span[0].date,
+      end: span[span.length - 1].date,
+      days: span.length
+    }))
+    .filter(span => span.end >= chartStart && span.start <= chartEnd)
+    .map(span => ({
+      start: span.start,
+      end: span.end,
+      label: span.days === 1 ? 'Vacation' : `Vacation ${span.days}d`,
+      color: 'rgba(251,191,36,0.08)',
+      borderColor: 'rgba(251,191,36,0.22)'
+    }));
+  return { enabled: !!ranges.length, dateKeys, ranges };
 }
 
 function sparklineOptions(color, min = undefined, max = undefined) {
