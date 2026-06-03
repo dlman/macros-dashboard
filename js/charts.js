@@ -666,7 +666,6 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const tdeeStability = tdeeStabilityProfile();
   const activityTerms = tdeeActivityTerms(analyticsDays);
   const baselineExclusions = baselineExclusionSummary(analyticsDays);
-  const vacationSummary = vacationRangeSummary(getRangeDays());
   const tdeeBand = {
     low: Math.min(workingProfile.rangeLow, baselineProfile.rangeLow),
     high: Math.max(workingProfile.rangeHigh, baselineProfile.rangeHigh)
@@ -780,17 +779,6 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="tiny">Range-based estimate</div>
         </div>
       `,
-    vacationSummary
-      ? `
-        <div class="forecast-card mobile-secondary">
-          <div class="eyebrow">Vacation Range</div>
-          <div class="value">${vacationSummary.days} day${vacationSummary.days === 1 ? '' : 's'}</div>
-          <div class="sub">${vacationSummary.spanText}${vacationSummary.spans.length > 1 ? ` across ${vacationSummary.spans.length} spans` : ''}. These tagged days stay visible in-range but sit outside the baseline-cut maintenance fallback.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill logged">Sheet note tag</span></div>
-          <div class="tiny">${vacationSummary.avgCalories != null ? `Avg intake ${energyLabel(vacationSummary.avgCalories)} · ` : ''}${vacationSummary.drinkNights} drink night${vacationSummary.drinkNights === 1 ? '' : 's'}${vacationSummary.weightChange != null ? ` · scale ${vacationSummary.weightChange > 0 ? '+' : ''}${weightLabel(vacationSummary.weightChange, 1)}` : ''}${vacationSummary.avgSleepPerf != null ? ` · sleep ${Math.round(vacationSummary.avgSleepPerf)}%` : ''}</div>
-        </div>
-      `
-      : '',
     `
       <div class="forecast-card mobile-primary">
         <div class="eyebrow">Latest Snapshot</div>
