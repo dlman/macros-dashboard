@@ -38,6 +38,7 @@ DATA_JS_PATH = ROOT / "js" / "data.js"
 PUBLISHED_CSV_URLS: dict[str, str] = {
     "Apr": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
     "May": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
+    "Jun": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=303838993&single=true&output=csv",
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
