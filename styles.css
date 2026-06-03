@@ -288,14 +288,16 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 
 /* ===== STAT CARDS ===== */
 .section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; margin-top: 28px; }
-.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
-.stat-card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 20px 22px; transition: border-color 0.2s; cursor: default; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
+.stat-card { min-width: 0; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 20px 22px; transition: border-color 0.2s; cursor: default; }
 .stat-card:hover { border-color: var(--border-card-hover); }
 .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-faint); margin-bottom: 10px; }
 .stat-card .months { display: flex; gap: 16px; }
 .stat-card .month-val { display: flex; flex-direction: column; gap: 2px; }
 .stat-card .month-name { font-size: 10px; color: var(--text-faint); }
 .stat-card .val { font-size: 22px; font-weight: 700; }
+#sleepStatGrid .months { flex-wrap: wrap; gap: 14px 18px; }
+#sleepStatGrid .month-val { flex: 1 1 74px; min-width: 64px; }
 .col-jan { color: var(--col-jan); } .col-feb { color: var(--col-feb); } .col-mar { color: var(--col-mar); }
 .trend-arrow { font-size: 14px; margin-left: 4px; vertical-align: middle; }
 .trend-up-good { color: var(--col-green); }
