@@ -484,19 +484,39 @@ function monthlyProgression(filtered) {
     const prev = summaries[i - 1], cur = summaries[i];
     const calDelta = cur.avgCal - prev.avgCal;
     const proDelta = cur.proteinHit - prev.proteinHit;
-    const liftDelta = cur.liftRate - prev.liftRate;
-    const drinkDelta = cur.drinkNights - prev.drinkNights;
 
     const parts = [];
-    if (cur.wChange != null) parts.push(`scale ${cur.wChange < 0 ? '↓' : '↑'} ${weightLabel(Math.abs(cur.wChange), 1)}`);
-    if (Math.abs(calDelta) > 30) parts.push(`intake ${calDelta < 0 ? '↓' : '↑'} ${energyLabel(Math.abs(calDelta))}/day`);
-    if (Math.abs(proDelta) > 5) parts.push(`protein ${proDelta > 0 ? '↑' : '↓'} ${prev.proteinHit}→${cur.proteinHit}%`);
+    if (cur.wChange != null) {
+      parts.push({
+        label: 'Scale',
+        value: `${cur.wChange < 0 ? '↓' : '↑'} ${weightLabel(Math.abs(cur.wChange), 1)}`,
+        direction: cur.wChange < 0 ? 'good' : 'warn'
+      });
+    }
+    if (Math.abs(calDelta) > 30) {
+      parts.push({
+        label: 'Intake',
+        value: `${calDelta < 0 ? '↓' : '↑'} ${energyLabel(Math.abs(calDelta))}/day`,
+        direction: calDelta < 0 ? 'good' : 'warn'
+      });
+    }
+    if (Math.abs(proDelta) > 5) {
+      parts.push({
+        label: 'Protein',
+        value: `${prev.proteinHit}→${cur.proteinHit}%`,
+        direction: proDelta > 0 ? 'good' : 'warn'
+      });
+    }
 
     if (parts.length) {
-      trends.push(`<strong>${prev.label} → ${cur.label}:</strong> ${parts.join(', ')}.`);
+      trends.push({
+        from: prev.label,
+        to: cur.label,
+        parts
+      });
     }
   }
-  return trends.length ? trends.join(' ') : null;
+  return trends.length ? trends : null;
 }
 
 function consistencyScore(days, key) {

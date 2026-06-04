@@ -303,6 +303,65 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .trend-up-bad { color: var(--col-red); }
 .trend-down-bad { color: var(--col-red); }
 .trend-neutral { color: var(--col-amber); }
+.monthly-progression {
+  margin: 12px 0 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  color: var(--text-muted);
+}
+.progression-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+.progression-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.progression-chip {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  border: 1px solid color-mix(in srgb, var(--border-card) 82%, transparent);
+}
+.progression-range {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.progression-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.progression-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(148,163,184,0.10);
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.progression-metric strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.progression-metric.good { background: rgba(52,211,153,0.11); }
+.progression-metric.good strong { color: var(--col-green); }
+.progression-metric.warn { background: rgba(251,191,36,0.11); }
+.progression-metric.warn strong { color: var(--col-amber); }
 
 /* ===== CHART CARDS ===== */
 .chart-row { display: grid; gap: 16px; margin-bottom: 16px; }

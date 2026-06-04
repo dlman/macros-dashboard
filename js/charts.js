@@ -365,7 +365,23 @@ function renderStatCards() {
   const progressionEl = document.getElementById('monthlyProgression');
   const progression = monthlyProgression(filtered);
   if (progression) {
-    progressionEl.innerHTML = `<strong>Month-over-month:</strong> ${progression}`;
+    progressionEl.innerHTML = `
+      <div class="progression-head">Month-over-month</div>
+      <div class="progression-strip">
+        ${progression.map(item => `
+          <div class="progression-chip">
+            <div class="progression-range">${item.from} → ${item.to}</div>
+            <div class="progression-metrics">
+              ${item.parts.map(part => `
+                <span class="progression-metric ${part.direction}">
+                  <span>${part.label}</span>
+                  <strong>${part.value}</strong>
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
     progressionEl.style.display = '';
   } else {
     progressionEl.style.display = 'none';
