@@ -22,10 +22,12 @@ import csv
 import io
 import json
 import re
+import time
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -74,11 +76,38 @@ def normalize_header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
 
 
+def with_cache_buster(url: str, attempt: int) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["_sync_retry"] = str(int(time.time() * 1000) + attempt)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
 def fetch_csv(url: str, label: str) -> list[list[str]]:
     """Fetch a published Google Sheets CSV and return rows as list[list[str]]."""
     print(f"  Fetching {label} …")
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+    headers = {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "User-Agent": "macros-dashboard-sync/1.0",
+    }
+    last_error: Exception | None = None
+    response: requests.Response | None = None
+    for attempt in range(1, 4):
+        fetch_url = url if attempt == 1 else with_cache_buster(url, attempt)
+        try:
+            response = requests.get(fetch_url, timeout=30, headers=headers)
+            response.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            last_error = exc
+            status = response.status_code if response is not None else None
+            if attempt == 3 or status not in {400, 408, 429, 500, 502, 503, 504}:
+                raise
+            print(f"  {label}: fetch attempt {attempt} failed with HTTP {status}; retrying …")
+            time.sleep(2 * attempt)
+    if response is None:
+        raise RuntimeError(f"Failed to fetch {label}") from last_error
     reader = csv.reader(io.StringIO(response.text))
     rows = [row for row in reader if any(cell.strip() for cell in row)]
     print(f"  {label}: {len(rows) - 1} data rows")
