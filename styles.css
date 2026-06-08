@@ -861,9 +861,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-copy h2 { font-size: 22px; }
   .hero-copy p { display: none; }
   .hero-chart { height: 180px; }
-  .hero-side .hero-mini:not(:last-child) { display: none; }
-  .hero-side { grid-template-columns: 1fr; }
-  .hero-side .hero-mini:last-child { grid-column: auto; }
+  .hero-side { display: none; }
   .hero-pulse { grid-template-columns: 1fr; }
   .hero-pulse .pulse-item .t { font-size: 9px; }
   .mini-metric-grid { grid-template-columns: 1fr; }
