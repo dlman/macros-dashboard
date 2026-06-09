@@ -1685,29 +1685,35 @@ let calVisibility = Array.isArray(persistedState.calVisibility) && persistedStat
 function makeCalDatasets() {
   const ds = ACTIVE_MONTHS.map(m => ({
     label: m.label,
-    data: data[m.key].map(d => d.calories),
+    data: data[m.key].map(d => ({ x: parseInt(d.date.slice(8), 10), y: d.calories })),
     borderColor: m.color,
     backgroundColor: m.bg,
     tension: 0.3, pointRadius: 4, pointHoverRadius: 7, fill: false
   }));
-  const maxLen = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
   ds.push({
     label: `Target (${goals.calories})`,
-    data: Array(maxLen).fill(goals.calories),
+    data: Array.from({ length: 31 }, (_, i) => ({ x: i + 1, y: goals.calories })),
     borderColor: 'rgba(251,191,36,0.5)', borderDash: [8,4], pointRadius: 0, fill: false, borderWidth: 2
   });
   return ds;
 }
 
-const maxLabels = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
 allCharts.caloriesChart = new Chart(document.getElementById('caloriesChart'), {
   type: 'line',
-  data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: makeCalDatasets() },
+  data: { datasets: makeCalDatasets() },
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < ACTIVE_MONTHS.length) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if (data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },
-    plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${energyLabel(ctx.parsed.y)}` } } },
-    scales: { x: { ...chartDefaults().scales.x, title:{display:true,text:'Day of Month',color:'#64748b',font:{size:11}}, ticks:{...TICK()} }, y: { ...chartDefaults().scales.y, min: 1000, max: 3600, ticks: { ...TICK(), stepSize: 250, callback: v => v.toLocaleString()+' kcal' } } }
+    plugins: { ...chartDefaults().plugins, legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+      title: ctx => {
+        const point = ctx[0];
+        if (!point || point.datasetIndex >= ACTIVE_MONTHS.length) return `Day ${point?.parsed?.x ?? ''}`;
+        const month = monthOrder[point.datasetIndex];
+        return data[month]?.[point.dataIndex]?.date || `Day ${point.parsed.x}`;
+      },
+      label: ctx => ` ${ctx.dataset.label}: ${energyLabel(ctx.parsed.y)}`
+    } } },
+    scales: { x: { ...chartDefaults().scales.x, type: 'linear', min: 1, max: 31, title:{display:true,text:'Day of Month',color:'#64748b',font:{size:11}}, ticks:{...TICK(), stepSize: 1, precision: 0} }, y: { ...chartDefaults().scales.y, min: 1000, max: 3600, ticks: { ...TICK(), stepSize: 250, callback: v => v.toLocaleString()+' kcal' } } }
   }
 });
 
@@ -1829,9 +1835,10 @@ const macroDatasets = () => {
   return ds;
 };
 
+const macroMaxLabels = Math.max(...ACTIVE_MONTHS.map(m => data[m.key].length), 1);
 allCharts.macroChart = new Chart(document.getElementById('macroChart'), {
   type: 'line',
-  data: { labels: Array.from({length:maxLabels},(_,i)=>i+1), datasets: macroDatasets() },
+  data: { labels: Array.from({length:macroMaxLabels},(_,i)=>i+1), datasets: macroDatasets() },
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length && elements[0].datasetIndex < ACTIVE_MONTHS.length) { const el = elements[0]; const mo = monthOrder[el.datasetIndex]; if(data[mo] && data[mo][el.index]) openPanel(data[mo][el.index].date); } },

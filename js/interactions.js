@@ -979,11 +979,9 @@ function updateBodyCompChart(days) {
 
 function updateCaloriesChart(months) {
   const chart = allCharts.caloriesChart;
-  const maxLen = Math.max(...ACTIVE_MONTHS.map(m => (months[m.key]||[]).length), 1);
-  chart.data.labels = Array.from({ length: maxLen }, (_, i) => i + 1);
   chart.data.datasets = [
-    ...ACTIVE_MONTHS.map(m => ({ label: m.label, data: (months[m.key]||[]).map(d => energyValue(d.calories)), borderColor: m.color, backgroundColor: m.bg, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false })),
-    { label:`Target (${energyLabel(goals.calories)})`, data: Array(maxLen).fill(energyValue(goals.calories)), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
+    ...ACTIVE_MONTHS.map(m => ({ label: m.label, data: (months[m.key]||[]).map(d => ({ x: parseInt(d.date.slice(8), 10), y: energyValue(d.calories) })), borderColor: m.color, backgroundColor: m.bg, tension:0.3, pointRadius:4, pointHoverRadius:7, fill:false })),
+    { label:`Target (${energyLabel(goals.calories)})`, data: Array.from({ length: 31 }, (_, i) => ({ x: i + 1, y: energyValue(goals.calories) })), borderColor:'rgba(251,191,36,0.5)', borderDash:[8,4], pointRadius:0, fill:false, borderWidth:2 }
   ];
   calVisibility.forEach((visible, idx) => { chart.data.datasets[idx].hidden = !visible; });
   const visibleEnergy = ACTIVE_MONTHS.flatMap(m => (months[m.key]||[]).map(d => energyValue(d.calories))).concat([energyValue(goals.calories)]);
@@ -994,7 +992,18 @@ function updateCaloriesChart(months) {
     const day = months[month][elements[0].index];
     if (day) openPanel(day.date);
   };
+  chart.options.plugins.tooltip.callbacks.title = ctx => {
+    const point = ctx[0];
+    if (!point || point.datasetIndex >= ACTIVE_MONTHS.length) return `Day ${point?.parsed?.x ?? ''}`;
+    const month = monthOrder[point.datasetIndex];
+    return months[month]?.[point.dataIndex]?.date || `Day ${point.parsed.x}`;
+  };
   chart.options.plugins.tooltip.callbacks.label = ctx => ctx.parsed.y == null ? '' : ` ${ctx.dataset.label}: ${energyLabel(useMetric ? ctx.parsed.y / 4.184 : ctx.parsed.y)}`;
+  chart.options.scales.x.type = 'linear';
+  chart.options.scales.x.min = 1;
+  chart.options.scales.x.max = 31;
+  chart.options.scales.x.ticks.stepSize = 1;
+  chart.options.scales.x.ticks.precision = 0;
   chart.options.scales.y.min = Math.max(0, Math.floor(bounds.min / (useMetric ? 250 : 100)) * (useMetric ? 250 : 100));
   chart.options.scales.y.max = Math.ceil(bounds.max / (useMetric ? 250 : 100)) * (useMetric ? 250 : 100);
   chart.options.scales.y.ticks.stepSize = useMetric ? 500 : 250;
