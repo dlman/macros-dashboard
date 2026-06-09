@@ -3011,10 +3011,23 @@ function renderHeatmap() {
     'rgba(0,114,178,0.82)'
   ];
 
-  function cellColor(val) {
+  function proteinGoodNorm(grams, date) {
+    const floor = proteinGoalForDay(date);
+    const bodyweightTarget = floor / PROTEIN_FLOOR_RATIO;
+    const gramsPerLb = bodyweightTarget ? grams / bodyweightTarget : 0;
+    if (gramsPerLb >= 1) return 0.9;
+    if (gramsPerLb >= PROTEIN_FLOOR_RATIO) return 0.7 + ((gramsPerLb - PROTEIN_FLOOR_RATIO) / (1 - PROTEIN_FLOOR_RATIO)) * 0.19;
+    if (gramsPerLb >= 0.75) return 0.35 + ((gramsPerLb - 0.75) / (PROTEIN_FLOOR_RATIO - 0.75)) * 0.3;
+    if (gramsPerLb >= 0.6) return 0.12 + ((gramsPerLb - 0.6) / 0.15) * 0.18;
+    return Math.max(0, gramsPerLb / 0.6 * 0.12);
+  }
+
+  function cellColor(val, date) {
     if (val == null) return null;
-    const norm = Math.max(0, Math.min(1, (val - r.min) / (r.max - r.min)));
-    const goodNorm = r.good === 'high' ? norm : 1 - norm;
+    const norm = heatmapMetric === 'protein'
+      ? proteinGoodNorm(val, date)
+      : Math.max(0, Math.min(1, (val - r.min) / (r.max - r.min)));
+    const goodNorm = heatmapMetric === 'protein' ? norm : (r.good === 'high' ? norm : 1 - norm);
     if (goodNorm >= 0.85) return heatmapStops[4];
     if (goodNorm >= 0.65) return heatmapStops[3];
     if (goodNorm >= 0.4) return heatmapStops[2];
@@ -3051,7 +3064,7 @@ function renderHeatmap() {
         + (val == null ? ' empty' : '')
         + (inRange ? '' : ' out-of-range')
         + (inferredVacation ? ' vacation-gap' : '');
-      const bg = cellColor(val);
+      const bg = cellColor(val, date);
       if (bg) cell.style.background = bg;
       cell.title = `${date}: ${val != null ? val : inferredVacation ? 'vacation' : 'no data'}`;
       cell.dataset.date = date;
@@ -3066,7 +3079,12 @@ function renderHeatmap() {
             const delta = effective - heatmapMaintenance;
             label = `${energyLabel(effective)} effective (${delta > 0 ? '+' : ''}${energyLabel(delta)} vs maint)`;
           }
-          else if (heatmapMetric === 'protein' && d) label = `${d.protein}g protein`;
+          else if (heatmapMetric === 'protein' && d) {
+            const floor = proteinGoalForDay(d.date);
+            const bodyweightTarget = floor / PROTEIN_FLOOR_RATIO;
+            const gramsPerLb = bodyweightTarget ? d.protein / bodyweightTarget : null;
+            label = `${d.protein}g protein${gramsPerLb ? ` (${gramsPerLb.toFixed(2)}g/lb, floor ${floor}g)` : ''}`;
+          }
           else if (heatmapMetric === 'sleepPerf') label = `${val}% sleep`;
           else if (heatmapMetric === 'weight') label = `${val > 0 ? '+' : ''}${weightValue(Math.abs(val))} ${weightUnit()}`;
           if (inferredVacation && !d) label += `${label ? ' · ' : ''}Vacation day`;
