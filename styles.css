@@ -387,6 +387,18 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   line-height: 1.35;
 }
 .chart-mobile-readout.show { display: block; }
+#chartZoomFrame > .chart-mobile-readout {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  margin-top: 0;
+  max-height: 64px;
+  overflow: hidden;
+  z-index: 12;
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+}
 .chart-mobile-readout-title {
   color: var(--text-primary);
   font-size: 11px;
@@ -609,6 +621,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .chart-zoom-frame {
   flex: 1;
   min-height: 0;
+  position: relative;
   border-radius: 14px;
   background: rgba(15,23,42,0.4);
   border: 1px solid var(--border-card);
