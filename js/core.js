@@ -2346,7 +2346,12 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.scales.y.max = Math.ceil(bounds.max);
   chart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   chart.options.plugins.legend.labels.filter = item => !chart.data.datasets[item.datasetIndex]?.legendHidden;
-  chart.options.plugins.tooltip.filter = ctx => !ctx.dataset.tooltipHidden;
+  const compactTooltip = typeof isMobileChartViewport === 'function' && isMobileChartViewport();
+  chart.options.plugins.tooltip.filter = ctx => {
+    if (ctx.dataset.tooltipHidden) return false;
+    if (!compactTooltip) return true;
+    return [currentSeries.label, activeSeries.label, 'Fed-state comparable'].includes(ctx.dataset.label);
+  };
   chart.options.plugins.scenarioGoalMarker = scenarioPlannerMode === 'goal' && goalProjection?.achievable
     ? {
         enabled: true,
@@ -2359,11 +2364,12 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const bfPct = ctx.dataset.bodyFatPcts?.[ctx.dataIndex];
     const bfRange = ctx.dataset.bodyFatRanges?.[ctx.dataIndex];
-    const bfText = Number.isFinite(bfPct) ? ` · ~${bfPct.toFixed(1)}% BF` : '';
+    const bfText = Number.isFinite(bfPct) ? (compactTooltip ? ` · ${bfPct.toFixed(1)}% BF` : ` · ~${bfPct.toFixed(1)}% BF`) : '';
     const bfRangeText = Array.isArray(bfRange) && Number.isFinite(bfRange[0]) && Number.isFinite(bfRange[1]) ? ` (${bfRange[0].toFixed(1)}%–${bfRange[1].toFixed(1)}%)` : '';
-    return `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}${bfText}${bfRangeText}`;
+    return `${ctx.dataset.label}: ${ctx.parsed.y} ${weightUnit()}${bfText}${compactTooltip ? '' : bfRangeText}`;
   };
   chart.options.plugins.tooltip.callbacks.footer = items => {
+    if (compactTooltip) return '';
     const point = items[0];
     if (!point) return '';
     if (point.dataIndex === 0) return 'Latest weigh-in in selected range';

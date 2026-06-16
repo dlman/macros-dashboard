@@ -1,13 +1,65 @@
 // =====================================================================
 // CHART DEFAULTS
 // =====================================================================
+function isMobileChartViewport() {
+  return window.matchMedia?.('(max-width: 640px)')?.matches ?? false;
+}
+
+if (window.Chart?.Tooltip?.positioners) {
+  Chart.Tooltip.positioners.mobileEdge = function mobileEdgePosition(items, eventPosition) {
+    const chartArea = this.chart?.chartArea;
+    if (!chartArea) return eventPosition;
+    const source = items?.[0]?.element || eventPosition || {};
+    const rawX = Number.isFinite(source.x) ? source.x : eventPosition?.x;
+    const rawY = Number.isFinite(source.y) ? source.y : eventPosition?.y;
+    const width = Math.max(120, Math.min(220, chartArea.right - chartArea.left - 12));
+    const x = Math.max(chartArea.left + (width / 2), Math.min(chartArea.right - (width / 2), rawX || ((chartArea.left + chartArea.right) / 2)));
+    const midpoint = (chartArea.top + chartArea.bottom) / 2;
+    const anchorTop = !Number.isFinite(rawY) || rawY > midpoint;
+    return {
+      x,
+      y: anchorTop ? chartArea.top + 8 : chartArea.bottom - 8,
+      xAlign: 'center',
+      yAlign: anchorTop ? 'top' : 'bottom'
+    };
+  };
+}
+
+function mobileAwareTooltip(options = {}) {
+  const compact = isMobileChartViewport();
+  return {
+    backgroundColor: '#1e2535',
+    titleColor: '#e2e8f0',
+    bodyColor: '#94a3b8',
+    borderColor: '#2d3748',
+    borderWidth: 1,
+    displayColors: !compact,
+    titleFont: { size: compact ? 11 : 12, weight: '700' },
+    bodyFont: { size: compact ? 10 : 12 },
+    footerFont: { size: compact ? 10 : 12 },
+    padding: compact ? 8 : 10,
+    boxPadding: compact ? 2 : 4,
+    caretSize: compact ? 0 : 5,
+    cornerRadius: compact ? 6 : 8,
+    multiKeyBackground: '#1e2535',
+    bodySpacing: compact ? 2 : 4,
+    titleSpacing: compact ? 2 : 4,
+    titleMarginBottom: compact ? 4 : 6,
+    position: compact ? 'mobileEdge' : 'average',
+    xAlign: compact ? 'center' : undefined,
+    yAlign: compact ? 'bottom' : undefined,
+    callbacks: {},
+    ...options
+  };
+}
+
 function chartDefaults() {
   return {
     responsive: true, maintainAspectRatio: false,
     animation: { duration: 300 },
     plugins: {
       legend: { display: false },
-      tooltip: { backgroundColor: '#1e2535', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: '#2d3748', borderWidth: 1 },
+      tooltip: mobileAwareTooltip(),
       zoom: {
         limits: {
           x: { min: 'original', max: 'original', minRange: 2 },
@@ -304,7 +356,10 @@ allCharts.scenarioForecastChart = new Chart(document.getElementById('scenarioFor
           padding: 16
         }
       },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} }
+      tooltip: mobileAwareTooltip({
+        filter: ctx => !isMobileChartViewport() || ctx.datasetIndex === 0 || ctx.datasetIndex === 1,
+        callbacks: {}
+      })
     },
     scales: {
       x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
@@ -1471,7 +1526,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
           ], color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 }
         },
         tooltip: {
-          ...chartDefaults().plugins.tooltip,
+          ...mobileAwareTooltip({ displayColors: !isMobileChartViewport() }),
           callbacks: {
             title: ctx => adjustedPoints[ctx[0].dataIndex]?.date || '',
             label: ctx => {
@@ -1481,6 +1536,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
               return null;
             },
             afterBody: ctx => {
+              if (isMobileChartViewport()) return [];
               const point = adjustedPoints[ctx[0].dataIndex];
               if (!point) return [];
               return [
