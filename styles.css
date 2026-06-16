@@ -435,6 +435,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .whatif-mode-tabs { width: fit-content; }
 .whatif-inputs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
 .whatif-field { display: flex; flex-direction: column; gap: 4px; }
+.whatif-field[hidden] { display: none !important; }
 .whatif-field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-faint); }
 .whatif-field input[type=number] { width: 100px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 6px 10px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 .whatif-field input[type=range] { width: 100%; min-width: 120px; accent-color: #38bdf8; }
