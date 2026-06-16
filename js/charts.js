@@ -31,14 +31,19 @@ function mobileExternalTooltip({ chart, tooltip }) {
     .map(compactTooltipText)
     .filter(Boolean)
     .slice(0, 2);
-  if (!title && !bodyLines.length) {
+  const footerLines = (tooltip.footer || [])
+    .map(compactTooltipText)
+    .filter(Boolean)
+    .slice(0, Math.max(0, 3 - bodyLines.length));
+  const lines = [...bodyLines, ...footerLines];
+  if (!title && !lines.length) {
     readout.classList.remove('show');
     readout.innerHTML = '';
     return;
   }
   readout.innerHTML = `
     ${title ? `<div class="chart-mobile-readout-title">${title}</div>` : ''}
-    ${bodyLines.map(line => `<div class="chart-mobile-readout-line">${line}</div>`).join('')}
+    ${lines.map(line => `<div class="chart-mobile-readout-line">${line}</div>`).join('')}
   `;
   readout.classList.add('show');
 }
@@ -357,8 +362,8 @@ function sparklineOptions(color, min = undefined, max = undefined) {
 allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
-    { data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
+    { label: 'Weight', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
+    { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
   ] },
   options: {
     ...chartDefaults(),
@@ -745,19 +750,32 @@ function renderWeeklyReport() {
 function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   const weightDays = filteredDays.filter(d => d.weight);
   const weightVals = weightDays.map(d => weightValue(d.weight));
-  const weightTrendPoints = stateSpaceWeightTrendPoints(filteredDays);
-  const filteredTrend = weightTrendPoints.map(point => weightValue(point.trendWeight));
-  const weightBounds = calcAxisBounds([...weightVals, ...filteredTrend], useMetric ? 0.8 : 2);
+  const rollingTrend = rollingAvg(weightDays.map(d => d.weight), 7).map(v => v == null ? null : weightValue(v));
+  const validWeights = weightVals.map((value, index) => ({ value, index })).filter(point => Number.isFinite(point.value));
+  let heroPaceText = '';
+  if (validWeights.length >= 3) {
+    const n = validWeights.length;
+    const sumX = validWeights.reduce((sum, point) => sum + point.index, 0);
+    const sumY = validWeights.reduce((sum, point) => sum + point.value, 0);
+    const sumXY = validWeights.reduce((sum, point) => sum + (point.index * point.value), 0);
+    const sumX2 = validWeights.reduce((sum, point) => sum + (point.index * point.index), 0);
+    const denom = (n * sumX2) - (sumX * sumX);
+    const slope = denom ? ((n * sumXY) - (sumX * sumY)) / denom : 0;
+    const weeklyPace = slope * 7;
+    heroPaceText = `Pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
+  }
+  const weightBounds = calcAxisBounds([...weightVals, ...rollingTrend], useMetric ? 0.8 : 2);
   allCharts.heroWeightChart.data.labels = weightDays.map(d => d.date.slice(5));
   allCharts.heroWeightChart.data.datasets[0].data = weightVals;
-  allCharts.heroWeightChart.data.datasets[1].data = filteredTrend;
+  allCharts.heroWeightChart.data.datasets[1].data = rollingTrend;
   allCharts.heroWeightChart.options.scales.y.min = Math.floor(weightBounds.min);
   allCharts.heroWeightChart.options.scales.y.max = Math.ceil(weightBounds.max);
   allCharts.heroWeightChart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 0) return `Weight: ${ctx.parsed.y} ${weightUnit()}`;
-    return `Filtered trend: ${ctx.parsed.y} ${weightUnit()}`;
+    return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
   };
+  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = () => heroPaceText;
   allCharts.heroWeightChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
