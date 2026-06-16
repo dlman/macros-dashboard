@@ -375,6 +375,29 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .chart-wrapper.tall { height: 320px; }
 .chart-wrapper.medium { height: 220px; }
 .chart-wrapper.short { height: 160px; }
+.chart-mobile-readout {
+  display: none;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 86%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.chart-mobile-readout.show { display: block; }
+.chart-mobile-readout-title {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+.chart-mobile-readout-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
 .card-header h3 { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .export-btn { position: absolute; top: 10px; right: 10px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 4px 8px; font-size: 10px; color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity 0.2s; z-index: 5; }

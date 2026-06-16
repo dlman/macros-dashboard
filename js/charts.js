@@ -5,29 +5,49 @@ function isMobileChartViewport() {
   return window.matchMedia?.('(max-width: 640px)')?.matches ?? false;
 }
 
-if (window.Chart?.Tooltip?.positioners) {
-  Chart.Tooltip.positioners.mobileEdge = function mobileEdgePosition(items, eventPosition) {
-    const chartArea = this.chart?.chartArea;
-    if (!chartArea) return eventPosition;
-    const source = items?.[0]?.element || eventPosition || {};
-    const rawX = Number.isFinite(source.x) ? source.x : eventPosition?.x;
-    const rawY = Number.isFinite(source.y) ? source.y : eventPosition?.y;
-    const width = Math.max(120, Math.min(220, chartArea.right - chartArea.left - 12));
-    const x = Math.max(chartArea.left + (width / 2), Math.min(chartArea.right - (width / 2), rawX || ((chartArea.left + chartArea.right) / 2)));
-    const midpoint = (chartArea.top + chartArea.bottom) / 2;
-    const anchorTop = !Number.isFinite(rawY) || rawY > midpoint;
-    return {
-      x,
-      y: anchorTop ? chartArea.top + 8 : chartArea.bottom - 8,
-      xAlign: 'center',
-      yAlign: anchorTop ? 'top' : 'bottom'
-    };
-  };
+function compactTooltipText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function mobileExternalTooltip({ chart, tooltip }) {
+  if (!isMobileChartViewport()) return;
+  const wrapper = chart.canvas.closest('.chart-wrapper, .hero-chart');
+  if (!wrapper) return;
+  const parent = wrapper.parentElement || wrapper;
+  let readout = parent.querySelector(':scope > .chart-mobile-readout');
+  if (!readout) {
+    readout = document.createElement('div');
+    readout.className = 'chart-mobile-readout';
+    parent.insertBefore(readout, wrapper.nextSibling);
+  }
+  if (!tooltip || tooltip.opacity === 0) {
+    readout.classList.remove('show');
+    readout.innerHTML = '';
+    return;
+  }
+  const title = compactTooltipText(tooltip.title?.[0]);
+  const bodyLines = (tooltip.body || [])
+    .flatMap(item => item.lines || [])
+    .map(compactTooltipText)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!title && !bodyLines.length) {
+    readout.classList.remove('show');
+    readout.innerHTML = '';
+    return;
+  }
+  readout.innerHTML = `
+    ${title ? `<div class="chart-mobile-readout-title">${title}</div>` : ''}
+    ${bodyLines.map(line => `<div class="chart-mobile-readout-line">${line}</div>`).join('')}
+  `;
+  readout.classList.add('show');
 }
 
 function mobileAwareTooltip(options = {}) {
   const compact = isMobileChartViewport();
   return {
+    enabled: !compact,
+    external: compact ? mobileExternalTooltip : undefined,
     backgroundColor: '#1e2535',
     titleColor: '#e2e8f0',
     bodyColor: '#94a3b8',
@@ -45,9 +65,7 @@ function mobileAwareTooltip(options = {}) {
     bodySpacing: compact ? 2 : 4,
     titleSpacing: compact ? 2 : 4,
     titleMarginBottom: compact ? 4 : 6,
-    position: compact ? 'mobileEdge' : 'average',
-    xAlign: compact ? 'center' : undefined,
-    yAlign: compact ? 'bottom' : undefined,
+    position: 'average',
     callbacks: {},
     ...options
   };
