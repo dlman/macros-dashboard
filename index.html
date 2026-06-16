@@ -8,9 +8,11 @@
 <meta http-equiv="Expires" content="0">
 <title>Macros/Sleep Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css?v=2026.06.16.2">
+<link rel="stylesheet" href="./styles.css?v=2026.06.16.3">
 </head>
 <body>
 
@@ -675,7 +677,8 @@
   <button class="close-btn" id="closeChartZoom" aria-label="Close enlarged chart">✕</button>
   <div class="chart-zoom-copy">
     <div class="chart-zoom-title" id="chartZoomTitle">Chart</div>
-    <div class="chart-zoom-sub">Double tap a chart on mobile to enlarge it. Tap outside to close.</div>
+    <div class="chart-zoom-sub">Pinch or drag-select to zoom a range. Drag to pan. Double tap any chart to enlarge.</div>
+    <button class="chart-reset-btn modal-reset" id="chartZoomReset" type="button">Reset zoom</button>
   </div>
   <div class="chart-zoom-frame" id="chartZoomFrame"></div>
 </div>
@@ -741,8 +744,8 @@
 <!-- HEATMAP TOOLTIP -->
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
-<script src="./js/data.js?v=2026.06.16.2"></script>
-<script src="./js/core.js?v=2026.06.16.2"></script>
-<script src="./js/charts.js?v=2026.06.16.2"></script>
-<script src="./js/interactions.js?v=2026.06.16.2"></script>
+<script src="./js/data.js?v=2026.06.16.3"></script>
+<script src="./js/core.js?v=2026.06.16.3"></script>
+<script src="./js/charts.js?v=2026.06.16.3"></script>
+<script src="./js/interactions.js?v=2026.06.16.3"></script>
 </body></html>

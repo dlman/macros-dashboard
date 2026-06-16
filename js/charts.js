@@ -5,7 +5,36 @@ function chartDefaults() {
   return {
     responsive: true, maintainAspectRatio: false,
     animation: { duration: 300 },
-    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e2535', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: '#2d3748', borderWidth: 1 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: '#1e2535', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: '#2d3748', borderWidth: 1 },
+      zoom: {
+        limits: {
+          x: { min: 'original', max: 'original', minRange: 2 },
+          y: { min: 'original', max: 'original' },
+          y2: { min: 'original', max: 'original' }
+        },
+        pan: {
+          enabled: true,
+          mode: 'x',
+          threshold: 8,
+          onPanComplete: ({ chart }) => window.updateChartZoomUi?.(chart)
+        },
+        zoom: {
+          mode: 'x',
+          wheel: { enabled: true, modifierKey: 'ctrl', speed: 0.08 },
+          pinch: { enabled: true },
+          drag: {
+            enabled: true,
+            threshold: 12,
+            backgroundColor: 'rgba(56, 189, 248, 0.14)',
+            borderColor: 'rgba(56, 189, 248, 0.72)',
+            borderWidth: 1
+          },
+          onZoomComplete: ({ chart }) => window.updateChartZoomUi?.(chart)
+        }
+      }
+    },
     scales: { x: { grid: GRID(), ticks: TICK() }, y: { grid: GRID(), ticks: TICK() } }
   };
 }

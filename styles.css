@@ -73,6 +73,7 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-copy h2 { font-size: 30px; line-height: 0.98; color: var(--text-primary); letter-spacing: -1px; max-width: 560px; }
 .hero-copy p { font-size: 13px; color: var(--text-muted); max-width: 360px; line-height: 1.5; }
 .hero-chart { height: 500px; }
+.hero-main canvas { cursor: pointer; }
 .hero-side { display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 16px; }
 .hero-mini { padding: 16px 18px 10px; background:
   linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-card) 90%, rgba(15,23,42,0.08)));
@@ -379,6 +380,26 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .export-btn { position: absolute; top: 10px; right: 10px; background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 6px; padding: 4px 8px; font-size: 10px; color: var(--text-faint); cursor: pointer; opacity: 0; transition: opacity 0.2s; z-index: 5; }
 .chart-card:hover .export-btn { opacity: 1; }
 .export-btn:hover { color: var(--text-secondary); border-color: var(--border-card-hover); }
+.chart-reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 48px;
+  display: none;
+  background: rgba(15,23,42,0.92);
+  border: 1px solid var(--border-card-hover);
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 5px 10px;
+  text-transform: uppercase;
+  z-index: 6;
+}
+.chart-is-zoomed .chart-reset-btn,
+.chart-reset-btn.show { display: inline-flex; align-items: center; justify-content: center; }
+.chart-reset-btn:hover { color: var(--text-primary); border-color: var(--col-sky); }
 
 /* ===== BADGES ===== */
 .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px; }
@@ -557,6 +578,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .chart-zoom-copy { padding-right: 44px; }
 .chart-zoom-title { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px; }
 .chart-zoom-sub { margin-top: 4px; font-size: 11px; color: var(--text-faint); }
+.chart-zoom-copy .modal-reset {
+  position: static;
+  margin-top: 8px;
+  width: fit-content;
+}
 .chart-zoom-frame {
   flex: 1;
   min-height: 0;
@@ -573,6 +599,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+#chartZoomFrame .hero-chart {
+  width: 100%;
+  height: 100%;
 }
 #chartZoomFrame .chart-wrapper.tall,
 #chartZoomFrame .chart-wrapper.medium,

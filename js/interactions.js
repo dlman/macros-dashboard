@@ -93,14 +93,35 @@ document.getElementById('overlay').addEventListener('click', closePanel);
 let lastChartTap = { id: null, time: 0 };
 let chartZoomState = null;
 
+function chartHasRangeZoom(chart) {
+  return Boolean(chart?.isZoomedOrPanned?.());
+}
+
+window.updateChartZoomUi = function updateChartZoomUi(chart) {
+  if (!chart?.canvas) return;
+  const hasZoom = chartHasRangeZoom(chart);
+  chart.canvas.closest('.chart-card')?.classList.toggle('chart-is-zoomed', hasZoom);
+  const modalReset = document.getElementById('chartZoomReset');
+  if (modalReset && chartZoomState?.canvasId === chart.canvas.id) {
+    modalReset.classList.toggle('show', hasZoom);
+  }
+};
+
+function resetChartZoom(canvas) {
+  const chart = canvas ? Chart.getChart(canvas) : null;
+  if (!chart?.resetZoom) return;
+  chart.resetZoom('none');
+  window.updateChartZoomUi(chart);
+}
+
 function openChartZoom(canvas) {
   if (!canvas || chartZoomState) return;
   const title = document.getElementById('chartZoomTitle');
   const frame = document.getElementById('chartZoomFrame');
-  const card = canvas.closest('.chart-card');
-  const wrapper = canvas.closest('.chart-wrapper');
+  const card = canvas.closest('.chart-card, .hero-main');
+  const wrapper = canvas.closest('.chart-wrapper, .hero-chart');
   if (!wrapper) return;
-  const label = card?.querySelector('h3')?.textContent?.trim() || 'Chart';
+  const label = card?.querySelector('h3, #heroTitle')?.textContent?.trim() || 'Chart';
   const parent = wrapper.parentNode;
   const placeholder = document.createComment(`chart-zoom-placeholder:${canvas.id || label}`);
   parent.insertBefore(placeholder, wrapper);
@@ -108,6 +129,7 @@ function openChartZoom(canvas) {
   wrapper.classList.add('zoomed-live');
   title.textContent = label;
   chartZoomState = { wrapper, parent, placeholder, canvasId: canvas.id };
+  document.getElementById('chartZoomReset')?.classList.toggle('show', chartHasRangeZoom(Chart.getChart(canvas)));
   document.getElementById('chartZoomOverlay').classList.add('show');
   document.getElementById('chartZoomModal').classList.add('open');
   document.getElementById('chartZoomModal').setAttribute('aria-hidden', 'false');
@@ -117,6 +139,7 @@ function openChartZoom(canvas) {
     if (chart) {
       chart.resize();
       chart.update('none');
+      window.updateChartZoomUi(chart);
     }
   });
 }
@@ -140,6 +163,7 @@ function closeChartZoom() {
   }
   chartZoomState = null;
   document.getElementById('chartZoomFrame').innerHTML = '';
+  document.getElementById('chartZoomReset')?.classList.remove('show');
   document.getElementById('chartZoomOverlay').classList.remove('show');
   document.getElementById('chartZoomModal').classList.remove('open');
   document.getElementById('chartZoomModal').setAttribute('aria-hidden', 'true');
@@ -155,7 +179,19 @@ function isCompactMobileViewport() {
 }
 
 function attachChartZoomHandlers() {
-  document.querySelectorAll('.chart-card canvas').forEach(canvas => {
+  document.querySelectorAll('.chart-card canvas, .hero-main canvas').forEach(canvas => {
+    const card = canvas.closest('.chart-card, .hero-main');
+    if (card && !card.querySelector('.chart-reset-btn:not(.modal-reset)')) {
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'chart-reset-btn';
+      resetBtn.type = 'button';
+      resetBtn.textContent = 'Reset zoom';
+      resetBtn.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        resetChartZoom(canvas);
+      });
+      card.appendChild(resetBtn);
+    }
     if (canvas.dataset.zoomBound === 'true') return;
     canvas.dataset.zoomBound = 'true';
     canvas.addEventListener('dblclick', () => openChartZoom(canvas));
@@ -174,6 +210,10 @@ function attachChartZoomHandlers() {
 
 document.getElementById('closeChartZoom').addEventListener('click', closeChartZoom);
 document.getElementById('chartZoomOverlay').addEventListener('click', closeChartZoom);
+document.getElementById('chartZoomReset')?.addEventListener('click', () => {
+  const canvas = chartZoomState?.canvasId ? document.getElementById(chartZoomState.canvasId) : null;
+  resetChartZoom(canvas);
+});
 
 // Navigate prev/next
 function navigateDay(direction) {
