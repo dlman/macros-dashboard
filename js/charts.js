@@ -17,6 +17,7 @@ function chartDefaults() {
         pan: {
           enabled: true,
           mode: 'x',
+          modifierKey: 'shift',
           threshold: 8,
           onPanComplete: ({ chart }) => window.updateChartZoomUi?.(chart)
         },
