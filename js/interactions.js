@@ -93,6 +93,7 @@ document.getElementById('overlay').addEventListener('click', closePanel);
 let lastChartTap = { id: null, time: 0 };
 let chartZoomState = null;
 let chartTouchZoomState = null;
+const chartTouchPointers = new Set();
 
 function chartHasRangeZoom(chart) {
   return Boolean(chart?.isZoomedOrPanned?.());
@@ -159,11 +160,23 @@ function updateTouchZoomBox(state, currentX) {
   state.box.style.height = `${chartArea.bottom - chartArea.top}px`;
 }
 
+function cancelTouchRangeZoom() {
+  if (!chartTouchZoomState) return;
+  chartTouchZoomState.box.style.display = 'none';
+  try { chartTouchZoomState.canvas.releasePointerCapture(chartTouchZoomState.pointerId); } catch (err) {}
+  chartTouchZoomState = null;
+}
+
 function bindTouchRangeZoom(canvas) {
   if (canvas.dataset.touchRangeZoomBound === 'true') return;
   canvas.dataset.touchRangeZoomBound = 'true';
   canvas.addEventListener('pointerdown', (evt) => {
-    if (evt.pointerType === 'mouse' || !evt.isPrimary || !canvas.closest('#chartZoomFrame')) return;
+    if (evt.pointerType === 'mouse' || !canvas.closest('#chartZoomFrame')) return;
+    chartTouchPointers.add(evt.pointerId);
+    if (chartTouchPointers.size > 1) {
+      cancelTouchRangeZoom();
+      return;
+    }
     const chart = Chart.getChart(canvas);
     const xScale = chart?.scales?.x;
     if (!chart?.zoomScale || !xScale || !chart.chartArea) return;
@@ -172,23 +185,49 @@ function bindTouchRangeZoom(canvas) {
     const y = evt.clientY - canvasRect.top;
     const area = chart.chartArea;
     if (x < area.left || x > area.right || y < area.top || y > area.bottom) return;
-    evt.preventDefault();
     const box = getTouchZoomBox(canvas);
     if (!box) return;
-    chartTouchZoomState = { canvas, chart, box, pointerId: evt.pointerId, startX: evt.clientX, currentX: evt.clientX };
-    try { canvas.setPointerCapture(evt.pointerId); } catch (err) {}
-    updateTouchZoomBox(chartTouchZoomState, evt.clientX);
+    chartTouchZoomState = {
+      canvas,
+      chart,
+      box,
+      pointerId: evt.pointerId,
+      startX: evt.clientX,
+      startY: evt.clientY,
+      currentX: evt.clientX,
+      active: false
+    };
   }, { passive: false });
 
   canvas.addEventListener('pointermove', (evt) => {
     if (!chartTouchZoomState || chartTouchZoomState.pointerId !== evt.pointerId) return;
+    if (chartTouchPointers.size > 1) {
+      cancelTouchRangeZoom();
+      return;
+    }
+    const dx = Math.abs(evt.clientX - chartTouchZoomState.startX);
+    const dy = Math.abs(evt.clientY - chartTouchZoomState.startY);
+    if (!chartTouchZoomState.active) {
+      if (dx < 10 && dy < 10) return;
+      if (dy > dx * 1.2) {
+        cancelTouchRangeZoom();
+        return;
+      }
+      chartTouchZoomState.active = true;
+      try { canvas.setPointerCapture(evt.pointerId); } catch (err) {}
+    }
     evt.preventDefault();
     chartTouchZoomState.currentX = evt.clientX;
     updateTouchZoomBox(chartTouchZoomState, evt.clientX);
   }, { passive: false });
 
   function finishTouchRangeZoom(evt) {
+    if (evt.pointerType !== 'mouse') chartTouchPointers.delete(evt.pointerId);
     if (!chartTouchZoomState || chartTouchZoomState.pointerId !== evt.pointerId) return;
+    if (!chartTouchZoomState.active || chartTouchPointers.size > 0) {
+      cancelTouchRangeZoom();
+      return;
+    }
     evt.preventDefault();
     const state = chartTouchZoomState;
     chartTouchZoomState = null;
