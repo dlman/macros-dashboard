@@ -266,7 +266,51 @@ const rangeHighlightPlugin = {
   }
 };
 
-Chart.register(rangeHighlightPlugin);
+const heroHoverMarkerPlugin = {
+  id: 'heroHoverMarker',
+  afterDatasetsDraw(chart) {
+    const config = chart.options?.plugins?.heroHoverMarker;
+    if (!config?.enabled) return;
+    const active = chart.getActiveElements?.() || [];
+    if (!active.length) return;
+    const activeIndex = active[0].index;
+    const xScale = chart.scales?.x;
+    const chartArea = chart.chartArea;
+    if (!xScale || !chartArea || activeIndex == null) return;
+    const x = xScale.getPixelForValue(activeIndex);
+    if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right) return;
+
+    const { ctx } = chart;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(226,232,240,0.52)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      if (dataset.hidden) return;
+      const yValue = dataset.data?.[activeIndex];
+      const yScale = chart.scales?.[dataset.yAxisID || 'y'];
+      if (!yScale || !Number.isFinite(yValue)) return;
+      const y = yScale.getPixelForValue(yValue);
+      if (!Number.isFinite(y) || y < chartArea.top || y > chartArea.bottom) return;
+      ctx.fillStyle = dataset.borderColor || '#e2e8f0';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, datasetIndex === 0 ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+};
+
+Chart.register(rangeHighlightPlugin, heroHoverMarkerPlugin);
 
 function vacationHighlightConfig(dateKeys) {
   if (!Array.isArray(dateKeys) || !dateKeys.length) return { enabled: false, ranges: [], dateKeys: [] };
@@ -313,12 +357,18 @@ function sparklineOptions(color, min = undefined, max = undefined) {
 allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, pointRadius: 0 },
-    { data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, pointRadius: 0 }
+    { data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
+    { data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
   ] },
   options: {
     ...chartDefaults(),
-    plugins: { ...chartDefaults().plugins, legend: { display: false }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} } },
+    interaction: { mode: 'index', intersect: false, axis: 'x' },
+    plugins: {
+      ...chartDefaults().plugins,
+      heroHoverMarker: { enabled: true },
+      legend: { display: false },
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} }
+    },
     scales: {
       x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
       y: { ...chartDefaults().scales.y, ticks: { ...TICK(), maxTicksLimit: 5, callback: v => `${v} ${weightUnit()}` } }
@@ -704,7 +754,10 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   allCharts.heroWeightChart.options.scales.y.min = Math.floor(weightBounds.min);
   allCharts.heroWeightChart.options.scales.y.max = Math.ceil(weightBounds.max);
   allCharts.heroWeightChart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
-  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => ctx.datasetIndex === 0 ? ` ${ctx.parsed.y} ${weightUnit()}` : ` Filtered trend: ${ctx.parsed.y} ${weightUnit()}`;
+  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => {
+    if (ctx.datasetIndex === 0) return `Weight: ${ctx.parsed.y} ${weightUnit()}`;
+    return `Filtered trend: ${ctx.parsed.y} ${weightUnit()}`;
+  };
   allCharts.heroWeightChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
