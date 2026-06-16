@@ -115,20 +115,33 @@ const rangeHighlightPlugin = {
       return Number.isFinite(t) ? t / 86400000 : NaN;
     };
     const dateValues = dateKeys.map(dayNumber);
-    const pixelForDayValue = dayValue => {
+    const indexForDayValue = dayValue => {
       if (!dateValues.length || !Number.isFinite(dayValue)) return null;
-      if (dateValues.length === 1) {
-        const center = xScale.getPixelForValue(0);
-        return Number.isFinite(center) ? center : null;
+      if (dateValues.length === 1) return 0;
+      const lastIdx = dateValues.length - 1;
+      if (dayValue <= dateValues[0]) {
+        const gap = Math.max(1, dateValues[1] - dateValues[0]);
+        return (dayValue - dateValues[0]) / gap;
       }
-      const startDay = dateValues[0];
-      const endDay = dateValues[dateValues.length - 1];
-      if (!Number.isFinite(startDay) || !Number.isFinite(endDay) || endDay <= startDay) {
-        const center = xScale.getPixelForValue(0);
-        return Number.isFinite(center) ? center : null;
+      if (dayValue >= dateValues[lastIdx]) {
+        const gap = Math.max(1, dateValues[lastIdx] - dateValues[lastIdx - 1]);
+        return lastIdx + ((dayValue - dateValues[lastIdx]) / gap);
       }
-      const frac = Math.max(0, Math.min(1, (dayValue - startDay) / (endDay - startDay)));
-      return chartArea.left + ((chartArea.right - chartArea.left) * frac);
+      for (let i = 0; i < lastIdx; i++) {
+        const start = dateValues[i];
+        const end = dateValues[i + 1];
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+        if (dayValue >= start && dayValue <= end) {
+          return i + ((dayValue - start) / (end - start));
+        }
+      }
+      return null;
+    };
+    const pixelForDayValue = dayValue => {
+      const index = indexForDayValue(dayValue);
+      if (!Number.isFinite(index)) return null;
+      const pixel = xScale.getPixelForValue(index);
+      return Number.isFinite(pixel) ? pixel : null;
     };
 
     const { ctx } = chart;
