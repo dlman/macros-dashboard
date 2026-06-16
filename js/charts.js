@@ -914,6 +914,11 @@ function renderExecutiveSummary() {
   const previousTrendLoss = weightTrendReality(previousDays).actualLoss;
   const current = summarizeRange(filteredDays, filteredSleep);
   const previous = summarizeRange(previousDays, previousSleep);
+  const latestWeightRollingAvg = (() => {
+    const recentWeights = filteredDays.filter(d => d.weight).slice(-7).map(d => d.weight);
+    if (!recentWeights.length) return null;
+    return recentWeights.reduce((sum, weight) => sum + weight, 0) / recentWeights.length;
+  })();
   const weightDelta = compareDelta(currentTrendLoss, previousTrendLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
@@ -962,7 +967,10 @@ function renderExecutiveSummary() {
   `;
 
   document.getElementById('executiveKpis').innerHTML = [
-    { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: trendReality.actualLoss != null ? `${trendReality.actualLoss >= 0 ? 'Smoothed trend down' : 'Smoothed trend up'} ${weightValue(Math.abs(trendReality.actualLoss))} ${weightUnit()} in range` : 'No weigh-ins', delta: weightDelta },
+    { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: [
+      trendReality.actualLoss != null ? `${trendReality.actualLoss >= 0 ? 'Smoothed trend down' : 'Smoothed trend up'} ${weightValue(Math.abs(trendReality.actualLoss))} ${weightUnit()} in range` : 'No weigh-ins',
+      latestWeightRollingAvg != null ? `Current 7-day rolling avg ${weightLabel(latestWeightRollingAvg)}` : null
+    ].filter(Boolean).join('<br>'), delta: weightDelta },
     { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}` : 'No intake data', delta: calDelta },
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
     { label: 'Sleep Performance', value: current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—', sub: current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep` : 'No sleep data', delta: sleepDelta },
