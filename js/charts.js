@@ -751,19 +751,26 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   const weightDays = filteredDays.filter(d => d.weight);
   const weightVals = weightDays.map(d => weightValue(d.weight));
   const rollingTrend = rollingAvg(weightDays.map(d => d.weight), 7).map(v => v == null ? null : weightValue(v));
-  const validWeights = weightVals.map((value, index) => ({ value, index })).filter(point => Number.isFinite(point.value));
-  let heroPaceText = '';
-  if (validWeights.length >= 3) {
-    const n = validWeights.length;
-    const sumX = validWeights.reduce((sum, point) => sum + point.index, 0);
-    const sumY = validWeights.reduce((sum, point) => sum + point.value, 0);
-    const sumXY = validWeights.reduce((sum, point) => sum + (point.index * point.value), 0);
-    const sumX2 = validWeights.reduce((sum, point) => sum + (point.index * point.index), 0);
+  const firstWeightTime = weightDays[0] ? new Date(`${weightDays[0].date}T12:00:00`).getTime() : null;
+  const pacePoints = weightDays.map((day, index) => ({
+    index,
+    value: weightVals[index],
+    dayOffset: firstWeightTime == null ? index : (new Date(`${day.date}T12:00:00`).getTime() - firstWeightTime) / 86400000
+  })).filter(point => Number.isFinite(point.value) && Number.isFinite(point.dayOffset));
+  const localPaceText = pacePoints.map(point => {
+    let sample = pacePoints.filter(candidate => candidate.index <= point.index && candidate.dayOffset >= point.dayOffset - 14);
+    if (sample.length < 3) sample = pacePoints.filter(candidate => candidate.index <= point.index).slice(-7);
+    if (sample.length < 3) return '';
+    const n = sample.length;
+    const sumX = sample.reduce((sum, candidate) => sum + candidate.dayOffset, 0);
+    const sumY = sample.reduce((sum, candidate) => sum + candidate.value, 0);
+    const sumXY = sample.reduce((sum, candidate) => sum + (candidate.dayOffset * candidate.value), 0);
+    const sumX2 = sample.reduce((sum, candidate) => sum + (candidate.dayOffset * candidate.dayOffset), 0);
     const denom = (n * sumX2) - (sumX * sumX);
     const slope = denom ? ((n * sumXY) - (sumX * sumY)) / denom : 0;
     const weeklyPace = slope * 7;
-    heroPaceText = `Pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
-  }
+    return `Local pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
+  });
   const weightBounds = calcAxisBounds([...weightVals, ...rollingTrend], useMetric ? 0.8 : 2);
   allCharts.heroWeightChart.data.labels = weightDays.map(d => d.date.slice(5));
   allCharts.heroWeightChart.data.datasets[0].data = weightVals;
@@ -775,7 +782,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
     if (ctx.datasetIndex === 0) return `Weight: ${ctx.parsed.y} ${weightUnit()}`;
     return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
   };
-  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = () => heroPaceText;
+  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = items => localPaceText[items?.[0]?.dataIndex] || '';
   allCharts.heroWeightChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
