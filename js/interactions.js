@@ -1045,22 +1045,27 @@ function updateGlycogenChart(days) {
   const tdeeEst = window.dashboardData?.bayesian?.tdeePosterior?.mean || _bayesTDEE || 2400;
   const states = glycogenStateModel(days, tdeeEst, GLYCOGEN_MAX_G);
   if (!states.length) return;
+  const stateByDate = Object.fromEntries(states.map(s => [s.date, s]));
+  const dateKeys = chartDateKeysFor(states.map(s => s.date));
+  const keyedStates = dateKeys.map(date => stateByDate[date] || null);
   const dxaDates = [DXA_SCAN_PREV.date, DXA_SCAN.date];
-  const loadColors = states.map(s =>
+  const loadColors = keyedStates.map(s =>
+    !s ? 'rgba(100,116,139,0.18)' :
     s.loadPct >= 70 ? 'rgba(52,211,153,0.55)' :
     s.loadPct >= 40 ? 'rgba(251,191,36,0.55)' :
                       'rgba(248,113,113,0.55)'
   );
-  chart.data.labels = states.map(s => s.date.slice(5));
-  chart.data.datasets[0].data = states.map(s => s.loadPct);
+  chart.data.labels = dateKeys.map(date => date.slice(5));
+  chart.data.datasets[0].data = keyedStates.map(s => s?.loadPct ?? null);
   chart.data.datasets[0].pointBackgroundColor = loadColors;
   chart.data.datasets[0].backgroundColor = loadColors;
-  chart.data.datasets[0].pointRadius = states.map(s => dxaDates.includes(s.date) ? (compact ? 5.5 : 8) : (compact ? 1.5 : 2));
-  chart.data.datasets[0].pointStyle = states.map(s => dxaDates.includes(s.date) ? 'triangle' : 'circle');
-  chart.options.plugins.tooltip.callbacks.title = ctx => states[ctx[0].dataIndex]?.date || '';
+  chart.data.datasets[0].pointRadius = keyedStates.map(s => !s ? 0 : dxaDates.includes(s.date) ? (compact ? 5.5 : 8) : (compact ? 1.5 : 2));
+  chart.data.datasets[0].pointStyle = keyedStates.map(s => s && dxaDates.includes(s.date) ? 'triangle' : 'circle');
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
+  chart.options.plugins.tooltip.callbacks.title = ctx => dateKeys[ctx[0].dataIndex] || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.dataset.label === '_fill') return null;
-    const s = states[ctx.dataIndex];
+    const s = keyedStates[ctx.dataIndex];
     if (!s) return '';
     const lines = [
       ` Glycogen: ${s.loadPct}% loaded (${s.glycogenG}g)`,
@@ -1082,12 +1087,14 @@ function updateBodyCompChart(days) {
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days, bodyCompState);
-  const dateKeys = bodyComp.map(d => d.date);
-  const fatVals = bodyComp.map(d => weightValue(d.fat));
-  const leanVals = bodyComp.map(d => weightValue(d.lean));
-  const fatLowVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatLow));
-  const fatHighVals = bodyComp.map(d => d.measured ? null : weightValue(d.fatHigh));
-  chart.data.labels = bodyComp.map(d => d.date.slice(5));
+  const bodyCompByDate = Object.fromEntries(bodyComp.map(d => [d.date, d]));
+  const dateKeys = chartDateKeysFor(bodyComp.map(d => d.date));
+  const keyedBodyComp = dateKeys.map(date => bodyCompByDate[date] || null);
+  const fatVals = keyedBodyComp.map(d => d ? weightValue(d.fat) : null);
+  const leanVals = keyedBodyComp.map(d => d ? weightValue(d.lean) : null);
+  const fatLowVals = keyedBodyComp.map(d => d && !d.measured ? weightValue(d.fatLow) : null);
+  const fatHighVals = keyedBodyComp.map(d => d && !d.measured ? weightValue(d.fatHigh) : null);
+  chart.data.labels = dateKeys.map(date => date.slice(5));
   chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
   chart.data.datasets[0].data = fatHighVals;
   chart.data.datasets[0].pointHoverRadius = 0;
@@ -1096,11 +1103,11 @@ function updateBodyCompChart(days) {
   chart.data.datasets[1].pointHoverRadius = 0;
   chart.data.datasets[1].pointHitRadius = 0;
   chart.data.datasets[2].data = fatVals;
-  chart.data.datasets[2].pointRadius = bodyComp.map(d => d.measured ? 0 : (compact ? 2.5 : 4));
+  chart.data.datasets[2].pointRadius = keyedBodyComp.map(d => !d || d.measured ? 0 : (compact ? 2.5 : 4));
   chart.data.datasets[3].data = leanVals;
-  chart.data.datasets[3].pointRadius = bodyComp.map(d => d.measured ? 0 : (compact ? 2 : 3));
-  chart.data.datasets[4].data = bodyComp.map(d => d.measured ? weightValue(d.fat) : null);
-  chart.data.datasets[5].data = bodyComp.map(d => d.measured ? weightValue(d.lean) : null);
+  chart.data.datasets[3].pointRadius = keyedBodyComp.map(d => !d || d.measured ? 0 : (compact ? 2 : 3));
+  chart.data.datasets[4].data = keyedBodyComp.map(d => d?.measured ? weightValue(d.fat) : null);
+  chart.data.datasets[5].data = keyedBodyComp.map(d => d?.measured ? weightValue(d.lean) : null);
   chart.data.datasets[4].pointRadius = compact ? 4.5 : 7;
   chart.data.datasets[4].pointHoverRadius = compact ? 5.5 : 8;
   chart.data.datasets[5].pointRadius = compact ? 4.5 : 7;
@@ -1108,9 +1115,9 @@ function updateBodyCompChart(days) {
   const fatBounds = calcAxisBounds([...fatVals, ...fatHighVals.filter(v => v != null)], useMetric ? 1 : 2);
   const leanBounds = calcAxisBounds(leanVals, useMetric ? 1 : 1);
   chart.options.plugins.legend.display = !compact;
-  chart.options.plugins.tooltip.callbacks.title = ctx => bodyComp[ctx[0].dataIndex]?.date || '';
+  chart.options.plugins.tooltip.callbacks.title = ctx => dateKeys[ctx[0].dataIndex] || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
-    const d = bodyComp[ctx.dataIndex];
+    const d = keyedBodyComp[ctx.dataIndex];
     if (!d) return '';
     if (ctx.datasetIndex === 2) return ` Est. fat: ${weightLabel(d.fat)} (~${d.bodyFatPct.toFixed(1)}% BF)`;
     if (ctx.datasetIndex === 3) return ` Est. lean: ${weightLabel(d.lean)}`;
@@ -1118,7 +1125,7 @@ function updateBodyCompChart(days) {
     return ` Measured lean: ${weightLabel(d.lean)}`;
   };
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
-    const d = bodyComp[ctx[0].dataIndex];
+    const d = keyedBodyComp[ctx[0].dataIndex];
     if (!d) return [];
     const gs = glycogenByDate[d.date];
     const glycoNote = gs ? `  Glycogen: ${gs.loadPct}% loaded (~${gs.glycogenG}g, +${gs.waterG}g water)` : '';
@@ -1210,17 +1217,24 @@ function updateWaterfallChart(days) {
     cum += (baseTDEE - totalCalories);
     return { date: d.date, cum, delta: baseTDEE - totalCalories, calories: d.calories, totalCalories };
   });
-  chart.data.labels = view.map(d => d.date.slice(5));
-  chart.data.datasets[0].data = view.map(d => energyValue(d.cum));
-  chart.data.datasets[0].backgroundColor = view.map(d => d.cum >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
-  chart.data.datasets[1].data = view.map(d => energyValue(d.delta));
-  chart.data.datasets[1].pointRadius = view.map(d => compact ? (Math.abs(d.delta) > 800 ? 3.5 : 1.8) : (Math.abs(d.delta) > 800 ? 5 : 3));
-  chart.data.datasets[1].pointBackgroundColor = view.map(d => d.delta >= 0 ? '#34d399' : '#f87171');
+  const viewByDate = Object.fromEntries(view.map(d => [d.date, d]));
+  const dateKeys = chartDateKeysFor(view.map(d => d.date));
+  const keyedView = dateKeys.map(date => viewByDate[date] || null);
+  chart.data.labels = dateKeys.map(date => date.slice(5));
+  chart.data.datasets[0].data = keyedView.map(d => d ? energyValue(d.cum) : null);
+  chart.data.datasets[0].backgroundColor = keyedView.map(d => d && d.cum >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)');
+  chart.data.datasets[1].data = keyedView.map(d => d ? energyValue(d.delta) : null);
+  chart.data.datasets[1].pointRadius = keyedView.map(d => !d ? 0 : compact ? (Math.abs(d.delta) > 800 ? 3.5 : 1.8) : (Math.abs(d.delta) > 800 ? 5 : 3));
+  chart.data.datasets[1].pointBackgroundColor = keyedView.map(d => d && d.delta >= 0 ? '#34d399' : '#f87171');
   chart.options.plugins.legend.display = !compact;
-  chart.options.onClick = (evt, elements) => { if (elements.length) openPanel(view[elements[0].index].date); };
-  chart.options.plugins.tooltip.callbacks.title = ctx => view[ctx[0].dataIndex]?.date || '';
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
+  chart.options.onClick = (evt, elements) => {
+    const point = keyedView[elements?.[0]?.index];
+    if (point) openPanel(point.date);
+  };
+  chart.options.plugins.tooltip.callbacks.title = ctx => dateKeys[ctx[0].dataIndex] || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
-    const d = view[ctx.dataIndex];
+    const d = keyedView[ctx.dataIndex];
     if (!d) return '';
     if (ctx.datasetIndex === 0) {
       const eqLbs = Math.abs(d.cum) / 3500;
@@ -1265,20 +1279,24 @@ function updateMacroChart(months) {
 function updateMacroStackedChart(days) {
   const chart = allCharts.macroStackedChart;
   const splits = days.map(macroSplitForDay);
-  chart.data.labels = days.map(d => d.date.slice(5));
-  chart.data.datasets[0].data = splits.map(d => d.proteinPct);
-  chart.data.datasets[1].data = splits.map(d => d.carbsPct);
-  chart.data.datasets[2].data = splits.map(d => d.fatPct);
-  chart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
+  const splitByDate = Object.fromEntries(days.map((d, index) => [d.date, splits[index]]));
+  const dateKeys = chartDateKeysFor(days.map(d => d.date));
+  const keyedSplits = dateKeys.map(date => splitByDate[date] || null);
+  chart.data.labels = dateKeys.map(date => date.slice(5));
+  chart.data.datasets[0].data = keyedSplits.map(d => d?.proteinPct ?? null);
+  chart.data.datasets[1].data = keyedSplits.map(d => d?.carbsPct ?? null);
+  chart.data.datasets[2].data = keyedSplits.map(d => d?.fatPct ?? null);
+  chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
+  chart.options.plugins.tooltip.callbacks.title = ctx => dateKeys[ctx[0].dataIndex] || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
-    const split = splits[ctx.dataIndex];
+    const split = keyedSplits[ctx.dataIndex];
     if (!split) return '';
     if (ctx.datasetIndex === 0) return ` Protein: ${split.proteinPct}% (${energyLabel(split.proteinKcal)})`;
     if (ctx.datasetIndex === 1) return ` Carbs: ${split.carbsPct}% (${energyLabel(split.carbsKcal)})`;
     return ` Fat: ${split.fatPct}% (${energyLabel(split.fatKcal)})`;
   };
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
-    const split = splits[ctx[0].dataIndex];
+    const split = keyedSplits[ctx[0].dataIndex];
     return split ? [` Total from macros: ${energyLabel(split.totalKcal)}`] : [];
   };
   chart.options.scales.y.min = 0;

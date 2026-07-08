@@ -180,9 +180,32 @@ function dateKeysBetween(startDate, endDate) {
   return keys;
 }
 
+function daysBetweenDates(startDate, endDate) {
+  const start = Date.parse(`${startDate}T12:00:00`);
+  const end = Date.parse(`${endDate}T12:00:00`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return Math.round((end - start) / 86400000);
+}
+
 function chartDateKeysFor(dates) {
   const sorted = [...new Set((dates || []).filter(Boolean))].sort();
-  return sorted.length ? dateKeysBetween(sorted[0], sorted[sorted.length - 1]) : [];
+  if (!sorted.length) return [];
+  let chartStart = sorted[0];
+  let chartEnd = sorted[sorted.length - 1];
+  const cutoff = analyticsCutoffDate();
+  let extendedForVacation = false;
+  vacationDates.forEach(date => {
+    if (!date || date < chartStart || date > cutoff) return;
+    const daysAfterEnd = daysBetweenDates(chartEnd, date);
+    if (date <= chartEnd || (daysAfterEnd != null && daysAfterEnd >= 0 && daysAfterEnd <= 14)) {
+      if (date > chartEnd) {
+        chartEnd = date;
+        extendedForVacation = true;
+      }
+    }
+  });
+  if (extendedForVacation) chartEnd = nextDayStr(chartEnd);
+  return dateKeysBetween(chartStart, chartEnd);
 }
 // Never include today — partial days skew every metric
 function analyticsCutoffDate() {
