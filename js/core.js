@@ -173,6 +173,17 @@ const NOTE_TAG_PATTERNS = {
 
 function prevDay(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function nextDayStr(dateStr) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+function dateKeysBetween(startDate, endDate) {
+  if (!startDate || !endDate || startDate > endDate) return [];
+  const keys = [];
+  for (let cursor = startDate; cursor <= endDate; cursor = nextDayStr(cursor)) keys.push(cursor);
+  return keys;
+}
+
+function chartDateKeysFor(dates) {
+  const sorted = [...new Set((dates || []).filter(Boolean))].sort();
+  return sorted.length ? dateKeysBetween(sorted[0], sorted[sorted.length - 1]) : [];
+}
 // Never include today — partial days skew every metric
 function analyticsCutoffDate() {
   const now = new Date();

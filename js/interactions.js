@@ -862,10 +862,14 @@ function updateWeightChart(days) {
     date: d.date,
     value: d.weight
   }));
-  const vals = points.map(p => weightValue(p.value));
-  const rolling = rollingAvg(points.map(p => p.value), 7).map(v => v == null ? null : weightValue(v));
-  const dateKeys = points.map(p => p.date);
-  chart.data.labels = points.map(p => p.label);
+  const pointByDate = Object.fromEntries(points.map(p => [p.date, p]));
+  const dateKeys = chartDateKeysFor(points.map(p => p.date));
+  const rollingByDate = Object.fromEntries(
+    rollingAvg(points.map(p => p.value), 7).map((v, i) => [points[i].date, v == null ? null : weightValue(v)])
+  );
+  const vals = dateKeys.map(date => pointByDate[date] ? weightValue(pointByDate[date].value) : null);
+  const rolling = dateKeys.map(date => rollingByDate[date] ?? null);
+  chart.data.labels = dateKeys.map(date => `${date.slice(5)} (${monthKey(date).slice(0, 3)})`);
   chart.data.datasets[0].data = vals;
   chart.data.datasets[1].data = rolling;
   chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
@@ -894,33 +898,38 @@ function updateWeightChart(days) {
   }
 
   // Update glyco-adjusted line (what would weight be at Jan 6 glycogen level?)
-  const glycoAdjData = points.map(p => {
-    const s = glycogenByDate[p.date];
+  const glycoAdjData = dateKeys.map(date => {
+    const p = pointByDate[date];
+    const s = glycogenByDate[date];
+    if (!p) return null;
     if (!s) return null;
     const delta = s.massLbs - glycogenRefState.massLbs;
     return +((p.value - delta)).toFixed(1);
   });
   const glycoDs = chart.data.datasets.find(d => d.label === 'Glyco-adj (vs Jan 6)');
   if (!glycoDs) {
-    chart.data.datasets.push({ label: 'Glyco-adj (vs Jan 6)', data: glycoAdjData, borderColor: 'rgba(192,132,252,0.75)', borderDash: [4,4], pointRadius: 0, tension: 0.4, fill: false, borderWidth: 1.5 });
+    chart.data.datasets.push({ label: 'Glyco-adj (vs Jan 6)', data: glycoAdjData, borderColor: 'rgba(192,132,252,0.75)', borderDash: [4,4], pointRadius: 0, tension: 0.4, fill: false, spanGaps: true, borderWidth: 1.5 });
   } else {
     glycoDs.data = glycoAdjData;
+    glycoDs.spanGaps = true;
   }
-  chart.data.datasets[0].pointRadius = points.map(p => {
-    const eventPoint = drinkDates.has(p.date) || liftDates.has(p.date);
+  chart.data.datasets[0].pointRadius = dateKeys.map(date => {
+    const eventPoint = drinkDates.has(date) || liftDates.has(date);
+    if (!pointByDate[date]) return 0;
     return compact ? (eventPoint ? 5 : 3) : (eventPoint ? 7 : 5);
   });
-  chart.data.datasets[0].pointStyle = points.map(p => drinkDates.has(p.date) ? 'triangle' : liftDates.has(p.date) ? 'rectRot' : 'circle');
-  chart.data.datasets[0].pointBackgroundColor = points.map(p => {
-    if (drinkDates.has(p.date)) return EVENT_COLORS.drink;
-    if (liftDates.has(p.date)) return EVENT_COLORS.lift;
+  chart.data.datasets[0].pointStyle = dateKeys.map(date => drinkDates.has(date) ? 'triangle' : liftDates.has(date) ? 'rectRot' : 'circle');
+  chart.data.datasets[0].pointBackgroundColor = dateKeys.map(date => {
+    if (drinkDates.has(date)) return EVENT_COLORS.drink;
+    if (liftDates.has(date)) return EVENT_COLORS.lift;
     return '#34d399';
   });
-  chart.data.datasets[0].pointBorderColor = points.map(p => drinkDates.has(p.date) || liftDates.has(p.date) ? 'rgba(15,17,23,0.85)' : 'transparent');
-  chart.data.datasets[0].pointBorderWidth = points.map(p => drinkDates.has(p.date) || liftDates.has(p.date) ? 1.5 : 0);
+  chart.data.datasets[0].pointBorderColor = dateKeys.map(date => drinkDates.has(date) || liftDates.has(date) ? 'rgba(15,17,23,0.85)' : 'transparent');
+  chart.data.datasets[0].pointBorderWidth = dateKeys.map(date => drinkDates.has(date) || liftDates.has(date) ? 1.5 : 0);
   chart.data.datasets[1].data = rolling;
   chart.options.onClick = (evt, elements) => {
-    if (elements.length && elements[0].datasetIndex === 0) openPanel(points[elements[0].index].date);
+    const date = dateKeys[elements?.[0]?.index];
+    if (elements.length && elements[0].datasetIndex === 0 && pointByDate[date]) openPanel(date);
   };
   const bounds = calcAxisBounds(vals, useMetric ? 0.8 : 2);
   chart.options.plugins.legend.display = !compact;
@@ -928,11 +937,12 @@ function updateWeightChart(days) {
   chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
   chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   chart.options.plugins.tooltip.callbacks.label = ctx => {
-    if (ctx.datasetIndex === 0) return ` ${weightLabel(points[ctx.dataIndex].value)}`;
+    const point = pointByDate[dateKeys[ctx.dataIndex]];
+    if (ctx.datasetIndex === 0) return point ? ` ${weightLabel(point.value)}` : '';
     if (ctx.dataset.label === '7-day Avg') return ` 7d avg: ${ctx.parsed.y} ${weightUnit()}`;
     if (ctx.dataset.label === 'Trend') return ` Trend: ${ctx.parsed.y} ${weightUnit()}`;
     if (ctx.dataset.label === 'Glyco-adj (vs Jan 6)') {
-      const s = glycogenByDate[points[ctx.dataIndex]?.date];
+      const s = glycogenByDate[dateKeys[ctx.dataIndex]];
       return s ? ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()} (${s.loadPct}% glycogen loaded)` : ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()}`;
     }
     return ` ${ctx.parsed.y} ${weightUnit()}`;
@@ -975,28 +985,32 @@ function updateAdjustedWeightViewChart(days) {
     if (noteEl) noteEl.textContent = 'This view needs weigh-ins inside the selected range.';
     return;
   }
-  const dateKeys = points.map(p => p.date);
-  chart.data.labels = points.map(p => p.date.slice(5));
-  chart.data.datasets[0].data = points.map(p => p.actual);
-  chart.data.datasets[1].data = points.map(p => p.adjusted);
-  chart.data.datasets[2].data = points.map(p => p.delta);
+  const pointByDate = Object.fromEntries(points.map(p => [p.date, p]));
+  const dateKeys = chartDateKeysFor(points.map(p => p.date));
+  chart.data.labels = dateKeys.map(date => date.slice(5));
+  chart.data.datasets[0].data = dateKeys.map(date => pointByDate[date]?.actual ?? null);
+  chart.data.datasets[1].data = dateKeys.map(date => pointByDate[date]?.adjusted ?? null);
+  chart.data.datasets[2].data = dateKeys.map(date => pointByDate[date]?.delta ?? null);
   chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
-  chart.data.datasets[2].backgroundColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
-  chart.data.datasets[2].borderColor = points.map(p => p.deltaRaw >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
-  chart.data.datasets[0].pointRadius = compact ? 1.5 : 2.5;
+  chart.data.datasets[0].spanGaps = true;
+  chart.data.datasets[1].spanGaps = true;
+  chart.data.datasets[2].backgroundColor = dateKeys.map(date => (pointByDate[date]?.deltaRaw || 0) >= 0 ? 'rgba(59,130,246,0.18)' : 'rgba(251,191,36,0.18)');
+  chart.data.datasets[2].borderColor = dateKeys.map(date => (pointByDate[date]?.deltaRaw || 0) >= 0 ? 'rgba(59,130,246,0.45)' : 'rgba(251,191,36,0.45)');
+  chart.data.datasets[0].pointRadius = dateKeys.map(date => pointByDate[date] ? (compact ? 1.5 : 2.5) : 0);
   chart.data.datasets[0].pointHoverRadius = compact ? 3.5 : 5;
   const weightBounds = calcAxisBounds([...points.map(p => p.actual), ...points.map(p => p.adjusted)], useMetric ? 0.8 : 2);
   const deltaBounds = calcAxisBounds(points.map(p => p.delta), useMetric ? 0.3 : 0.8);
   chart.options.plugins.legend.display = !compact;
-  chart.options.plugins.tooltip.callbacks.title = ctx => points[ctx[0].dataIndex]?.date || '';
+  chart.options.plugins.tooltip.callbacks.title = ctx => dateKeys[ctx[0].dataIndex] || '';
   chart.options.plugins.tooltip.callbacks.label = ctx => {
+    if (!pointByDate[dateKeys[ctx.dataIndex]]) return '';
     if (ctx.datasetIndex === 0) return ` Actual: ${ctx.parsed.y} ${weightUnit()}`;
     if (ctx.datasetIndex === 1) return ` Glyco-adjusted: ${ctx.parsed.y} ${weightUnit()}`;
     if (ctx.datasetIndex === 2) return ` Glycogen/water delta vs Jan 6: ${ctx.parsed.y > 0 ? '+' : ''}${ctx.parsed.y} ${weightUnit()}`;
     return '';
   };
   chart.options.plugins.tooltip.callbacks.afterBody = ctx => {
-    const point = points[ctx[0].dataIndex];
+    const point = pointByDate[dateKeys[ctx[0].dataIndex]];
     if (!point) return [];
     return [
       `Modeled glycogen load: ${point.loadPct}% (${point.glycogenG}g)`,

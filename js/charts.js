@@ -362,8 +362,8 @@ function sparklineOptions(color, min = undefined, max = undefined) {
 allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart'), {
   type: 'line',
   data: { labels: [], datasets: [
-    { label: 'Weight', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
-    { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
+    { label: 'Weight', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, spanGaps: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
+    { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
   ] },
   options: {
     ...chartDefaults(),
@@ -749,18 +749,27 @@ function renderWeeklyReport() {
 
 function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   const weightDays = filteredDays.filter(d => d.weight);
-  const weightVals = weightDays.map(d => weightValue(d.weight));
-  const rollingTrend = rollingAvg(weightDays.map(d => d.weight), 7).map(v => v == null ? null : weightValue(v));
+  const chartDates = chartDateKeysFor(weightDays.map(d => d.date));
+  const weightByDate = Object.fromEntries(weightDays.map(d => [d.date, d]));
+  const rollingByDate = Object.fromEntries(
+    rollingAvg(weightDays.map(d => d.weight), 7).map((v, i) => [weightDays[i].date, v == null ? null : weightValue(v)])
+  );
+  const weightVals = chartDates.map(date => weightByDate[date] ? weightValue(weightByDate[date].weight) : null);
+  const rollingTrend = chartDates.map(date => rollingByDate[date] ?? null);
   const firstWeightTime = weightDays[0] ? new Date(`${weightDays[0].date}T12:00:00`).getTime() : null;
   const pacePoints = weightDays.map((day, index) => ({
     index,
-    value: weightVals[index],
+    value: weightValue(day.weight),
     dayOffset: firstWeightTime == null ? index : (new Date(`${day.date}T12:00:00`).getTime() - firstWeightTime) / 86400000
   })).filter(point => Number.isFinite(point.value) && Number.isFinite(point.dayOffset));
-  const localPaceText = pacePoints.map(point => {
+  const localPaceByDate = {};
+  pacePoints.forEach(point => {
     let sample = pacePoints.filter(candidate => candidate.index <= point.index && candidate.dayOffset >= point.dayOffset - 14);
     if (sample.length < 3) sample = pacePoints.filter(candidate => candidate.index <= point.index).slice(-7);
-    if (sample.length < 3) return '';
+    if (sample.length < 3) {
+      localPaceByDate[weightDays[point.index].date] = '';
+      return;
+    }
     const n = sample.length;
     const sumX = sample.reduce((sum, candidate) => sum + candidate.dayOffset, 0);
     const sumY = sample.reduce((sum, candidate) => sum + candidate.value, 0);
@@ -769,12 +778,13 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
     const denom = (n * sumX2) - (sumX * sumX);
     const slope = denom ? ((n * sumXY) - (sumX * sumY)) / denom : 0;
     const weeklyPace = slope * 7;
-    return `Local pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
+    localPaceByDate[weightDays[point.index].date] = `Local pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
   });
   const weightBounds = calcAxisBounds([...weightVals, ...rollingTrend], useMetric ? 0.8 : 2);
-  allCharts.heroWeightChart.data.labels = weightDays.map(d => d.date.slice(5));
+  allCharts.heroWeightChart.data.labels = chartDates.map(d => d.slice(5));
   allCharts.heroWeightChart.data.datasets[0].data = weightVals;
   allCharts.heroWeightChart.data.datasets[1].data = rollingTrend;
+  allCharts.heroWeightChart.options.plugins.rangeHighlights = vacationHighlightConfig(chartDates);
   allCharts.heroWeightChart.options.scales.y.min = Math.floor(weightBounds.min);
   allCharts.heroWeightChart.options.scales.y.max = Math.ceil(weightBounds.max);
   allCharts.heroWeightChart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
@@ -782,7 +792,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
     if (ctx.datasetIndex === 0) return `Weight: ${ctx.parsed.y} ${weightUnit()}`;
     return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
   };
-  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = items => localPaceText[items?.[0]?.dataIndex] || '';
+  allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = items => localPaceByDate[chartDates[items?.[0]?.dataIndex]] || '';
   allCharts.heroWeightChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
@@ -1492,13 +1502,13 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
           if (liftDates.has(p.date)) return EVENT_COLORS.lift;
           return '#34d399';
         }),
-        tension: 0.3, fill: true
+        tension: 0.3, fill: true, spanGaps: true
       },
       {
         label: '7-day Avg',
         data: weightRolling,
         borderColor: 'rgba(251,191,36,0.6)', borderDash: [6,3],
-        pointRadius: 0, tension: 0.4, fill: false, borderWidth: 2
+        pointRadius: 0, tension: 0.4, fill: false, spanGaps: true, borderWidth: 2
       },
       // Dataset 2 reserved for trend line (pushed dynamically by updateWeightChart)
       // Dataset 3 reserved for glyco-adjusted (pushed dynamically by updateWeightChart)
