@@ -740,13 +740,15 @@ function rollingAdherence(days, window = 7) {
   const calHit = [];
   const proHit = [];
   const labels = [];
+  const dates = [];
   for (let i = window - 1; i < days.length; i++) {
     const slice = days.slice(i - window + 1, i + 1);
     calHit.push(Math.round(slice.filter(d => d.calories <= goals.calories).length / slice.length * 100));
     proHit.push(Math.round(slice.filter(hitProteinFloor).length / slice.length * 100));
     labels.push(days[i].date.slice(5));
+    dates.push(days[i].date);
   }
-  return { labels, calHit, proHit, window };
+  return { labels, dates, calHit, proHit, window };
 }
 
 // ── STEP ANALYTICS ──────────────────────────────────────────────────────
@@ -784,6 +786,7 @@ function stepStats(days, goalSteps = 8000) {
     avg, max, goalHit,
     allSteps: allStepVals,
     allLabels: daysWithSteps.map(d => d.date.slice(5)),
+    allDates: daysWithSteps.map(d => d.date),
     rollingAvg, rollingLabels,
     trendPerWeek,
     daysWithSteps,

@@ -345,6 +345,9 @@ function vacationHighlightConfig(dateKeys) {
   return { enabled: !!ranges.length, dateKeys, ranges };
 }
 
+const macroTimelineDateKeys = allDays.map(d => d.date);
+const sleepTimelineDateKeys = sleepData.map(d => d.date);
+
 function sparklineOptions(color, min = undefined, max = undefined) {
   return {
     responsive: true,
@@ -1623,6 +1626,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
       ...chartDefaults(),
       plugins: {
         ...chartDefaults().plugins,
+        rangeHighlights: vacationHighlightConfig(adjustedPoints.map(p => p.date)),
         legend: {
           display: true,
           labels: { generateLabels: () => [
@@ -1737,6 +1741,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
     ...chartDefaults(),
     interaction: { mode: 'index', intersect: false, axis: 'x' },
     plugins: { ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(bodyComp.map(d => d.date)),
       legend: {
         display: true,
         labels: {
@@ -1840,6 +1845,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
       ...chartDefaults(),
       plugins: {
         ...chartDefaults().plugins,
+        rangeHighlights: vacationHighlightConfig(glycogenStates.map(s => s.date)),
         legend: { display: false },
         tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
           title: ctx => glycogenStates[ctx[0].dataIndex]?.date || '',
@@ -2001,6 +2007,7 @@ allCharts.waterfallChart = new Chart(document.getElementById('waterfallChart'), 
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length) openPanel(waterfallData[elements[0].index].date); },
     plugins: { ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(waterfallData.map(d => d.date)),
       legend: { display: true, labels: { color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
       tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
         title: ctx => waterfallData[ctx[0].dataIndex].date,
@@ -2127,6 +2134,7 @@ allCharts.macroStackedChart = new Chart(document.getElementById('macroStackedCha
     ...chartDefaults(),
     plugins: {
       ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(macroTimelineDateKeys),
       legend: { display:true, labels:{color:'#94a3b8',font:{size:11},boxWidth:10,padding:14} },
       tooltip: {
         mode:'index',
@@ -2350,6 +2358,7 @@ allCharts.adherenceChart = new Chart(document.getElementById('adherenceChart'), 
     },
     plugins: {
       ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(initAdherence ? initAdherence.dates : []),
       legend: { display: true, labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 } },
       tooltip: {
         ...chartDefaults().plugins.tooltip,
@@ -2413,6 +2422,7 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
     },
     plugins: {
       ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(initSteps ? initSteps.allDates : []),
       legend: { display: true, labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 10, padding: 14 } },
       tooltip: {
         ...chartDefaults().plugins.tooltip,
@@ -2505,7 +2515,7 @@ allCharts.recoveryChart = new Chart(document.getElementById('recoveryChart'), {
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length) openPanel(sleepData[elements[0].index].date); },
-    plugins: { ...chartDefaults().plugins, legend: { display:true, labels:{color:'#94a3b8',font:{size:11},boxWidth:10,padding:14} }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+    plugins: { ...chartDefaults().plugins, rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys), legend: { display:true, labels:{color:'#94a3b8',font:{size:11},boxWidth:10,padding:14} }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
       title: ctx => sleepData[ctx[0].dataIndex].date,
       label: ctx => {
         if (ctx.datasetIndex === 1) return ` 7d avg: ${ctx.parsed.y.toFixed(0)}`;
@@ -2553,7 +2563,7 @@ allCharts.sleepPerfChart = new Chart(document.getElementById('sleepPerfChart'), 
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length) openPanel(sleepData[elements[0].index].date); },
-    plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
+    plugins: { ...chartDefaults().plugins, rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys), tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
       title: ctx => sleepData[ctx[0].dataIndex].date,
       label: ctx => {
         const d = sleepData[ctx.dataIndex];
@@ -2581,7 +2591,7 @@ allCharts.sleepDurChart = new Chart(document.getElementById('sleepDurChart'), {
   options: {
     ...chartDefaults(),
     onClick: (evt, elements) => { if (elements.length) openPanel(sleepData[elements[0].index].date); },
-    plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)}h sleep — ${sleepData[ctx.dataIndex].perf}% performance` } } },
+    plugins: { ...chartDefaults().plugins, rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys), tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)}h sleep — ${sleepData[ctx.dataIndex].perf}% performance` } } },
     scales: { x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:16} }, y: { ...chartDefaults().scales.y, min:1, max:11, ticks:{...TICK(),stepSize:1,callback:v=>v+'h'} } }
   }
 });
@@ -2599,7 +2609,7 @@ new Chart(document.getElementById('sleepStagesChart'), {
   },
   options: {
     ...chartDefaults(),
-    plugins: { ...chartDefaults().plugins, legend: { display:true, labels:{color:'#94a3b8',font:{size:11},boxWidth:10,padding:12} }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}h` } } },
+    plugins: { ...chartDefaults().plugins, rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys), legend: { display:true, labels:{color:'#94a3b8',font:{size:11},boxWidth:10,padding:12} }, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}h` } } },
     scales: { x: { ...chartDefaults().scales.x, ticks:{...TICK(),maxTicksLimit:16} }, y: { ...chartDefaults().scales.y, min:0, max:11, stacked:true, ticks:{...TICK(),stepSize:1,callback:v=>v+'h'} } }
   }
 });
@@ -2618,7 +2628,7 @@ allCharts.sleepDebtChart = new Chart(document.getElementById('sleepDebtChart'), 
   },
   options: {
     ...chartDefaults(),
-    plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` Cumulative debt: ${ctx.parsed.y}h (vs ${goals.sleep}h target)` } } },
+    plugins: { ...chartDefaults().plugins, rangeHighlights: vacationHighlightConfig(sDebt.map(d => d.date)), tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` Cumulative debt: ${ctx.parsed.y}h (vs ${goals.sleep}h target)` } } },
     scales: { x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:20}}, y:{...chartDefaults().scales.y,ticks:{...TICK(),callback:v=>v+'h'}} }
   }
 });
@@ -2668,7 +2678,7 @@ new Chart(document.getElementById('bedtimeBucketChart'), {
 new Chart(document.getElementById('respRateChart'), {
   type: 'line',
   data: { labels:sleepData.map(d=>d.date.slice(5)), datasets:[{data:sleepData.map(d=>d.resp),borderColor:'#f97316',backgroundColor:'rgba(249,115,22,0.06)',pointRadius:3,pointHoverRadius:6,tension:0.3,fill:true,pointBackgroundColor:'#f97316'}] },
-  options: { ...chartDefaults(), plugins:{...chartDefaults().plugins,tooltip:{...chartDefaults().plugins.tooltip,callbacks:{label:ctx=>` ${ctx.parsed.y} rpm`}}}, scales:{ x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:16}}, y:{...chartDefaults().scales.y,min:13.5,max:19.5,ticks:{...TICK(),stepSize:0.5,callback:v=>v+' rpm'}} } }
+  options: { ...chartDefaults(), plugins:{...chartDefaults().plugins,rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys),tooltip:{...chartDefaults().plugins.tooltip,callbacks:{label:ctx=>` ${ctx.parsed.y} rpm`}}}, scales:{ x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:16}}, y:{...chartDefaults().scales.y,min:13.5,max:19.5,ticks:{...TICK(),stepSize:0.5,callback:v=>v+' rpm'}} } }
 });
 
 // Cal vs Sleep scatter
@@ -2701,6 +2711,7 @@ new Chart(document.getElementById('sleepAnnotatedChart'), {
   options: {
     ...chartDefaults(),
     plugins: { ...chartDefaults().plugins,
+      rangeHighlights: vacationHighlightConfig(sleepTimelineDateKeys),
       legend: { display:true, labels: { generateLabels: () => [
         {text:'● Normal day',fillStyle:EVENT_COLORS.normal,strokeStyle:'transparent',fontColor:'#94a3b8'},
         {text:'▲ After drinking',fillStyle:EVENT_COLORS.drink,strokeStyle:'transparent',fontColor:'#94a3b8'},
