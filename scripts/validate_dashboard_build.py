@@ -48,7 +48,8 @@ def validate_data_footer() -> None:
         "const sleepData = [",
         "const stepsData = [",
         "const recoveryData = [",
-        "window.dashboardData = { data, sleepData, stepsData, recoveryData };",
+        "const vacationDates = [",
+        "window.dashboardData = { data, sleepData, stepsData, recoveryData, vacationDates };",
         "})();",
     ]
     missing = [snippet for snippet in required_snippets if snippet not in src]
@@ -61,7 +62,7 @@ def validate_data_footer() -> None:
         raise SystemExit(f"Mismatched BAYES markers: {bayes_starts} starts vs {bayes_ends} ends")
 
     bad_footer = re.search(
-        r"window\.dashboardData\s*=\s*\{ data, sleepData, stepsData, recoveryData \};\s*\}\s*// BAYES_START",
+        r"window\.dashboardData\s*=\s*\{ data, sleepData, stepsData, recoveryData(?:, vacationDates)? \};\s*\}\s*// BAYES_START",
         src,
     )
     if bad_footer:

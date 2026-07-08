@@ -131,7 +131,7 @@ function applyTheme(preference = themePreference) {
 
 // Shared dataset loaded from js/data.js
 
-const { data, sleepData, stepsData, recoveryData = [] } = window.dashboardData;
+const { data, sleepData, stepsData, recoveryData = [], vacationDates = [] } = window.dashboardData;
 // Months that actually have data — drives all charts, stat cards, donuts, and toggles
 const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].length > 0);
 
@@ -323,7 +323,7 @@ function hasExplicitVacationTag(day) {
 }
 
 const inferredVacationDateSet = (() => {
-  const dates = new Set();
+  const dates = new Set(vacationDates);
   const sortedMacroDays = [...allDays].sort((a, b) => a.date.localeCompare(b.date));
   sortedMacroDays.forEach((day, idx) => {
     if (!hasExplicitVacationTag(day)) return;

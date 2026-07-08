@@ -41,6 +41,7 @@ PUBLISHED_CSV_URLS: dict[str, str] = {
     "Apr": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
     "May": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
     "Jun": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=303838993&single=true&output=csv",
+    "Jul": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1367450588&single=true&output=csv",
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -170,6 +171,10 @@ def parse_lifting(value: str | None) -> str | None:
     if value.strip().lower() in {"y", "yes", "true", "1", "lift", "lifting", "workout", "trained"}:
         return "Y"
     return None
+
+
+def is_vacation_note(value: str | None) -> bool:
+    return bool(value and re.search(r"\bvacation\b", value, re.IGNORECASE))
 
 
 def format_number(value: float | int | None) -> str:
@@ -307,7 +312,7 @@ def apply_csv_to_bucket(
     buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
     rows: list[list[str]],
     month_name: str,
-) -> None:
+) -> list[str]:
     """Overwrite a single month bucket with rows from a CSV fetch."""
     headers = map_headers(rows[0], MACRO_ALIASES)
     missing = [f for f in ("date", "protein", "carbs", "fat", "calories") if f not in headers]
@@ -315,10 +320,14 @@ def apply_csv_to_bucket(
         raise SystemExit(f"{month_name} CSV is missing required columns: {', '.join(missing)}")
 
     new_rows: list[OrderedDict[str, Any]] = []
+    vacation_dates: list[str] = []
     for row in rows[1:]:
         date = parse_date(cell(row, headers.get("date")))
         if not date:
             continue
+        notes = cell(row, headers.get("notes"))
+        if is_vacation_note(notes):
+            vacation_dates.append(date)
         protein = parse_int(cell(row, headers.get("protein")))
         if protein is None:
             continue  # skip empty/future rows
@@ -331,12 +340,13 @@ def apply_csv_to_bucket(
             ("weight",   parse_float(cell(row, headers.get("weight")))),
             ("lifting",  parse_lifting(cell(row, headers.get("lifting")))),
             ("drinks",   cell(row, headers.get("drinks"))),
-            ("notes",    cell(row, headers.get("notes"))),
+            ("notes",    notes),
         ]))
 
     new_rows.sort(key=lambda r: r["date"])
     buckets[month_name] = new_rows
     print(f"  {month_name}: {len(new_rows)} rows loaded from CSV")
+    return vacation_dates
 
 
 def _fmt_recovery_val(v: Any) -> str:
@@ -363,6 +373,7 @@ def render_data_js(
     sleep_rows: list[Any],
     steps_rows: list[Any],
     recovery_rows: list[Any],
+    vacation_dates: list[str],
     bayes_block: str,
 ) -> str:
     macro_lines = []
@@ -374,6 +385,7 @@ def render_data_js(
     sleep_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
     steps_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
     recovery_ser = ",\n  ".join(_serialize_recovery_row(r) for r in recovery_rows)
+    vacation_ser = ", ".join(json.dumps(d) for d in sorted(set(vacation_dates)))
 
     return (
         "(() => {\n// Raw data\nconst data = {\n"
@@ -381,7 +393,8 @@ def render_data_js(
         + "\n};\n\nconst sleepData = [\n  " + sleep_ser + "\n];\n\n"
         + "const stepsData = [\n  " + steps_ser + "\n];\n\n"
         + "const recoveryData = [\n  " + recovery_ser + "\n];\n\n"
-        + "window.dashboardData = { data, sleepData, stepsData, recoveryData };\n"
+        + "const vacationDates = [" + vacation_ser + "];\n\n"
+        + "window.dashboardData = { data, sleepData, stepsData, recoveryData, vacationDates };\n"
         + (bayes_block if bayes_block else "")
         + "\n})();\n"
     )
@@ -403,14 +416,15 @@ def main() -> None:
     bayes_block       = extract_bayes_block(output_path)
 
     print(f"\nFetching {len(PUBLISHED_CSV_URLS)} published CSV tab(s) …")
+    vacation_dates: list[str] = []
     for month_name, url in PUBLISHED_CSV_URLS.items():
         if month_name not in MONTH_BUCKETS:
             print(f"  WARNING: '{month_name}' not in MONTH_BUCKETS — skipping")
             continue
         rows = fetch_csv(url, f"{month_name} Macros")
-        apply_csv_to_bucket(macro_buckets, rows, month_name)
+        vacation_dates.extend(apply_csv_to_bucket(macro_buckets, rows, month_name))
 
-    output = render_data_js(macro_buckets, existing_sleep, existing_steps, existing_recovery, bayes_block)
+    output = render_data_js(macro_buckets, existing_sleep, existing_steps, existing_recovery, vacation_dates, bayes_block)
 
     if args.dry_run:
         print("\n--- DRY RUN: would write ---")
