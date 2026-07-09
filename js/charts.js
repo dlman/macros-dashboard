@@ -178,7 +178,10 @@ const rangeHighlightPlugin = {
   id: 'rangeHighlight',
   beforeDatasetsDraw(chart) {
     const config = chart?.options?.plugins?.rangeHighlights;
-    if (!config?.enabled || !Array.isArray(config.ranges) || !config.ranges.length) return;
+    if (!config?.enabled) return;
+    const ranges = Array.isArray(config.ranges) ? config.ranges : [];
+    const markers = Array.isArray(config.markers) ? config.markers : [];
+    if (!ranges.length && !markers.length) return;
     const xScale = chart.scales?.x;
     const chartArea = chart.chartArea;
     if (!xScale || !chartArea) return;
@@ -221,7 +224,7 @@ const rangeHighlightPlugin = {
 
     const { ctx } = chart;
     ctx.save();
-    for (const range of config.ranges) {
+    for (const range of ranges) {
       const startDay = dayNumber(range.start);
       const endDay = dayNumber(range.end);
       if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) continue;
@@ -265,6 +268,32 @@ const rangeHighlightPlugin = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(range.label, labelX, barTop + 3);
+      }
+    }
+    if (markers.length) {
+      for (const marker of markers) {
+        const markerDay = dayNumber(marker.date);
+        const x = pixelForDayValue(markerDay);
+        if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right) continue;
+        const lineColor = marker.color || EVENT_COLORS.supplement || 'rgba(163,230,53,0.85)';
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (marker.label) {
+          const label = marker.label;
+          const labelX = Math.max(chartArea.left + 6, Math.min(x + 6, chartArea.right - 6));
+          ctx.fillStyle = marker.labelColor || lineColor;
+          ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.textAlign = labelX > chartArea.right - 60 ? 'right' : 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(label, labelX, chartArea.top + 24);
+        }
       }
     }
     ctx.restore();
@@ -325,7 +354,15 @@ function vacationHighlightConfig(dateKeys) {
   for (let cursor = chartStart; cursor <= chartEnd; cursor = nextDayStr(cursor)) {
     if (isVacationDate(cursor)) vacationDays.push({ date: cursor });
   }
-  if (!vacationDays.length) return { enabled: false, ranges: [], dateKeys };
+  const markers = supplementEvents
+    .filter(event => event.date >= chartStart && event.date <= chartEnd)
+    .map(event => ({
+      date: event.date,
+      label: event.label,
+      color: EVENT_COLORS.supplement,
+      labelColor: 'rgba(217,249,157,0.98)'
+    }));
+  if (!vacationDays.length && !markers.length) return { enabled: false, ranges: [], markers: [], dateKeys };
   const ranges = contiguousDateRanges(vacationDays)
     .map(span => ({
       start: span[0].date,
@@ -342,7 +379,7 @@ function vacationHighlightConfig(dateKeys) {
       innerStripeColor: 'rgba(251,191,36,0.08)',
       borderColor: 'rgba(251,191,36,0.34)'
     }));
-  return { enabled: !!ranges.length, dateKeys, ranges };
+  return { enabled: !!(ranges.length || markers.length), dateKeys, ranges, markers };
 }
 
 const macroTimelineDateKeys = allDays.map(d => d.date);
@@ -1533,6 +1570,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
         { text: '-- Glyco-adj (vs Jan 6)', fillStyle:'rgba(192,132,252,0.75)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '▲ Drink day', fillStyle:EVENT_COLORS.drink, strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '■ Lift day', fillStyle:EVENT_COLORS.lift, strokeStyle:'transparent', fontColor:'#94a3b8' },
+        { text: '-- Creatine start', fillStyle:EVENT_COLORS.supplement, strokeStyle:'transparent', fontColor:'#94a3b8' },
       ], color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
       tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {
         label: ctx => {

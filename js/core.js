@@ -18,7 +18,10 @@ const MONTH_REGISTRY = [
   { key: 'Nov',   num: '11', label: 'Nov',  longLabel: 'November',  color: COLORS.nov, bg: 'rgba(45,212,191,0.1)' },
   { key: 'Dec',   num: '12', label: 'Dec',  longLabel: 'December',  color: COLORS.dec, bg: 'rgba(251,191,36,0.1)' },
 ];
-const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4' };
+const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4', supplement: '#a3e635' };
+const supplementEvents = [
+  { date: '2026-07-02', label: 'Creatine start', type: 'creatine' }
+];
 const GRID = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || 'rgba(255,255,255,0.05)' });
 const TICK = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--tick-color').trim() || '#64748b', font: { size: 11 } });
 
