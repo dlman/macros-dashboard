@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,14 @@ from sync_google_sheets import (
     parse_existing_steps_data,
     render_data_js,
 )
+
+
+def parse_existing_vacation_dates(path: Path) -> list[str]:
+    src = path.read_text(encoding="utf-8")
+    match = re.search(r"const vacationDates = \[(.*?)\];", src, re.S)
+    if not match:
+        return []
+    return re.findall(r'"(\d{4}-\d{2}-\d{2})"', match.group(1))
 
 
 def _parse_steps_value(value: Any) -> int:
@@ -137,10 +146,18 @@ def main() -> None:
     existing_sleep = parse_existing_sleep_data(output_path)
     existing_steps = parse_existing_steps_data(output_path)
     existing_recovery = parse_existing_recovery_data(output_path)
+    existing_vacation_dates = parse_existing_vacation_dates(output_path)
     bayes_block = extract_bayes_block(output_path)
 
     merged_steps = merge_steps(existing_steps, updates)
-    output = render_data_js(macro_buckets, existing_sleep, merged_steps, existing_recovery, bayes_block)
+    output = render_data_js(
+        macro_buckets,
+        existing_sleep,
+        merged_steps,
+        existing_recovery,
+        existing_vacation_dates,
+        bayes_block,
+    )
 
     latest = updates[-1]
     print(
