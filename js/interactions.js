@@ -1139,6 +1139,7 @@ function updateBodyCompChart(days) {
     }
     return [
       ` Estimated from dynamic DXA model (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
+      d.creatineWater ? ` Creatine water adjustment: +${weightLabel(d.creatineWater, 1)} lean/water, excluded from fat trend` : '',
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
       glycoNote
@@ -1167,8 +1168,8 @@ function updateBodyCompChart(days) {
       ? compact
         ? `Latest ${bodyCompState}-state est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
         : bodyCompState === 'fed'
-          ? `Fed-state comparable estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% after restoring Jan 6-like glycogen/hydration into lean mass.`
-          : `Cut-state estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, and protein adherence.`
+          ? `Fed-state comparable estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% after restoring Jan 6-like glycogen/hydration and creatine water into lean mass.`
+          : `Cut-state estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% based on the DXA anchor, weigh-ins, lifting, protein adherence, and creatine water adjustment.`
       : 'Latest estimated body fat range will appear here once the selected range has weigh-ins.';
   }
 }
