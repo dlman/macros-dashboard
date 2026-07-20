@@ -3054,18 +3054,21 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   const targetWeight = cutStateTarget ?? current.weight;
   const fedStateTargetWeight = fedStateTarget ?? +(targetWeight + fedStateDelta).toFixed(1);
   if (current.bodyFatPct <= targetBfPct) return {
+    alreadyThere: true,
     daysToTarget: 0,
-    targetWeight: current.weight,
-    cutStateTargetWeight: current.weight,
+    targetWeight,
+    cutStateTargetWeight: +targetWeight.toFixed(1),
     fedStateTargetWeight,
     currentBfPct: current.bodyFatPct,
     targetBfPct,
+    currentWeight,
     confidence: wp.confidence,
     currentGlycogenState,
     fedStateDelta,
     creatineWater: current.creatineWater || 0,
     fullCreatineWater: CREATINE_FULL_WATER_LBS,
-    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2)
+    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2),
+    dailySlope: wp.dailySlope
   };
   const weightToDrop = currentWeight - targetWeight;
   const daysToTarget = Math.ceil(weightToDrop / Math.abs(wp.dailySlope));

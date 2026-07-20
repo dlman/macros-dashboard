@@ -946,14 +946,24 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   if (latestDay?.drinks) flags.push('Drink');
   if (latestDay && overallOnTrack(latestDay)) flags.push('On-track');
 
-  const bfTarget = bodyFatTargetProjection(filteredDays, 18);
-  const bfTarget15 = bodyFatTargetProjection(filteredDays, 15);
-  const bfPctWeightDelta = bfTarget && bfTarget.daysToTarget > 0
-    ? Math.max(0, bfTarget.currentBfPct - bfTarget.targetBfPct)
+  const bfTargets = [18, 17, 16, 15]
+    .map(target => bodyFatTargetProjection(filteredDays, target))
+    .filter(Boolean);
+  const bfTarget = bfTargets[0] || null;
+  const nextBfTarget = bfTargets.find(target => target.daysToTarget > 0) || bfTargets.at(-1) || null;
+  const bfPctWeightDelta = nextBfTarget && nextBfTarget.daysToTarget > 0
+    ? Math.max(0, nextBfTarget.currentBfPct - nextBfTarget.targetBfPct)
     : 0;
-  const bfLbsPerPct = bfTarget && bfPctWeightDelta > 0
-    ? ((bfTarget.currentWeight - bfTarget.targetWeight) / bfPctWeightDelta)
+  const bfLbsPerPct = nextBfTarget && bfPctWeightDelta > 0
+    ? ((nextBfTarget.currentWeight - nextBfTarget.targetWeight) / bfPctWeightDelta)
     : null;
+  const targetLadderHtml = bfTargets.map(target => `
+    <div class="bf-target-row ${target.daysToTarget === 0 ? 'current' : ''}">
+      <div class="bf-target-label">${target.targetBfPct}%</div>
+      <div class="bf-target-main">${target.daysToTarget === 0 ? 'Now' : `~${target.daysToTarget}d`}</div>
+      <div class="bf-target-meta">${weightLabel(target.cutStateTargetWeight, 1)} cut · ${weightLabel(target.fedStateTargetWeight, 1)} fed</div>
+    </div>
+  `).join('');
 
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
@@ -1057,12 +1067,13 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     bfTarget
       ? `
         <div class="forecast-card mobile-secondary">
-          <div class="eyebrow">Time to ${bfTarget.targetBfPct}% BF</div>
-          <div class="value">${bfTarget.daysToTarget === 0 ? 'Already there!' : `~${bfTarget.daysToTarget} days`}</div>
-          <div class="sub">${bfTarget.daysToTarget > 0 ? `At current pace, ${bfTarget.targetBfPct}% BF lands around ${weightLabel(bfTarget.cutStateTargetWeight)} creatine-adjusted cut-state or ~${weightLabel(bfTarget.fedStateTargetWeight)} at Jan 6-like fullness. Currently ~${bfTarget.currentBfPct.toFixed(1)}% BF (est).` : `Estimated BF is already at or below ${bfTarget.targetBfPct}%.`}${bfTarget15 && bfTarget15.daysToTarget > 0 ? ` · 15% BF: ~${bfTarget15.daysToTarget} days (${weightLabel(bfTarget15.cutStateTargetWeight)} cut-state / ~${weightLabel(bfTarget15.fedStateTargetWeight)} fed-state)` : ''}</div>
+          <div class="eyebrow">Body Fat Target Ladder</div>
+          <div class="value">~${bfTarget.currentBfPct.toFixed(1)}% BF</div>
+          <div class="sub">${bfTarget.daysToTarget === 0 ? '18% is already within the current DXA/creatine-adjusted estimate; use the lower targets for the next cut checkpoints.' : `18% projects in ~${bfTarget.daysToTarget} days at the current trend.`}</div>
+          <div class="bf-target-ladder">${targetLadderHtml}</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
           <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
-          <div class="tiny">Based on regression slope of ${(bfTarget.dailySlope * 7).toFixed(2)} ${weightUnit()}/wk · Apr 8 DXA as cut-state and Jan 6 DXA as fuller-state bracket · creatine modeled as up to ~${weightLabel(bfTarget.fullCreatineWater || CREATINE_FULL_WATER_LBS, 1)} non-fat water${bfTarget.scanStateGap ? ` · ~${weightLabel(bfTarget.scanStateGap, 2)} scan-state gap at ${bfTarget.targetBfPct}%` : ''}${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% in cut-state terms` : ''}</div>
+          <div class="tiny">Based on regression slope of ${Number.isFinite(bfTarget.dailySlope) ? (bfTarget.dailySlope * 7).toFixed(2) : '—'} ${weightUnit()}/wk · creatine modeled as up to ~${weightLabel(bfTarget.fullCreatineWater || CREATINE_FULL_WATER_LBS, 1)} non-fat water${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% near the next target` : ''}</div>
         </div>
       `
       : `
