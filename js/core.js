@@ -1112,6 +1112,25 @@ function targetWeightFromFatFreeMass(targetBfPct, fatFreeMass, creatineWater = 0
   return (fatFreeMass + Math.max(0, creatineWater || 0)) / fatFraction;
 }
 
+function bodyFatTargetWeightsFromCurrent(currentState, targetBfPct) {
+  if (!currentState || !Number.isFinite(currentState.weight) || !Number.isFinite(currentState.fat)) {
+    return { cutStateTarget: null, fedStateTarget: null, scanStateGap: null };
+  }
+  const currentFatFreeMass = Math.max(currentState.weight - currentState.fat, 0);
+  const remainingCreatineWater = Math.max(0, CREATINE_FULL_WATER_LBS - (currentState.creatineWater || 0));
+  const targetCutFatFreeMass = currentFatFreeMass + remainingCreatineWater;
+  const targetFedFatFreeMass = targetCutFatFreeMass + Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
+  const cutStateTarget = targetWeightFromFatFreeMass(targetBfPct, targetCutFatFreeMass, 0);
+  const fedStateTarget = targetWeightFromFatFreeMass(targetBfPct, targetFedFatFreeMass, 0);
+  return {
+    cutStateTarget,
+    fedStateTarget,
+    scanStateGap: Number.isFinite(cutStateTarget) && Number.isFinite(fedStateTarget)
+      ? +(fedStateTarget - cutStateTarget).toFixed(2)
+      : null
+  };
+}
+
 function bodyCompModelShares(days = allDays) {
   const liftPerWeek = days.filter(d => d.lifting === 'Y').length / Math.max(days.length / 7, 1);
   const proteinHitRate = days.filter(hitProteinFloor).length / Math.max(days.length, 1);
@@ -1489,8 +1508,9 @@ function scenarioTimeToBodyFatGoal(values, targetBfPct = 18, days = allDays, sle
   const currentWeight = scenario.currentWeight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const currentStates = scenarioProjectedBodyComp(currentWeight, days, currentDate);
-  const cutTargetWeight = targetWeightFromFatFreeMass(targetBfPct, DXA_FAT_FREE_MASS, CREATINE_FULL_WATER_LBS);
-  const fedTargetWeight = targetWeightFromFatFreeMass(targetBfPct, DXA_PREV_FAT_FREE_MASS, CREATINE_FULL_WATER_LBS);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(currentStates.cutState, targetBfPct);
+  const cutTargetWeight = targetWeights.cutStateTarget;
+  const fedTargetWeight = targetWeights.fedStateTarget;
   const dailyPace = scenario.effectiveDeficit / 3500;
   const targetStates = scenarioProjectedBodyComp(cutTargetWeight, days, addDaysToDate(currentDate, 42));
   if (!Number.isFinite(cutTargetWeight) || !Number.isFinite(fedTargetWeight)) return null;
@@ -3049,8 +3069,9 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
   const currentGlycogenState = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const fedStateDelta = currentGlycogenState ? +(glycogenRefState.massLbs - currentGlycogenState.massLbs).toFixed(2) : 0;
-  const cutStateTarget = targetWeightFromFatFreeMass(targetBfPct, DXA_FAT_FREE_MASS, CREATINE_FULL_WATER_LBS);
-  const fedStateTarget = targetWeightFromFatFreeMass(targetBfPct, DXA_PREV_FAT_FREE_MASS, CREATINE_FULL_WATER_LBS);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct);
+  const cutStateTarget = targetWeights.cutStateTarget;
+  const fedStateTarget = targetWeights.fedStateTarget;
   const targetWeight = cutStateTarget ?? current.weight;
   const fedStateTargetWeight = fedStateTarget ?? +(targetWeight + fedStateDelta).toFixed(1);
   if (current.bodyFatPct <= targetBfPct) return {
@@ -3067,7 +3088,7 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     fedStateDelta,
     creatineWater: current.creatineWater || 0,
     fullCreatineWater: CREATINE_FULL_WATER_LBS,
-    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2),
+    scanStateGap: targetWeights.scanStateGap,
     dailySlope: wp.dailySlope
   };
   const weightToDrop = currentWeight - targetWeight;
@@ -3084,7 +3105,7 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     fedStateDelta,
     creatineWater: current.creatineWater || 0,
     fullCreatineWater: CREATINE_FULL_WATER_LBS,
-    scanStateGap: +(fedStateTargetWeight - targetWeight).toFixed(2),
+    scanStateGap: targetWeights.scanStateGap,
     dailySlope: wp.dailySlope,
     confidence: wp.confidence
   };
