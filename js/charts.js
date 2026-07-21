@@ -935,6 +935,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
   const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
   const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  const scaleNoise = scaleNoiseAssessment(filteredDays, filteredSleep);
   const weighInDelta = latestWeighInDelta(filteredDays);
   const calorieCurrent = currentStreak(filteredDays, d => d.calories <= goals.calories);
   const proteinCurrent = currentStreak(filteredDays, hitProteinFloor);
@@ -1084,6 +1085,30 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="sub">Need at least one tracked day in the active view to estimate your current glycogen and water load.</div>
           <div class="trust-row trust-inline"><span class="trust-pill estimated">Modeled glycogen state</span></div>
           <div class="tiny">Range-based estimate</div>
+        </div>
+      `,
+    scaleNoise
+      ? `
+        <div class="forecast-card mobile-primary scale-noise-card ${scaleNoise.cls}">
+          <div class="eyebrow">Scale Noise Check</div>
+          <div class="value">${scaleNoise.noiseScore}/100</div>
+          <div class="sub">${scaleNoise.noiseLabel} water/noise risk on the latest weigh-in.</div>
+          <div class="noise-driver-list">
+            ${scaleNoise.topDrivers.length
+              ? scaleNoise.topDrivers.map(driver => `<div class="noise-driver"><span>${driver.label}</span><em>${driver.detail}</em></div>`).join('')
+              : '<div class="noise-driver quiet"><span>No major flags</span><em>latest scale read looks clean</em></div>'}
+          </div>
+          <div class="confidence-pill ${scaleNoise.cls}">${scaleNoise.trustLabel}</div>
+          <div class="tiny">${formatShortDate(scaleNoise.date)} · ${weightLabel(scaleNoise.latestWeight)} latest${scaleNoise.rollingWeight == null ? '' : ` · ${scaleNoise.deltaVsRolling >= 0 ? '+' : ''}${weightLabel(scaleNoise.deltaVsRolling)} vs 7d avg`} · creatine water ~${weightLabel(scaleNoise.creatineWater, 1)}</div>
+        </div>
+      `
+      : `
+        <div class="forecast-card mobile-primary scale-noise-card medium">
+          <div class="eyebrow">Scale Noise Check</div>
+          <div class="value">—</div>
+          <div class="sub">Need a recent weigh-in before the dashboard can score water/noise risk.</div>
+          <div class="confidence-pill low">Low trust</div>
+          <div class="tiny">Uses 7-day average, glycogen, creatine, alcohol, sleep, lifting, and vacation tags.</div>
         </div>
       `,
     `

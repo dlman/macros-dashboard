@@ -3134,6 +3134,103 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   };
 }
 
+function scaleNoiseAssessment(days = allDays, sleep = sleepData) {
+  const weightDays = days.filter(d => d.weight);
+  if (!weightDays.length) return null;
+
+  const latestWeightDay = weightDays[weightDays.length - 1];
+  const date = latestWeightDay.date;
+  const priorDate = prevDay(date);
+  const latestSleep = sleepByDate[date] || sleep.find(d => d.date === date) || null;
+  const latestRecovery = recoveryByDate[date] || null;
+  const latestRolling = latestRollingWeightAnchor(days, 7);
+  const rollingWeight = latestRolling?.weight ?? null;
+  const deltaVsRolling = rollingWeight == null ? null : latestWeightDay.weight - rollingWeight;
+  const glycogen = glycogenByDate[date] || null;
+  const priorGlycogen = glycogenByDate[priorDate] || null;
+  const glycogenDelta = glycogen && priorGlycogen ? +(glycogen.massLbs - priorGlycogen.massLbs).toFixed(2) : 0;
+  const creatineWater = creatineScaleAdjustmentForDate(date);
+  const priorCreatineWater = creatineScaleAdjustmentForDate(priorDate);
+  const creatineDelta = +(creatineWater - priorCreatineWater).toFixed(2);
+  const priorMacro = macroByDate[priorDate] || null;
+  const latestMacro = macroByDate[date] || latestWeightDay || null;
+  const drivers = [];
+  let noiseScore = 0;
+
+  function addDriver(label, detail, points) {
+    if (!points || points <= 0) return;
+    noiseScore += points;
+    drivers.push({ label, detail, points });
+  }
+
+  if (Math.abs(deltaVsRolling ?? 0) >= 1.25) {
+    addDriver(
+      'Scale jump',
+      `${deltaVsRolling > 0 ? '+' : ''}${weightLabel(deltaVsRolling)} vs 7d avg`,
+      Math.min(18, 8 + Math.abs(deltaVsRolling) * 4)
+    );
+  }
+  if (Math.abs(glycogenDelta) >= 0.35) {
+    addDriver(
+      'Glycogen/water',
+      `${glycogenDelta > 0 ? '+' : ''}${weightLabel(glycogenDelta, 2)} since prior day`,
+      Math.min(18, 7 + Math.abs(glycogenDelta) * 10)
+    );
+  }
+  if (creatineDelta > 0.03) {
+    addDriver('Creatine ramp', `+${weightLabel(creatineDelta, 2)} modeled today`, 12);
+  }
+  if (priorMacro?.drinks) {
+    addDriver('Alcohol', 'previous night', 20);
+  }
+  if (latestSleep?.perf != null && latestSleep.perf < 55) {
+    addDriver('Poor recovery', `${Math.round(latestSleep.perf)}% sleep score`, latestSleep.perf < 40 ? 16 : 11);
+  } else if (latestRecovery?.recovery != null && latestRecovery.recovery < 40) {
+    addDriver('Poor recovery', `${Math.round(latestRecovery.recovery)}% WHOOP recovery`, 12);
+  }
+  if (latestSleep?.hours != null && latestSleep.hours < 5.5) {
+    addDriver('Short sleep', `${latestSleep.hours.toFixed(1)}h`, 8);
+  }
+  if (priorMacro?.lifting === 'Y') {
+    addDriver('Training load', 'lift day before weigh-in', 7);
+  }
+  if (vacationDates.includes(date) || vacationDates.includes(priorDate)) {
+    addDriver('Vacation tag', 'range marked as atypical', 14);
+  }
+  if ((priorMacro?.carbs ?? 0) >= 190) {
+    addDriver('Higher carbs', `${Math.round(priorMacro.carbs)}g prior day`, 7);
+  }
+
+  noiseScore = Math.round(Math.min(100, Math.max(0, noiseScore)));
+  const trustScore = Math.round(100 - noiseScore);
+  const cls = trustScore >= 72 ? 'high' : trustScore >= 52 ? 'medium' : 'low';
+  const noiseLabel = noiseScore < 22
+    ? 'Quiet'
+    : noiseScore < 45
+      ? 'Some noise'
+      : noiseScore < 68
+        ? 'Noisy'
+        : 'Very noisy';
+  const trustLabel = cls === 'high' ? 'High trust' : cls === 'medium' ? 'Moderate trust' : 'Low trust';
+  const topDrivers = drivers.sort((a, b) => b.points - a.points).slice(0, 4);
+
+  return {
+    date,
+    latestWeight: latestWeightDay.weight,
+    rollingWeight,
+    deltaVsRolling,
+    noiseScore,
+    trustScore,
+    cls,
+    noiseLabel,
+    trustLabel,
+    topDrivers,
+    creatineWater,
+    glycogenLoadPct: glycogen?.loadPct ?? null,
+    latestMacro
+  };
+}
+
 function directionalSignal(value, threshold = 0.25) {
   if (!Number.isFinite(value)) return 'unknown';
   if (value > threshold) return 'down';
