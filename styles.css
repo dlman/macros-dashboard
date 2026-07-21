@@ -91,11 +91,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-pulse .pulse-item { background: color-mix(in srgb, var(--bg-input) 84%, transparent); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 10px; }
 .hero-pulse .pulse-item .k { font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .hero-pulse .pulse-item .t { font-size: 10px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.7px; }
-.bf-milestone-strip { display: grid; grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr); gap: 18px; align-items: center; margin: -4px 0 18px; padding: 16px 18px; border: 1px solid var(--border-card); border-radius: 14px; background: linear-gradient(135deg, rgba(52,211,153,0.1), rgba(56,189,248,0.06)); }
+.bf-milestone-strip { display: grid; grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr); gap: 18px; align-items: stretch; margin: -4px 0 18px; padding: 16px 18px; border: 1px solid var(--border-card); border-radius: 14px; background: linear-gradient(135deg, rgba(52,211,153,0.1), rgba(56,189,248,0.06)); }
 .bf-strip-copy .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 5px; }
 .bf-strip-current { font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .bf-strip-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 4px; }
-.bf-track-wrap { min-width: 0; padding: 26px 0 12px; }
+.bf-track-wrap { min-width: 0; min-height: 118px; padding: 30px 0 34px; display: flex; align-items: center; }
 .bf-track { position: relative; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.22); }
 .bf-track-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, var(--col-green), var(--col-cyan)); }
 .bf-current-marker { position: absolute; top: -23px; transform: translateX(-50%); color: var(--col-green); font-size: 10px; font-weight: 800; white-space: nowrap; }
@@ -105,10 +105,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .bf-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(148,163,184,0.65); background: var(--bg-card); }
 .bf-milestone.reached .bf-dot { border-color: var(--col-green); background: var(--col-green); }
 .bf-milestone.next .bf-dot { border-color: var(--col-amber); box-shadow: 0 0 0 4px rgba(251,191,36,0.13); }
-.bf-ms-label { margin-top: 8px; font-size: 13px; font-weight: 800; color: var(--text-primary); }
-.bf-ms-time { margin-top: 1px; font-size: 11px; font-weight: 800; color: var(--text-muted); }
+.bf-ms-label { margin-top: 8px; font-size: 12px; font-weight: 800; color: var(--text-primary); }
+.bf-ms-time { margin-top: 0; font-size: 10px; font-weight: 800; color: var(--text-muted); }
 .bf-milestone.next .bf-ms-time { color: var(--col-amber); }
-.bf-ms-weight, .bf-ms-fed { font-size: 10px; color: var(--text-faint); line-height: 1.2; }
+.bf-ms-weight, .bf-ms-fed { font-size: 9px; color: var(--text-faint); line-height: 1.15; }
 .forecast-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: -2px 0 18px; }
 .forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 144px; }
 .forecast-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
