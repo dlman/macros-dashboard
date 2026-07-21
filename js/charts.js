@@ -989,7 +989,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${weightLabel(nextTarget.cutStateTargetWeight, 1)} cut-state.` : 'All displayed milestones are inside the current estimate.'}</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${weightLabel(nextTarget.cutStateTargetWeight, 1)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1106,7 +1106,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-primary">
           <div class="eyebrow">Body Fat Target Ladder</div>
           <div class="value">~${bfTarget.currentBfPct.toFixed(1)}% BF</div>
-          <div class="sub">${bfTarget.daysToTarget === 0 ? '18% is already within the current DXA/creatine-adjusted estimate; use the lower targets for the next cut checkpoints.' : `18% projects in ~${bfTarget.daysToTarget} days at the current trend.`}</div>
+          <div class="sub">${bfTarget.daysToTarget === 0 ? '18% is already within the DXA/creatine-adjusted estimate; use the lower targets for the next cut checkpoints.' : `18% projects in ~${bfTarget.daysToTarget} days at the current trend.`} Current BF uses ${bfTarget.currentWeightAnchor || 'current trend weight'}.</div>
           <div class="bf-target-ladder">${targetLadderHtml}</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
           <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>

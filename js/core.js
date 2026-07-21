@@ -3060,10 +3060,27 @@ function observedWeightProjection(days, horizonDays = 30) {
   };
 }
 
+function latestRollingWeightAnchor(days = allDays, window = 7) {
+  const weightDays = days.filter(d => d.weight);
+  if (!weightDays.length) return null;
+  const rolling = rollingAvg(weightDays.map(d => d.weight), window);
+  const latestIndex = rolling.length - 1;
+  const latestRolling = rolling[latestIndex];
+  const latestPoint = weightDays[latestIndex];
+  if (latestRolling == null || !latestPoint) return null;
+  return {
+    date: latestPoint.date,
+    weight: latestRolling,
+    sampleSize: weightDays.slice(Math.max(0, latestIndex - window + 1), latestIndex + 1).filter(d => d.weight != null).length,
+    window
+  };
+}
+
 function bodyFatTargetProjection(days, targetBfPct = 18) {
   const wp = observedWeightProjection(days, 1);
   if (!wp || !wp.dailySlope || wp.dailySlope >= 0) return null;
-  const currentWeight = wp.latestTrendWeight;
+  const rollingAnchor = latestRollingWeightAnchor(days, 7);
+  const currentWeight = rollingAnchor?.weight ?? wp.latestTrendWeight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const current = estimateBodyCompAtWeight(currentWeight, days, currentDate);
   const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
@@ -3083,6 +3100,9 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
+    currentWeightAnchor: rollingAnchor ? '7-day average' : 'filtered trend',
+    currentWeightAnchorDate: rollingAnchor?.date || currentDate,
+    currentWeightAnchorSampleSize: rollingAnchor?.sampleSize || null,
     confidence: wp.confidence,
     currentGlycogenState,
     fedStateDelta,
@@ -3101,6 +3121,9 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
+    currentWeightAnchor: rollingAnchor ? '7-day average' : 'filtered trend',
+    currentWeightAnchorDate: rollingAnchor?.date || currentDate,
+    currentWeightAnchorSampleSize: rollingAnchor?.sampleSize || null,
     currentGlycogenState,
     fedStateDelta,
     creatineWater: current.creatineWater || 0,
