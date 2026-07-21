@@ -968,7 +968,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
       ? `
-        <div class="forecast-card mobile-primary">
+        <div class="forecast-card mobile-secondary">
         <div class="eyebrow">30-Day Weight Pace</div>
         <div class="value">${weightLabel(weightProjection.projectedWeight)}</div>
           <div class="sub">If the filtered observed trend holds, that is ${weightProjection.projectedDelta < 0 ? 'down' : 'up'} ${weightLabel(Math.abs(weightProjection.projectedDelta))} from the latest weigh-in.</div>
@@ -978,7 +978,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         </div>
       `
       : `
-        <div class="forecast-card mobile-primary">
+        <div class="forecast-card mobile-secondary">
           <div class="eyebrow">30-Day Weight Pace</div>
           <div class="value">—</div>
           <div class="sub">Need at least two weigh-ins in the active view to project the current weight slope forward.</div>
@@ -1066,7 +1066,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     `,
     bfTarget
       ? `
-        <div class="forecast-card mobile-secondary">
+        <div class="forecast-card mobile-primary">
           <div class="eyebrow">Body Fat Target Ladder</div>
           <div class="value">~${bfTarget.currentBfPct.toFixed(1)}% BF</div>
           <div class="sub">${bfTarget.daysToTarget === 0 ? '18% is already within the current DXA/creatine-adjusted estimate; use the lower targets for the next cut checkpoints.' : `18% projects in ~${bfTarget.daysToTarget} days at the current trend.`}</div>
@@ -1077,7 +1077,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         </div>
       `
       : `
-        <div class="forecast-card mobile-secondary">
+        <div class="forecast-card mobile-primary">
           <div class="eyebrow">Time to 18% BF</div>
           <div class="value">—</div>
           <div class="sub">Need a downward weight trend to estimate time to body fat target.</div>
