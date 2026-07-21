@@ -964,6 +964,43 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       <div class="bf-target-meta">${weightLabel(target.cutStateTargetWeight, 1)} cut · ${weightLabel(target.fedStateTargetWeight, 1)} fed</div>
     </div>
   `).join('');
+  const milestoneEl = document.getElementById('bodyFatMilestoneStrip');
+  if (milestoneEl) {
+    if (!bfTargets.length) {
+      milestoneEl.innerHTML = '';
+    } else {
+      const currentBf = bfTargets[0].currentBfPct;
+      const nextTarget = bfTargets.find(target => target.daysToTarget > 0);
+      const markerPct = clamp01((18 - currentBf) / 3) * 100;
+      const milestoneHtml = bfTargets.map(target => {
+        const targetPct = clamp01((18 - target.targetBfPct) / 3) * 100;
+        const state = currentBf <= target.targetBfPct ? 'reached' : (target === nextTarget ? 'next' : 'future');
+        return `
+          <div class="bf-milestone ${state}" style="--milestone-left:${targetPct}%">
+            <div class="bf-dot"></div>
+            <div class="bf-ms-label">${target.targetBfPct}%</div>
+            <div class="bf-ms-time">${target.daysToTarget === 0 ? 'Now' : `~${target.daysToTarget}d`}</div>
+            <div class="bf-ms-weight">${weightLabel(target.cutStateTargetWeight, 1)}</div>
+            <div class="bf-ms-fed">${weightLabel(target.fedStateTargetWeight, 1)} fed</div>
+          </div>
+        `;
+      }).join('');
+      milestoneEl.innerHTML = `
+        <div class="bf-strip-copy">
+          <div class="eyebrow">Body Fat Milestones</div>
+          <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${weightLabel(nextTarget.cutStateTargetWeight, 1)} cut-state.` : 'All displayed milestones are inside the current estimate.'}</div>
+        </div>
+        <div class="bf-track-wrap">
+          <div class="bf-track">
+            <div class="bf-track-fill" style="width:${markerPct}%"></div>
+            <div class="bf-current-marker" style="left:${markerPct}%"><span>Current</span></div>
+            ${milestoneHtml}
+          </div>
+        </div>
+      `;
+    }
+  }
 
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection

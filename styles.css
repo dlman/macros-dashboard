@@ -91,6 +91,24 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .hero-pulse .pulse-item { background: color-mix(in srgb, var(--bg-input) 84%, transparent); border: 1px solid var(--border-card); border-radius: 12px; padding: 12px 10px; }
 .hero-pulse .pulse-item .k { font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .hero-pulse .pulse-item .t { font-size: 10px; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.7px; }
+.bf-milestone-strip { display: grid; grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr); gap: 18px; align-items: center; margin: -4px 0 18px; padding: 16px 18px; border: 1px solid var(--border-card); border-radius: 14px; background: linear-gradient(135deg, rgba(52,211,153,0.1), rgba(56,189,248,0.06)); }
+.bf-strip-copy .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 5px; }
+.bf-strip-current { font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
+.bf-strip-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 4px; }
+.bf-track-wrap { min-width: 0; padding: 26px 0 12px; }
+.bf-track { position: relative; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.22); }
+.bf-track-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, var(--col-green), var(--col-cyan)); }
+.bf-current-marker { position: absolute; top: -23px; transform: translateX(-50%); color: var(--col-green); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.bf-current-marker::after { content: ''; position: absolute; left: 50%; top: 15px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); background: var(--col-green); box-shadow: 0 0 0 4px rgba(52,211,153,0.18); }
+.bf-current-marker span { display: block; }
+.bf-milestone { position: absolute; left: var(--milestone-left); top: -9px; transform: translateX(-50%); display: grid; justify-items: center; min-width: 72px; text-align: center; }
+.bf-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(148,163,184,0.65); background: var(--bg-card); }
+.bf-milestone.reached .bf-dot { border-color: var(--col-green); background: var(--col-green); }
+.bf-milestone.next .bf-dot { border-color: var(--col-amber); box-shadow: 0 0 0 4px rgba(251,191,36,0.13); }
+.bf-ms-label { margin-top: 8px; font-size: 13px; font-weight: 800; color: var(--text-primary); }
+.bf-ms-time { margin-top: 1px; font-size: 11px; font-weight: 800; color: var(--text-muted); }
+.bf-milestone.next .bf-ms-time { color: var(--col-amber); }
+.bf-ms-weight, .bf-ms-fed { font-size: 10px; color: var(--text-faint); line-height: 1.2; }
 .forecast-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: -2px 0 18px; }
 .forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 144px; }
 .forecast-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
@@ -849,6 +867,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-pulse { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .hero-pulse .pulse-item { padding: 10px 8px; }
   .hero-pulse .pulse-item .k { font-size: 16px; }
+  .bf-milestone-strip { grid-template-columns: 1fr; gap: 14px; padding: 14px; margin-bottom: 14px; }
+  .bf-strip-current { font-size: 21px; }
+  .bf-track-wrap { padding: 26px 4px 44px; }
   .forecast-strip { grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
   .forecast-card { padding: 11px 12px; }
   .forecast-card .value { font-size: 18px; }
@@ -952,6 +973,16 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hero-side { display: none; }
   .hero-pulse { grid-template-columns: 1fr; }
   .hero-pulse .pulse-item .t { font-size: 9px; }
+  .bf-milestone-strip { padding: 12px; }
+  .bf-track-wrap { padding: 0; }
+  .bf-track { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; height: auto; background: transparent; }
+  .bf-track-fill,
+  .bf-current-marker { display: none; }
+  .bf-milestone { position: static; transform: none; min-width: 0; padding: 9px 8px; border: 1px solid rgba(148,163,184,0.16); border-radius: 10px; background: rgba(15,23,42,0.35); }
+  .bf-milestone.reached { border-color: rgba(52,211,153,0.32); background: rgba(16,185,129,0.1); }
+  .bf-milestone.next { border-color: rgba(251,191,36,0.34); background: rgba(251,191,36,0.08); }
+  .bf-dot { display: none; }
+  .bf-ms-label { margin-top: 0; }
   .mini-metric-grid { grid-template-columns: 1fr; }
   .forecast-strip { margin-bottom: 12px; }
   .forecast-strip .forecast-card.mobile-secondary { display: none; }
