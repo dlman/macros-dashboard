@@ -95,8 +95,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .bf-strip-copy .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 5px; }
 .bf-strip-current { font-size: 24px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .bf-strip-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 4px; }
-.bf-track-wrap { min-width: 0; min-height: 118px; padding: 30px 0 34px; display: flex; align-items: center; }
-.bf-track { position: relative; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.22); }
+.bf-track-wrap { min-width: 0; min-height: 112px; padding: 30px 36px 34px; display: flex; align-items: center; }
+.bf-track { position: relative; flex: 1 1 auto; width: 100%; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.22); }
 .bf-track-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, var(--col-green), var(--col-cyan)); }
 .bf-current-marker { position: absolute; top: -23px; transform: translateX(-50%); color: var(--col-green); font-size: 10px; font-weight: 800; white-space: nowrap; }
 .bf-current-marker::after { content: ''; position: absolute; left: 50%; top: 15px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); background: var(--col-green); box-shadow: 0 0 0 4px rgba(52,211,153,0.18); }
