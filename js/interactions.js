@@ -916,11 +916,11 @@ function updateWeightChart(days) {
   }
   const expectedLowData = expectedBand?.low || [];
   const expectedHighData = expectedBand?.high || [];
-  const expectedLowDs = chart.data.datasets.find(d => d.label === 'Expected lower');
-  const expectedHighDs = chart.data.datasets.find(d => d.label === 'Expected range');
+  const expectedLowDs = chart.data.datasets.find(d => d.label === 'Expected lane lower');
+  const expectedHighDs = chart.data.datasets.find(d => d.label === '30-day expected lane');
   if (!expectedLowDs) {
     chart.data.datasets.push({
-      label: 'Expected lower',
+      label: 'Expected lane lower',
       data: expectedLowData,
       borderColor: 'transparent',
       backgroundColor: 'transparent',
@@ -936,7 +936,7 @@ function updateWeightChart(days) {
   }
   if (!expectedHighDs) {
     chart.data.datasets.push({
-      label: 'Expected range',
+      label: '30-day expected lane',
       data: expectedHighData,
       borderColor: 'rgba(56,189,248,0.22)',
       backgroundColor: 'rgba(56,189,248,0.10)',
@@ -972,7 +972,7 @@ function updateWeightChart(days) {
   };
   const bounds = calcAxisBounds([...vals, ...(expectedBand?.low || []), ...(expectedBand?.high || [])], useMetric ? 0.8 : 2);
   chart.options.plugins.legend.display = !compact;
-  chart.options.plugins.tooltip.filter = item => item.dataset.label !== 'Expected lower';
+  chart.options.plugins.tooltip.filter = item => item.dataset.label !== 'Expected lane lower';
   chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
   chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
   chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
@@ -985,11 +985,11 @@ function updateWeightChart(days) {
       const s = glycogenByDate[dateKeys[ctx.dataIndex]];
       return s ? ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()} (${s.loadPct}% glycogen loaded)` : ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()}`;
     }
-    if (ctx.dataset.label === 'Expected range') {
+    if (ctx.dataset.label === '30-day expected lane') {
       const band = expectedBand?.byDate?.[dateKeys[ctx.dataIndex]];
-      return band ? ` Expected: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
+      return band ? ` 30d expected lane: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
     }
-    if (ctx.dataset.label === 'Expected lower') return '';
+    if (ctx.dataset.label === 'Expected lane lower') return '';
     return ` ${ctx.parsed.y} ${weightUnit()}`;
   };
   chart.options.scales.y.min = Math.floor(bounds.min);

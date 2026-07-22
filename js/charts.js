@@ -404,8 +404,8 @@ allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart')
   data: { labels: [], datasets: [
     { label: 'Weight', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, spanGaps: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
     { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 },
-    { label: 'Expected lower', data: [], borderColor: 'transparent', backgroundColor: 'transparent', fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, order: 10 },
-    { label: 'Expected range', data: [], borderColor: 'rgba(56,189,248,0.18)', backgroundColor: 'rgba(56,189,248,0.10)', fill: '-1', spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, borderWidth: 1, order: 9 }
+    { label: 'Expected lane lower', data: [], borderColor: 'transparent', backgroundColor: 'transparent', fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, order: 10 },
+    { label: '30-day expected lane', data: [], borderColor: 'rgba(56,189,248,0.20)', backgroundColor: 'rgba(56,189,248,0.12)', fill: '-1', spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, borderWidth: 1, order: 9 }
   ] },
   options: {
     ...chartDefaults(),
@@ -414,7 +414,7 @@ allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart')
       ...chartDefaults().plugins,
       heroHoverMarker: { enabled: true },
       legend: { display: false },
-      tooltip: { ...chartDefaults().plugins.tooltip, filter: item => item.dataset.label !== 'Expected lower', callbacks: {} }
+      tooltip: { ...chartDefaults().plugins.tooltip, filter: item => item.dataset.label !== 'Expected lane lower', callbacks: {} }
     },
     scales: {
       x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
@@ -839,7 +839,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
     if (ctx.datasetIndex === 1) return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
     if (ctx.datasetIndex === 3) {
       const band = expectedBand?.byDate?.[chartDates[ctx.dataIndex]];
-      return band ? `Expected band: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
+      return band ? `30d expected lane: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
     }
     return '';
   };
@@ -1662,7 +1662,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
       legend: { display: true, labels: { generateLabels: () => [
         { text: '● Weight', fillStyle:'#34d399', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '— 7-day avg', fillStyle:'rgba(251,191,36,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
-        { text: 'Expected band', fillStyle:'rgba(56,189,248,0.18)', strokeStyle:'rgba(56,189,248,0.35)', fontColor:'#94a3b8' },
+        { text: '30d expected lane', fillStyle:'rgba(56,189,248,0.18)', strokeStyle:'rgba(56,189,248,0.35)', fontColor:'#94a3b8' },
         { text: '-- Trend', fillStyle:'rgba(251,113,133,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '-- Glyco-adj (vs Jan 6)', fillStyle:'rgba(192,132,252,0.75)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '▲ Drink day', fillStyle:EVENT_COLORS.drink, strokeStyle:'transparent', fontColor:'#94a3b8' },

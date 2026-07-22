@@ -2136,20 +2136,30 @@ function expectedWeightLoss(days) {
   return days.reduce((sum, d) => sum + (rangeTdee - effectiveCalories(d)), 0) / 3500;
 }
 
-function expectedWeightBandSeries(days, dateKeys = null) {
+function expectedWeightBandSeries(days, dateKeys = null, horizonDays = 30) {
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length < 2) return null;
-  const profile = workingTDEEProfile(days);
+  const latestWeightDate = weightDays[weightDays.length - 1].date;
+  const startFloorDate = (() => {
+    const d = new Date(`${latestWeightDate}T12:00:00`);
+    d.setDate(d.getDate() - Math.max(7, horizonDays - 1));
+    return d.toISOString().slice(0, 10);
+  })();
+  const recentDays = days.filter(d => d.date >= startFloorDate && d.date <= latestWeightDate);
+  const profile = workingTDEEProfile(recentDays.length >= 14 ? recentDays : days);
   if (!profile || !Number.isFinite(profile.rangeLow) || !Number.isFinite(profile.rangeHigh)) return null;
-  const tdeeHalfWidth = Math.min(95, Math.max(55, (profile.rangeHigh - profile.rangeLow) / 2));
-  const bandTdeeLow = profile.maintenance - tdeeHalfWidth;
-  const bandTdeeHigh = profile.maintenance + tdeeHalfWidth;
   const keys = dateKeys?.length ? dateKeys : chartDateKeysFor(weightDays.map(d => d.date));
-  const startWeight = weightDays[0].weight;
-  const startDate = weightDays[0].date;
+  const rolling = rollingAvg(weightDays.map(d => d.weight), 7);
+  let anchorIndex = weightDays.findIndex((d, index) => d.date >= startFloorDate && rolling[index] != null);
+  if (anchorIndex < 0) anchorIndex = weightDays.findIndex(d => d.date >= startFloorDate);
+  if (anchorIndex < 0) anchorIndex = Math.max(0, weightDays.length - 1);
+  const startWeight = rolling[anchorIndex] ?? weightDays[anchorIndex].weight;
+  const startDate = weightDays[anchorIndex].date;
   const macroByRangeDate = Object.fromEntries(days.map(d => [d.date, d]));
-  let cumulativeLowTdeeDeficit = 0;
-  let cumulativeHighTdeeDeficit = 0;
+  const recentProjection = observedWeightProjection(recentDays.length >= 7 ? recentDays : days, 0);
+  const noisePadding = 1.25 + Math.min(0.85, Math.max(0, recentProjection?.residualStdDev || 0) * 0.45);
+  const lanePadding = +(Math.max(1.45, Math.min(2.25, noisePadding)).toFixed(1));
+  let cumulativeDeficit = 0;
   const low = [];
   const high = [];
   const mid = [];
@@ -2162,15 +2172,13 @@ function expectedWeightBandSeries(days, dateKeys = null) {
       mid.push(null);
       return;
     }
-    const day = macroByRangeDate[date];
-    if (day) {
-      const intake = effectiveCalories(day);
-      cumulativeLowTdeeDeficit += bandTdeeLow - intake;
-      cumulativeHighTdeeDeficit += bandTdeeHigh - intake;
+    if (date > startDate) {
+      const priorDay = macroByRangeDate[prevDay(date)];
+      if (priorDay) cumulativeDeficit += profile.maintenance - effectiveCalories(priorDay);
     }
-    const expectedLow = startWeight - (cumulativeHighTdeeDeficit / 3500);
-    const expectedHigh = startWeight - (cumulativeLowTdeeDeficit / 3500);
-    const expectedMid = (expectedLow + expectedHigh) / 2;
+    const expectedMid = startWeight - (cumulativeDeficit / 3500);
+    const expectedLow = expectedMid - lanePadding;
+    const expectedHigh = expectedMid + lanePadding;
     const point = {
       date,
       low: +expectedLow.toFixed(2),
@@ -2187,8 +2195,8 @@ function expectedWeightBandSeries(days, dateKeys = null) {
   const latest = byDate[latestDate] || null;
   return {
     profile,
-    bandTdeeLow,
-    bandTdeeHigh,
+    lanePadding,
+    horizonDays,
     startDate,
     startWeight,
     low,
