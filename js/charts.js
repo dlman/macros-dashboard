@@ -973,21 +973,6 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     if (!range || range[keyLow] == null || range[keyHigh] == null) return weightLabel(fallback, 1);
     return `${weightValue(range[keyLow], 1)}-${weightLabel(range[keyHigh], 1)}`;
   };
-  const bfTarget = bfTargets[0] || null;
-  const nextBfTarget = bfTargets.find(target => target.daysToTarget > 0) || bfTargets.at(-1) || null;
-  const bfPctWeightDelta = nextBfTarget && nextBfTarget.daysToTarget > 0
-    ? Math.max(0, nextBfTarget.currentBfPct - nextBfTarget.targetBfPct)
-    : 0;
-  const bfLbsPerPct = nextBfTarget && bfPctWeightDelta > 0
-    ? ((nextBfTarget.currentWeight - nextBfTarget.targetWeight) / bfPctWeightDelta)
-    : null;
-  const targetLadderHtml = bfTargets.map(target => `
-    <div class="bf-target-row ${target.daysToTarget === 0 ? 'current' : ''}">
-      <div class="bf-target-label">${target.targetBfPct}%</div>
-      <div class="bf-target-main">${targetDaysLabel(target)}</div>
-      <div class="bf-target-meta">${targetWeightRangeLabel(target, 'cutLow', 'cutHigh', target.cutStateTargetWeight)} cut · ${targetWeightRangeLabel(target, 'fedLow', 'fedHigh', target.fedStateTargetWeight)} fed</div>
-    </div>
-  `).join('');
   const milestoneEl = document.getElementById('bodyFatMilestoneStrip');
   if (milestoneEl) {
     if (!bfTargets.length) {
@@ -1148,29 +1133,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         </div>
         <div class="tiny">${weighInDelta ? `${weightLabel(weighInDelta.latest.weight)} (${weighInDelta.delta > 0 ? '+' : ''}${weightLabel(weighInDelta.delta)} vs prior)` : latestWeightDay ? `${weightLabel(latestWeightDay.weight)} latest weigh-in` : 'No weigh-ins in active view'}${flags.length ? ` · ${flags.join(' · ')}` : ''}${sleepCurrent ? ` · ${sleepCurrent} sleep-target nights` : ''}</div>
       </div>
-    `,
-    bfTarget
-      ? `
-        <div class="forecast-card mobile-primary">
-          <div class="eyebrow">Body Fat Target Ladder</div>
-          <div class="value">~${bfTarget.currentBfPct.toFixed(1)}% BF</div>
-          <div class="sub">${bfTarget.daysToTarget === 0 ? '18% is already within the DXA/creatine-adjusted estimate; use the lower targets for the next cut checkpoints.' : `18% projects in ~${bfTarget.daysToTarget} days at the current trend.`} Current BF uses ${bfTarget.currentWeightAnchor || 'current trend weight'}.</div>
-          <div class="bf-target-ladder">${targetLadderHtml}</div>
-          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
-          <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
-          <div class="tiny">Ranges include ~${weightLabel(bfTarget.targetRange?.weightPadding || 0, 1)} model/trend uncertainty · slope ${Number.isFinite(bfTarget.dailySlope) ? (bfTarget.dailySlope * 7).toFixed(2) : '—'} ${weightUnit()}/wk · creatine modeled as up to ~${weightLabel(bfTarget.fullCreatineWater || CREATINE_FULL_WATER_LBS, 1)} non-fat water${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% near the next target` : ''}</div>
-        </div>
-      `
-      : `
-        <div class="forecast-card mobile-primary">
-          <div class="eyebrow">Time to 18% BF</div>
-          <div class="value">—</div>
-          <div class="sub">Need a downward weight trend to estimate time to body fat target.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
-          <div class="confidence-pill low">Low confidence</div>
-          <div class="tiny">Body fat projection</div>
-        </div>
-      `
+    `
   ].join('');
 }
 
