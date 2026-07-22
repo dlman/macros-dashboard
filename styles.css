@@ -125,11 +125,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .noise-driver.quiet { grid-template-columns: 1fr; gap: 2px; }
 .noise-driver.quiet em { white-space: normal; }
 .bf-target-ladder { display: grid; gap: 6px; margin-top: 10px; }
-.bf-target-row { display: grid; grid-template-columns: 42px 64px minmax(0, 1fr); gap: 8px; align-items: center; padding: 7px 8px; border: 1px solid rgba(148,163,184,0.16); border-radius: 9px; background: rgba(15,23,42,0.35); }
+.bf-target-row { display: grid; grid-template-columns: 42px 80px minmax(0, 1fr); gap: 8px; align-items: center; padding: 7px 8px; border: 1px solid rgba(148,163,184,0.16); border-radius: 9px; background: rgba(15,23,42,0.35); }
 .bf-target-row.current { border-color: rgba(52,211,153,0.32); background: rgba(16,185,129,0.1); }
 .bf-target-label { color: var(--text-faint); font-size: 10px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; }
 .bf-target-main { color: var(--text-primary); font-size: 15px; font-weight: 800; }
-.bf-target-meta { min-width: 0; color: var(--text-muted); font-size: 10px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-target-meta { min-width: 0; color: var(--text-muted); font-size: 10px; line-height: 1.25; }
 .coach-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: -4px 0 18px; }
 .coach-card { background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(56,189,248,0.06)); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
 .coach-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }

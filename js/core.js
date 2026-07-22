@@ -2136,6 +2136,70 @@ function expectedWeightLoss(days) {
   return days.reduce((sum, d) => sum + (rangeTdee - effectiveCalories(d)), 0) / 3500;
 }
 
+function expectedWeightBandSeries(days, dateKeys = null) {
+  const weightDays = days.filter(d => d.weight);
+  if (weightDays.length < 2) return null;
+  const profile = workingTDEEProfile(days);
+  if (!profile || !Number.isFinite(profile.rangeLow) || !Number.isFinite(profile.rangeHigh)) return null;
+  const tdeeHalfWidth = Math.min(95, Math.max(55, (profile.rangeHigh - profile.rangeLow) / 2));
+  const bandTdeeLow = profile.maintenance - tdeeHalfWidth;
+  const bandTdeeHigh = profile.maintenance + tdeeHalfWidth;
+  const keys = dateKeys?.length ? dateKeys : chartDateKeysFor(weightDays.map(d => d.date));
+  const startWeight = weightDays[0].weight;
+  const startDate = weightDays[0].date;
+  const macroByRangeDate = Object.fromEntries(days.map(d => [d.date, d]));
+  let cumulativeLowTdeeDeficit = 0;
+  let cumulativeHighTdeeDeficit = 0;
+  const low = [];
+  const high = [];
+  const mid = [];
+  const byDate = {};
+
+  keys.forEach(date => {
+    if (date < startDate) {
+      low.push(null);
+      high.push(null);
+      mid.push(null);
+      return;
+    }
+    const day = macroByRangeDate[date];
+    if (day) {
+      const intake = effectiveCalories(day);
+      cumulativeLowTdeeDeficit += bandTdeeLow - intake;
+      cumulativeHighTdeeDeficit += bandTdeeHigh - intake;
+    }
+    const expectedLow = startWeight - (cumulativeHighTdeeDeficit / 3500);
+    const expectedHigh = startWeight - (cumulativeLowTdeeDeficit / 3500);
+    const expectedMid = (expectedLow + expectedHigh) / 2;
+    const point = {
+      date,
+      low: +expectedLow.toFixed(2),
+      high: +expectedHigh.toFixed(2),
+      mid: +expectedMid.toFixed(2)
+    };
+    byDate[date] = point;
+    low.push(weightValue(point.low));
+    high.push(weightValue(point.high));
+    mid.push(weightValue(point.mid));
+  });
+
+  const latestDate = weightDays[weightDays.length - 1].date;
+  const latest = byDate[latestDate] || null;
+  return {
+    profile,
+    bandTdeeLow,
+    bandTdeeHigh,
+    startDate,
+    startWeight,
+    low,
+    high,
+    mid,
+    byDate,
+    latest,
+    latestDate
+  };
+}
+
 function weightTrendReality(days) {
   const expectedLoss = expectedWeightLoss(days);
   const projection = observedWeightProjection(days, 0);
@@ -3076,6 +3140,35 @@ function latestRollingWeightAnchor(days = allDays, window = 7) {
   };
 }
 
+function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, dailySlope, confidence, residualStdDev = null) {
+  const confidencePadding = confidence?.cls === 'high' ? 1.1 : confidence?.cls === 'medium' ? 1.7 : 2.4;
+  const residualPadding = Math.min(0.9, Math.max(0, residualStdDev || 0) * 0.35);
+  const weightPadding = +(confidencePadding + residualPadding).toFixed(1);
+  const cutLow = targetWeight - weightPadding;
+  const cutHigh = targetWeight + weightPadding;
+  const fedLow = fedTargetWeight - weightPadding;
+  const fedHigh = fedTargetWeight + weightPadding;
+  const slopeAbs = Math.abs(dailySlope || 0);
+  const slopeUncertainty = confidence?.cls === 'high' ? 0.22 : confidence?.cls === 'medium' ? 0.34 : 0.48;
+  const fastSlope = slopeAbs * (1 + slopeUncertainty);
+  const slowSlope = slopeAbs * Math.max(0.25, 1 - slopeUncertainty);
+  const daysLow = slopeAbs
+    ? Math.max(0, Math.floor(Math.max(0, currentWeight - cutHigh) / fastSlope))
+    : null;
+  const daysHigh = slopeAbs
+    ? Math.max(0, Math.ceil(Math.max(0, currentWeight - cutLow) / slowSlope))
+    : null;
+  return {
+    weightPadding,
+    cutLow: +cutLow.toFixed(1),
+    cutHigh: +cutHigh.toFixed(1),
+    fedLow: +fedLow.toFixed(1),
+    fedHigh: +fedHigh.toFixed(1),
+    daysLow,
+    daysHigh
+  };
+}
+
 function bodyFatTargetProjection(days, targetBfPct = 18) {
   const wp = observedWeightProjection(days, 1);
   if (!wp || !wp.dailySlope || wp.dailySlope >= 0) return null;
@@ -3091,12 +3184,14 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   const fedStateTarget = targetWeights.fedStateTarget;
   const targetWeight = cutStateTarget ?? current.weight;
   const fedStateTargetWeight = fedStateTarget ?? +(targetWeight + fedStateDelta).toFixed(1);
+  const range = bodyFatProjectionRange(targetWeight, fedStateTargetWeight, currentWeight, wp.dailySlope, wp.confidence, wp.residualStdDev);
   if (current.bodyFatPct <= targetBfPct) return {
     alreadyThere: true,
     daysToTarget: 0,
     targetWeight,
     cutStateTargetWeight: +targetWeight.toFixed(1),
     fedStateTargetWeight,
+    targetRange: range,
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
@@ -3118,6 +3213,7 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     targetWeight,
     cutStateTargetWeight: +targetWeight.toFixed(1),
     fedStateTargetWeight: +fedStateTargetWeight.toFixed(1),
+    targetRange: range,
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,

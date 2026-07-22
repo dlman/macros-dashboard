@@ -403,7 +403,9 @@ allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart')
   type: 'line',
   data: { labels: [], datasets: [
     { label: 'Weight', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.14)', fill: true, spanGaps: true, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 16 },
-    { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 }
+    { label: '7-day avg', data: [], borderColor: 'rgba(251,191,36,0.7)', borderDash: [6, 4], fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 3, pointHitRadius: 16 },
+    { label: 'Expected lower', data: [], borderColor: 'transparent', backgroundColor: 'transparent', fill: false, spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, order: 10 },
+    { label: 'Expected range', data: [], borderColor: 'rgba(56,189,248,0.18)', backgroundColor: 'rgba(56,189,248,0.10)', fill: '-1', spanGaps: true, pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0, borderWidth: 1, order: 9 }
   ] },
   options: {
     ...chartDefaults(),
@@ -412,7 +414,7 @@ allCharts.heroWeightChart = new Chart(document.getElementById('heroWeightChart')
       ...chartDefaults().plugins,
       heroHoverMarker: { enabled: true },
       legend: { display: false },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: {} }
+      tooltip: { ...chartDefaults().plugins.tooltip, filter: item => item.dataset.label !== 'Expected lower', callbacks: {} }
     },
     scales: {
       x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 8 } },
@@ -796,6 +798,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   );
   const weightVals = chartDates.map(date => weightByDate[date] ? weightValue(weightByDate[date].weight) : null);
   const rollingTrend = chartDates.map(date => rollingByDate[date] ?? null);
+  const expectedBand = expectedWeightBandSeries(filteredDays, chartDates);
   const firstWeightTime = weightDays[0] ? new Date(`${weightDays[0].date}T12:00:00`).getTime() : null;
   const pacePoints = weightDays.map((day, index) => ({
     index,
@@ -820,17 +823,25 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
     const weeklyPace = slope * 7;
     localPaceByDate[weightDays[point.index].date] = `Local pace: ${weeklyPace < 0 ? '' : '+'}${weightValue(weeklyPace)} ${weightUnit()}/week`;
   });
-  const weightBounds = calcAxisBounds([...weightVals, ...rollingTrend], useMetric ? 0.8 : 2);
+  const bandVals = expectedBand ? [...expectedBand.low, ...expectedBand.high] : [];
+  const weightBounds = calcAxisBounds([...weightVals, ...rollingTrend, ...bandVals], useMetric ? 0.8 : 2);
   allCharts.heroWeightChart.data.labels = chartDates.map(d => d.slice(5));
   allCharts.heroWeightChart.data.datasets[0].data = weightVals;
   allCharts.heroWeightChart.data.datasets[1].data = rollingTrend;
+  allCharts.heroWeightChart.data.datasets[2].data = expectedBand?.low || [];
+  allCharts.heroWeightChart.data.datasets[3].data = expectedBand?.high || [];
   allCharts.heroWeightChart.options.plugins.rangeHighlights = vacationHighlightConfig(chartDates);
   allCharts.heroWeightChart.options.scales.y.min = Math.floor(weightBounds.min);
   allCharts.heroWeightChart.options.scales.y.max = Math.ceil(weightBounds.max);
   allCharts.heroWeightChart.options.scales.y.ticks.callback = v => `${v} ${weightUnit()}`;
   allCharts.heroWeightChart.options.plugins.tooltip.callbacks.label = ctx => {
     if (ctx.datasetIndex === 0) return `Weight: ${ctx.parsed.y} ${weightUnit()}`;
-    return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.datasetIndex === 1) return `7-day avg: ${ctx.parsed.y} ${weightUnit()}`;
+    if (ctx.datasetIndex === 3) {
+      const band = expectedBand?.byDate?.[chartDates[ctx.dataIndex]];
+      return band ? `Expected band: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
+    }
+    return '';
   };
   allCharts.heroWeightChart.options.plugins.tooltip.callbacks.footer = items => localPaceByDate[chartDates[items?.[0]?.dataIndex]] || '';
   allCharts.heroWeightChart.update();
@@ -950,6 +961,18 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const bfTargets = [18, 17, 16, 15]
     .map(target => bodyFatTargetProjection(filteredDays, target))
     .filter(Boolean);
+  const targetDaysLabel = target => {
+    if (target.daysToTarget === 0) return 'Now';
+    const range = target.targetRange;
+    if (!range || range.daysLow == null || range.daysHigh == null) return `~${target.daysToTarget}d`;
+    if (range.daysLow === range.daysHigh) return `~${range.daysLow}d`;
+    return `~${range.daysLow}-${range.daysHigh}d`;
+  };
+  const targetWeightRangeLabel = (target, keyLow, keyHigh, fallback) => {
+    const range = target.targetRange;
+    if (!range || range[keyLow] == null || range[keyHigh] == null) return weightLabel(fallback, 1);
+    return `${weightValue(range[keyLow], 1)}-${weightLabel(range[keyHigh], 1)}`;
+  };
   const bfTarget = bfTargets[0] || null;
   const nextBfTarget = bfTargets.find(target => target.daysToTarget > 0) || bfTargets.at(-1) || null;
   const bfPctWeightDelta = nextBfTarget && nextBfTarget.daysToTarget > 0
@@ -961,8 +984,8 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const targetLadderHtml = bfTargets.map(target => `
     <div class="bf-target-row ${target.daysToTarget === 0 ? 'current' : ''}">
       <div class="bf-target-label">${target.targetBfPct}%</div>
-      <div class="bf-target-main">${target.daysToTarget === 0 ? 'Now' : `~${target.daysToTarget}d`}</div>
-      <div class="bf-target-meta">${weightLabel(target.cutStateTargetWeight, 1)} cut · ${weightLabel(target.fedStateTargetWeight, 1)} fed</div>
+      <div class="bf-target-main">${targetDaysLabel(target)}</div>
+      <div class="bf-target-meta">${targetWeightRangeLabel(target, 'cutLow', 'cutHigh', target.cutStateTargetWeight)} cut · ${targetWeightRangeLabel(target, 'fedLow', 'fedHigh', target.fedStateTargetWeight)} fed</div>
     </div>
   `).join('');
   const milestoneEl = document.getElementById('bodyFatMilestoneStrip');
@@ -980,9 +1003,9 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="bf-milestone ${state}" style="--milestone-left:${targetPct}%">
             <div class="bf-dot"></div>
             <div class="bf-ms-label">${target.targetBfPct}%</div>
-            <div class="bf-ms-time">${target.daysToTarget === 0 ? 'Now' : `~${target.daysToTarget}d`}</div>
-            <div class="bf-ms-weight">${weightLabel(target.cutStateTargetWeight, 1)}</div>
-            <div class="bf-ms-fed">${weightLabel(target.fedStateTargetWeight, 1)} fed</div>
+            <div class="bf-ms-time">${targetDaysLabel(target)}</div>
+            <div class="bf-ms-weight">${targetWeightRangeLabel(target, 'cutLow', 'cutHigh', target.cutStateTargetWeight)} cut</div>
+            <div class="bf-ms-fed">${targetWeightRangeLabel(target, 'fedLow', 'fedHigh', target.fedStateTargetWeight)} fed</div>
           </div>
         `;
       }).join('');
@@ -990,7 +1013,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${weightLabel(nextTarget.cutStateTargetWeight, 1)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1135,7 +1158,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="bf-target-ladder">${targetLadderHtml}</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">DXA-anchored model</span></div>
           <div class="confidence-pill ${bfTarget.confidence.cls}">${bfTarget.confidence.label}</div>
-          <div class="tiny">Based on regression slope of ${Number.isFinite(bfTarget.dailySlope) ? (bfTarget.dailySlope * 7).toFixed(2) : '—'} ${weightUnit()}/wk · creatine modeled as up to ~${weightLabel(bfTarget.fullCreatineWater || CREATINE_FULL_WATER_LBS, 1)} non-fat water${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% near the next target` : ''}</div>
+          <div class="tiny">Ranges include ~${weightLabel(bfTarget.targetRange?.weightPadding || 0, 1)} model/trend uncertainty · slope ${Number.isFinite(bfTarget.dailySlope) ? (bfTarget.dailySlope * 7).toFixed(2) : '—'} ${weightUnit()}/wk · creatine modeled as up to ~${weightLabel(bfTarget.fullCreatineWater || CREATINE_FULL_WATER_LBS, 1)} non-fat water${bfLbsPerPct ? ` · ~${weightLabel(bfLbsPerPct, 1)} per 1 BF% near the next target` : ''}</div>
         </div>
       `
       : `
@@ -1639,6 +1662,7 @@ allCharts.weightChart = new Chart(document.getElementById('weightChart'), {
       legend: { display: true, labels: { generateLabels: () => [
         { text: '● Weight', fillStyle:'#34d399', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '— 7-day avg', fillStyle:'rgba(251,191,36,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
+        { text: 'Expected band', fillStyle:'rgba(56,189,248,0.18)', strokeStyle:'rgba(56,189,248,0.35)', fontColor:'#94a3b8' },
         { text: '-- Trend', fillStyle:'rgba(251,113,133,0.6)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '-- Glyco-adj (vs Jan 6)', fillStyle:'rgba(192,132,252,0.75)', strokeStyle:'transparent', fontColor:'#94a3b8' },
         { text: '▲ Drink day', fillStyle:EVENT_COLORS.drink, strokeStyle:'transparent', fontColor:'#94a3b8' },

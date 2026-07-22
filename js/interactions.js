@@ -869,6 +869,7 @@ function updateWeightChart(days) {
   );
   const vals = dateKeys.map(date => pointByDate[date] ? weightValue(pointByDate[date].value) : null);
   const rolling = dateKeys.map(date => rollingByDate[date] ?? null);
+  const expectedBand = expectedWeightBandSeries(days, dateKeys);
   chart.data.labels = dateKeys.map(date => `${date.slice(5)} (${monthKey(date).slice(0, 3)})`);
   chart.data.datasets[0].data = vals;
   chart.data.datasets[1].data = rolling;
@@ -913,6 +914,44 @@ function updateWeightChart(days) {
     glycoDs.data = glycoAdjData;
     glycoDs.spanGaps = true;
   }
+  const expectedLowData = expectedBand?.low || [];
+  const expectedHighData = expectedBand?.high || [];
+  const expectedLowDs = chart.data.datasets.find(d => d.label === 'Expected lower');
+  const expectedHighDs = chart.data.datasets.find(d => d.label === 'Expected range');
+  if (!expectedLowDs) {
+    chart.data.datasets.push({
+      label: 'Expected lower',
+      data: expectedLowData,
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      pointHitRadius: 0,
+      fill: false,
+      spanGaps: true,
+      order: 12
+    });
+  } else {
+    expectedLowDs.data = expectedLowData;
+  }
+  if (!expectedHighDs) {
+    chart.data.datasets.push({
+      label: 'Expected range',
+      data: expectedHighData,
+      borderColor: 'rgba(56,189,248,0.22)',
+      backgroundColor: 'rgba(56,189,248,0.10)',
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      pointHitRadius: 0,
+      borderWidth: 1,
+      fill: '-1',
+      spanGaps: true,
+      order: 11
+    });
+  } else {
+    expectedHighDs.data = expectedHighData;
+    expectedHighDs.fill = '-1';
+  }
   chart.data.datasets[0].pointRadius = dateKeys.map(date => {
     const eventPoint = drinkDates.has(date) || liftDates.has(date);
     if (!pointByDate[date]) return 0;
@@ -931,8 +970,9 @@ function updateWeightChart(days) {
     const date = dateKeys[elements?.[0]?.index];
     if (elements.length && elements[0].datasetIndex === 0 && pointByDate[date]) openPanel(date);
   };
-  const bounds = calcAxisBounds(vals, useMetric ? 0.8 : 2);
+  const bounds = calcAxisBounds([...vals, ...(expectedBand?.low || []), ...(expectedBand?.high || [])], useMetric ? 0.8 : 2);
   chart.options.plugins.legend.display = !compact;
+  chart.options.plugins.tooltip.filter = item => item.dataset.label !== 'Expected lower';
   chart.options.scales.x.ticks.maxTicksLimit = compact ? 6 : 20;
   chart.options.scales.x.ticks.minRotation = compact ? 42 : 0;
   chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
@@ -945,6 +985,11 @@ function updateWeightChart(days) {
       const s = glycogenByDate[dateKeys[ctx.dataIndex]];
       return s ? ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()} (${s.loadPct}% glycogen loaded)` : ` Glyco-adj: ${ctx.parsed.y} ${weightUnit()}`;
     }
+    if (ctx.dataset.label === 'Expected range') {
+      const band = expectedBand?.byDate?.[dateKeys[ctx.dataIndex]];
+      return band ? ` Expected: ${weightLabel(band.low)}–${weightLabel(band.high)}` : '';
+    }
+    if (ctx.dataset.label === 'Expected lower') return '';
     return ` ${ctx.parsed.y} ${weightUnit()}`;
   };
   chart.options.scales.y.min = Math.floor(bounds.min);
