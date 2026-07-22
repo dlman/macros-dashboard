@@ -1235,6 +1235,15 @@ function renderExecutiveSummary() {
   const drivers = getDriverRanking(filteredDays, filteredSleep);
   const outliers = getOutliers(filteredDays, filteredSleep);
   const foodPatterns = foodPatternSummary(filteredDays);
+  const behaviorDays = baselineAnalyticsDays(filteredDays);
+  const behaviorSleep = filteredSleep.filter(d => !isVacationDate(d.date) && !isInDietBreak(d.date));
+  const scorecardDays = behaviorDays.length ? behaviorDays : filteredDays;
+  const scorecardSleep = behaviorSleep.length ? behaviorSleep : filteredSleep;
+  const behaviorCurrent = summarizeRange(scorecardDays, scorecardSleep);
+  const behaviorExclusions = baselineExclusionSummary(filteredDays);
+  const behaviorScope = behaviorExclusions
+    ? `Excl. ${behaviorExclusions.text}.`
+    : 'Eligible baseline days only.';
   const analyticsRangeDays = getAnalyticsDays();
   const activeTdeeProfile = workingTDEEProfile(filteredDays);
   const fullBayesTdee = freshBayesianPosterior(analyticsRangeDays);
@@ -1365,12 +1374,12 @@ function renderExecutiveSummary() {
   `).join('');
 
   document.getElementById('behaviorScorecard').innerHTML = [
-    { label: 'Calories', value: `${Math.round(current.calorieHitRate)}%`, sub: `${filteredDays.filter(d => d.calories <= goals.calories).length}/${filteredDays.length} days under calorie goal · ${currentStreak(filteredDays, d => d.calories <= goals.calories)} current / ${bestStreak(filteredDays, d => d.calories <= goals.calories)} best streak` },
-    { label: 'Protein', value: `${Math.round(current.proteinHitRate)}%`, sub: `${filteredDays.filter(hitProteinFloor).length}/${filteredDays.length} days at protein floor (${proteinGoalRangeLabel(filteredDays)}) · ${currentStreak(filteredDays, hitProteinFloor)} current / ${bestStreak(filteredDays, hitProteinFloor)} best` },
-    { label: 'Sleep Perf', value: `${Math.round(current.sleepHitRate)}%`, sub: `${filteredSleep.filter(d => d.perf >= goals.sleepPerf).length}/${filteredSleep.length || 0} nights at sleep target · ${currentStreak(filteredSleep, d => d.perf >= goals.sleepPerf)} current / ${bestStreak(filteredSleep, d => d.perf >= goals.sleepPerf)} best` },
-    { label: 'Bedtime', value: `${Math.round(current.bedtimeHitRate)}%`, sub: `Goal: ${goals.bedtime}` },
-    { label: 'Clean Nights', value: `${Math.round(current.cleanRate)}%`, sub: `${current.drinkNights} drink nights in range · ${currentStreak(filteredDays, d => !d.drinks)} current / ${bestStreak(filteredDays, d => !d.drinks)} best clean streak` },
-    { label: 'Lifts / Week', value: `${(current.liftCount / Math.max(filteredDays.length, 1) * 7).toFixed(1)}`, sub: `${current.liftCount} sessions across the range` }
+    { label: 'Calories', value: `${Math.round(behaviorCurrent.calorieHitRate)}%`, sub: `${scorecardDays.filter(d => d.calories <= goals.calories).length}/${scorecardDays.length} eligible days under calorie goal · ${currentStreak(scorecardDays, d => d.calories <= goals.calories)} current / ${bestStreak(scorecardDays, d => d.calories <= goals.calories)} best streak. ${behaviorScope}` },
+    { label: 'Protein', value: `${Math.round(behaviorCurrent.proteinHitRate)}%`, sub: `${scorecardDays.filter(hitProteinFloor).length}/${scorecardDays.length} eligible days at protein floor (${proteinGoalRangeLabel(scorecardDays)}) · ${currentStreak(scorecardDays, hitProteinFloor)} current / ${bestStreak(scorecardDays, hitProteinFloor)} best. ${behaviorScope}` },
+    { label: 'Sleep Perf', value: `${Math.round(behaviorCurrent.sleepHitRate)}%`, sub: `${scorecardSleep.filter(d => d.perf >= goals.sleepPerf).length}/${scorecardSleep.length || 0} eligible nights at sleep target · ${currentStreak(scorecardSleep, d => d.perf >= goals.sleepPerf)} current / ${bestStreak(scorecardSleep, d => d.perf >= goals.sleepPerf)} best. ${behaviorScope}` },
+    { label: 'Bedtime', value: `${Math.round(behaviorCurrent.bedtimeHitRate)}%`, sub: `Goal: ${goals.bedtime}. ${behaviorScope}` },
+    { label: 'Clean Nights', value: `${Math.round(behaviorCurrent.cleanRate)}%`, sub: `${behaviorCurrent.drinkNights} drink nights across eligible days · ${currentStreak(scorecardDays, d => !d.drinks)} current / ${bestStreak(scorecardDays, d => !d.drinks)} best clean streak. ${behaviorScope}` },
+    { label: 'Lifts / Week', value: `${(behaviorCurrent.liftCount / Math.max(behaviorCurrent.daysCount, 1) * 7).toFixed(1)}`, sub: `${behaviorCurrent.liftCount} sessions across ${behaviorCurrent.daysCount} eligible days. ${behaviorScope}` }
   ].map(card => `
     <div class="score-card">
       <div class="eyebrow">${card.label}</div>
