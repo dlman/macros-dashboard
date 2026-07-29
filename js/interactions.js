@@ -1184,7 +1184,7 @@ function updateBodyCompChart(days) {
     }
     return [
       ` Estimated from dynamic DXA model (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
-      d.creatineWater ? ` Creatine water adjustment: +${weightLabel(d.creatineWater, 1)} lean/water, excluded from fat trend` : '',
+      d.creatineWater ? ` Creatine water adjustment: ~${creatineWaterRangeLabel(d.creatineWater)} lean/water modeled (midpoint ${weightLabel(d.creatineWater, 1)}), excluded from fat trend` : '',
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
       glycoNote

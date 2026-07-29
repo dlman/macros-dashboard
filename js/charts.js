@@ -982,6 +982,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       const nextTarget = bfTargets.find(target => target.daysToTarget > 0);
       const markerPct = clamp01((18 - currentBf) / 3) * 100;
       const creatineWater = bfTargets[0].creatineWater || 0;
+      const creatineRangeLabel = creatineWaterRangeLabel(creatineWater);
       const milestoneHtml = bfTargets.map(target => {
         const targetPct = clamp01((18 - target.targetBfPct) / 3) * 100;
         const state = currentBf <= target.targetBfPct ? 'reached' : (target === nextTarget ? 'next' : 'future');
@@ -999,7 +1000,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${creatineWater > 0 ? ` Scale includes ~${weightLabel(creatineWater, 1)} creatine water; BF math excludes it from fat trend.` : ''}</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${creatineWater > 0 ? ` Scale includes ~${creatineRangeLabel} modeled creatine water; BF math uses the ${weightLabel(creatineWater, 1)} midpoint and excludes it from fat trend.` : ''}</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1101,14 +1102,14 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-primary scale-noise-card ${scaleNoise.cls}">
           <div class="eyebrow">Scale Noise Check</div>
           <div class="value">${scaleNoise.noiseScore}/100</div>
-          <div class="sub">${scaleNoise.noiseLabel} water/noise risk on the latest weigh-in.${scaleNoise.creatineWater > 0 ? ` Scale is carrying ~${weightLabel(scaleNoise.creatineWater, 1)} modeled creatine water.` : ''}</div>
+          <div class="sub">${scaleNoise.noiseLabel} water/noise risk on the latest weigh-in.${scaleNoise.creatineWater > 0 ? ` Scale is carrying ~${creatineWaterRangeLabel(scaleNoise.creatineWater)} modeled creatine water.` : ''}</div>
           <div class="noise-driver-list">
             ${scaleNoise.topDrivers.length
               ? scaleNoise.topDrivers.map(driver => `<div class="noise-driver"><span>${driver.label}</span><em>${driver.detail}</em></div>`).join('')
               : '<div class="noise-driver quiet"><span>No major flags</span><em>latest scale read looks clean</em></div>'}
           </div>
           <div class="confidence-pill ${scaleNoise.cls}">${scaleNoise.trustLabel}</div>
-          <div class="tiny">${formatShortDate(scaleNoise.date)} · ${weightLabel(scaleNoise.latestWeight)} latest${scaleNoise.rollingWeight == null ? '' : ` · ${scaleNoise.deltaVsRolling >= 0 ? '+' : ''}${weightLabel(scaleNoise.deltaVsRolling)} vs 7d avg`}${scaleNoise.creatineWater > 0 ? ` · non-creatine comparable ~${weightLabel(scaleNoise.latestWeight - scaleNoise.creatineWater)}` : ''}</div>
+          <div class="tiny">${formatShortDate(scaleNoise.date)} · ${weightLabel(scaleNoise.latestWeight)} latest${scaleNoise.rollingWeight == null ? '' : ` · ${scaleNoise.deltaVsRolling >= 0 ? '+' : ''}${weightLabel(scaleNoise.deltaVsRolling)} vs 7d avg`}${scaleNoise.creatineWater > 0 ? ` · non-creatine comparable ~${creatineAdjustedWeightRangeLabel(scaleNoise.latestWeight, scaleNoise.creatineWater)}` : ''}</div>
         </div>
       `
       : `
@@ -1277,7 +1278,7 @@ function renderExecutiveSummary() {
       <div class="hero-value">${labelForDays(getComparisonCurrentBaseDays())}</div>
       <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}. ${plateau.title}</div>
     </div>
-    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}${latestCreatineWater > 0 ? `<br>Includes ~${weightLabel(latestCreatineWater, 1)} creatine water` : ''}</div></div>
+    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}${latestCreatineWater > 0 ? `<br>Includes ~${creatineWaterRangeLabel(latestCreatineWater)} creatine water` : ''}</div></div>
     <div class="summary-chip"><div class="eyebrow">Calories</div><div class="value">${current.avgCalories != null ? energyLabel(current.avgCalories) : '—'}</div><div class="sub">vs prior: ${calDelta.text}</div></div>
     <div class="summary-chip"><div class="eyebrow">Protein Hit Rate</div><div class="value">${Math.round(current.proteinHitRate)}%</div><div class="sub">vs prior: ${proteinDelta.text}</div></div>
     <div class="summary-chip"><div class="eyebrow">Sleep</div><div class="value">${current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—'}</div><div class="sub">${current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h avg` : 'No sleep data'}</div></div>
@@ -1287,7 +1288,7 @@ function renderExecutiveSummary() {
     { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: [
       trendReality.actualLoss != null ? `${trendReality.actualLoss >= 0 ? 'Smoothed trend down' : 'Smoothed trend up'} ${weightValue(Math.abs(trendReality.actualLoss))} ${weightUnit()} in range` : 'No weigh-ins',
       latestWeightRollingAvg != null ? `Current 7-day rolling avg ${weightLabel(latestWeightRollingAvg)}` : null,
-      latestWeightRollingAvgCreatineAdjusted != null && latestCreatineWater > 0 ? `Creatine-adjusted comparable ~${weightLabel(latestWeightRollingAvgCreatineAdjusted)} (${weightLabel(latestCreatineWater, 1)} water modeled)` : null
+      latestWeightRollingAvgCreatineAdjusted != null && latestCreatineWater > 0 ? `Ex-creatine comparable ~${creatineAdjustedWeightRangeLabel(latestWeightRollingAvg, latestCreatineWater)}; midpoint ${weightLabel(latestWeightRollingAvgCreatineAdjusted)}` : null
     ].filter(Boolean).join('<br>'), delta: weightDelta },
     { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}` : 'No intake data', delta: calDelta },
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
@@ -1887,7 +1888,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
           }
           return [
             `  Estimated from dynamic DXA model`,
-            d.creatineWater ? `  Creatine water adjustment: +${weightLabel(d.creatineWater, 1)} lean/water, excluded from fat trend` : '',
+            d.creatineWater ? `  Creatine water adjustment: ~${creatineWaterRangeLabel(d.creatineWater)} lean/water modeled (midpoint ${weightLabel(d.creatineWater, 1)}), excluded from fat trend` : '',
             `  Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
             `  Total: ${weightLabel(d.weight)}`,
             glycoNote
@@ -3304,7 +3305,7 @@ function runScenarioPlanner() {
     : scenarioTdee.source === 'bayesian'
       ? 'the full-range Bayesian maintenance posterior'
       : 'the selected-range trend and logged intake';
-  const creatineAssumption = `Creatine is modeled from ${CREATINE_START_DATE} as up to ~${weightLabel(CREATINE_FULL_WATER_LBS, 1)} of non-fat water over ${CREATINE_RAMP_DAYS} days, so BF math subtracts it from tissue trend and adds it back to lean/water scale weight.`;
+  const creatineAssumption = `Creatine is modeled from ${CREATINE_START_DATE} as roughly ${creatineWaterRangeLabel(CREATINE_FULL_WATER_LBS)} of non-fat water over ${CREATINE_RAMP_DAYS} days; calculations use the ${weightLabel(CREATINE_FULL_WATER_LBS, 1)} midpoint, subtract it from tissue trend, and add it back to lean/water scale weight.`;
   document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
     ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path. ${creatineAssumption} Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`
     : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state. ${creatineAssumption}${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;

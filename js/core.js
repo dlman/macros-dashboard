@@ -24,6 +24,8 @@ const supplementEvents = [
 ];
 const CREATINE_START_DATE = supplementEvents.find(event => event.type === 'creatine')?.date || '2026-07-02';
 const CREATINE_FULL_WATER_LBS = 1.8;
+const CREATINE_WATER_RANGE_LOW_LBS = 1.5;
+const CREATINE_WATER_RANGE_HIGH_LBS = 2.5;
 const CREATINE_RAMP_DAYS = 21;
 const GRID = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || 'rgba(255,255,255,0.05)' });
 const TICK = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue('--tick-color').trim() || '#64748b', font: { size: 11 } });
@@ -193,17 +195,50 @@ function daysBetweenDates(startDate, endDate) {
   return Math.round((end - start) / 86400000);
 }
 
-function creatineScaleAdjustmentForDate(dateStr) {
+function creatineScaleRampProgressForDate(dateStr) {
   if (!dateStr || dateStr < CREATINE_START_DATE) return 0;
   const daysSinceStart = daysBetweenDates(CREATINE_START_DATE, dateStr);
   if (daysSinceStart == null || daysSinceStart < 0) return 0;
-  const rampProgress = clamp01((daysSinceStart + 1) / CREATINE_RAMP_DAYS);
-  return +(CREATINE_FULL_WATER_LBS * rampProgress).toFixed(2);
+  return clamp01((daysSinceStart + 1) / CREATINE_RAMP_DAYS);
+}
+
+function creatineScaleAdjustmentForDate(dateStr) {
+  return +(CREATINE_FULL_WATER_LBS * creatineScaleRampProgressForDate(dateStr)).toFixed(2);
+}
+
+function creatineScaleAdjustmentRangeForDate(dateStr) {
+  const rampProgress = creatineScaleRampProgressForDate(dateStr);
+  return {
+    low: +(CREATINE_WATER_RANGE_LOW_LBS * rampProgress).toFixed(2),
+    mid: +(CREATINE_FULL_WATER_LBS * rampProgress).toFixed(2),
+    high: +(CREATINE_WATER_RANGE_HIGH_LBS * rampProgress).toFixed(2)
+  };
 }
 
 function latestCreatineScaleAdjustment(days = allDays) {
   const latestDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   return creatineScaleAdjustmentForDate(latestDate);
+}
+
+function latestCreatineScaleAdjustmentRange(days = allDays) {
+  const latestDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
+  return creatineScaleAdjustmentRangeForDate(latestDate);
+}
+
+function creatineWaterRangeLabel(creatineWater = CREATINE_FULL_WATER_LBS, digits = 1) {
+  const ratio = CREATINE_FULL_WATER_LBS > 0 ? Math.max(0, creatineWater || 0) / CREATINE_FULL_WATER_LBS : 0;
+  const low = CREATINE_WATER_RANGE_LOW_LBS * ratio;
+  const high = CREATINE_WATER_RANGE_HIGH_LBS * ratio;
+  if (high <= 0.05) return weightLabel(0, digits);
+  return `${weightValue(low, digits)}-${weightLabel(high, digits)}`;
+}
+
+function creatineAdjustedWeightRangeLabel(weight, creatineWater = CREATINE_FULL_WATER_LBS, digits = 1) {
+  if (!Number.isFinite(weight)) return '—';
+  const ratio = CREATINE_FULL_WATER_LBS > 0 ? Math.max(0, creatineWater || 0) / CREATINE_FULL_WATER_LBS : 0;
+  const lowComparable = weight - (CREATINE_WATER_RANGE_HIGH_LBS * ratio);
+  const highComparable = weight - (CREATINE_WATER_RANGE_LOW_LBS * ratio);
+  return `${weightValue(lowComparable, digits)}-${weightLabel(highComparable, digits)}`;
 }
 
 function creatineScaleDeltaFromAnchor(anchorDate, futureDate) {
