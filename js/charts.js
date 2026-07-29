@@ -981,6 +981,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       const currentBf = bfTargets[0].currentBfPct;
       const nextTarget = bfTargets.find(target => target.daysToTarget > 0);
       const markerPct = clamp01((18 - currentBf) / 3) * 100;
+      const creatineWater = bfTargets[0].creatineWater || 0;
       const milestoneHtml = bfTargets.map(target => {
         const targetPct = clamp01((18 - target.targetBfPct) / 3) * 100;
         const state = currentBf <= target.targetBfPct ? 'reached' : (target === nextTarget ? 'next' : 'future');
@@ -998,7 +999,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${creatineWater > 0 ? ` Scale includes ~${weightLabel(creatineWater, 1)} creatine water; BF math excludes it from fat trend.` : ''}</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1100,14 +1101,14 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-primary scale-noise-card ${scaleNoise.cls}">
           <div class="eyebrow">Scale Noise Check</div>
           <div class="value">${scaleNoise.noiseScore}/100</div>
-          <div class="sub">${scaleNoise.noiseLabel} water/noise risk on the latest weigh-in.</div>
+          <div class="sub">${scaleNoise.noiseLabel} water/noise risk on the latest weigh-in.${scaleNoise.creatineWater > 0 ? ` Scale is carrying ~${weightLabel(scaleNoise.creatineWater, 1)} modeled creatine water.` : ''}</div>
           <div class="noise-driver-list">
             ${scaleNoise.topDrivers.length
               ? scaleNoise.topDrivers.map(driver => `<div class="noise-driver"><span>${driver.label}</span><em>${driver.detail}</em></div>`).join('')
               : '<div class="noise-driver quiet"><span>No major flags</span><em>latest scale read looks clean</em></div>'}
           </div>
           <div class="confidence-pill ${scaleNoise.cls}">${scaleNoise.trustLabel}</div>
-          <div class="tiny">${formatShortDate(scaleNoise.date)} · ${weightLabel(scaleNoise.latestWeight)} latest${scaleNoise.rollingWeight == null ? '' : ` · ${scaleNoise.deltaVsRolling >= 0 ? '+' : ''}${weightLabel(scaleNoise.deltaVsRolling)} vs 7d avg`} · creatine water ~${weightLabel(scaleNoise.creatineWater, 1)}</div>
+          <div class="tiny">${formatShortDate(scaleNoise.date)} · ${weightLabel(scaleNoise.latestWeight)} latest${scaleNoise.rollingWeight == null ? '' : ` · ${scaleNoise.deltaVsRolling >= 0 ? '+' : ''}${weightLabel(scaleNoise.deltaVsRolling)} vs 7d avg`}${scaleNoise.creatineWater > 0 ? ` · non-creatine comparable ~${weightLabel(scaleNoise.latestWeight - scaleNoise.creatineWater)}` : ''}</div>
         </div>
       `
       : `
@@ -1222,6 +1223,10 @@ function renderExecutiveSummary() {
     if (!recentWeights.length) return null;
     return recentWeights.reduce((sum, weight) => sum + weight, 0) / recentWeights.length;
   })();
+  const latestCreatineWater = latestCreatineScaleAdjustment(filteredDays);
+  const latestWeightRollingAvgCreatineAdjusted = latestWeightRollingAvg != null
+    ? +(latestWeightRollingAvg - latestCreatineWater).toFixed(2)
+    : null;
   const weightDelta = compareDelta(currentTrendLoss, previousTrendLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
@@ -1272,7 +1277,7 @@ function renderExecutiveSummary() {
       <div class="hero-value">${labelForDays(getComparisonCurrentBaseDays())}</div>
       <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}. ${plateau.title}</div>
     </div>
-    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}</div></div>
+    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}${latestCreatineWater > 0 ? `<br>Includes ~${weightLabel(latestCreatineWater, 1)} creatine water` : ''}</div></div>
     <div class="summary-chip"><div class="eyebrow">Calories</div><div class="value">${current.avgCalories != null ? energyLabel(current.avgCalories) : '—'}</div><div class="sub">vs prior: ${calDelta.text}</div></div>
     <div class="summary-chip"><div class="eyebrow">Protein Hit Rate</div><div class="value">${Math.round(current.proteinHitRate)}%</div><div class="sub">vs prior: ${proteinDelta.text}</div></div>
     <div class="summary-chip"><div class="eyebrow">Sleep</div><div class="value">${current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—'}</div><div class="sub">${current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h avg` : 'No sleep data'}</div></div>
@@ -1281,7 +1286,8 @@ function renderExecutiveSummary() {
   document.getElementById('executiveKpis').innerHTML = [
     { label: 'Current Weight', value: current.lastWeight != null ? weightLabel(current.lastWeight) : '—', sub: [
       trendReality.actualLoss != null ? `${trendReality.actualLoss >= 0 ? 'Smoothed trend down' : 'Smoothed trend up'} ${weightValue(Math.abs(trendReality.actualLoss))} ${weightUnit()} in range` : 'No weigh-ins',
-      latestWeightRollingAvg != null ? `Current 7-day rolling avg ${weightLabel(latestWeightRollingAvg)}` : null
+      latestWeightRollingAvg != null ? `Current 7-day rolling avg ${weightLabel(latestWeightRollingAvg)}` : null,
+      latestWeightRollingAvgCreatineAdjusted != null && latestCreatineWater > 0 ? `Creatine-adjusted comparable ~${weightLabel(latestWeightRollingAvgCreatineAdjusted)} (${weightLabel(latestCreatineWater, 1)} water modeled)` : null
     ].filter(Boolean).join('<br>'), delta: weightDelta },
     { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}` : 'No intake data', delta: calDelta },
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
