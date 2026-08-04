@@ -42,6 +42,7 @@ PUBLISHED_CSV_URLS: dict[str, str] = {
     "May": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
     "Jun": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=303838993&single=true&output=csv",
     "Jul": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1367450588&single=true&output=csv",
+    "Aug": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=688095732&single=true&output=csv",
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
