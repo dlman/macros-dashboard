@@ -304,6 +304,18 @@ function monthBuckets(days) {
   return result;
 }
 
+function calendarActivityMonthBuckets() {
+  return monthBuckets(getAnalyticsDays(allDays));
+}
+
+function liftDayCount(days) {
+  return days.filter(d => d.lifting === 'Y').length;
+}
+
+function drinkDayCount(days) {
+  return days.filter(d => d.drinks).length;
+}
+
 function getAnalyticsDays(days = allDays) {
   const cutoff = analyticsCutoffDate();
   return days.filter(d => d.date <= cutoff);

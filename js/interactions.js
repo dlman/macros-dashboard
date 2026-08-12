@@ -1367,11 +1367,12 @@ function updateDonutCharts(months) {
   });
 }
 
-function updateSimpleMonthBars(months) {
+function updateSimpleMonthBars() {
   const liftingChart = Chart.getChart(document.getElementById('liftingChart'));
   const drinksChart = Chart.getChart(document.getElementById('drinksChart'));
-  liftingChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => (months[m.key]||[]).filter(d => d.lifting === 'Y').length);
-  drinksChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => (months[m.key]||[]).filter(d => d.drinks).length);
+  const activityMonths = calendarActivityMonthBuckets();
+  liftingChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => liftDayCount(activityMonths[m.key] || []));
+  drinksChart.data.datasets[0].data = ACTIVE_MONTHS.map(m => drinkDayCount(activityMonths[m.key] || []));
   liftingChart.update();
   drinksChart.update();
 }

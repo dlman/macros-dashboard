@@ -2331,11 +2331,12 @@ function donutChart(id, month) {
 // =====================================================================
 // LIFTING & DRINKS CHARTS
 // =====================================================================
+const activityMonthBuckets = calendarActivityMonthBuckets();
 new Chart(document.getElementById('liftingChart'), {
   type: 'bar',
   data: {
     labels: ACTIVE_MONTHS.map(m => m.longLabel),
-    datasets: [{ data: ACTIVE_MONTHS.map(m => data[m.key].filter(d=>d.lifting==='Y').length), backgroundColor: ACTIVE_MONTHS.map(m => m.color), borderRadius:6, borderSkipped:false }]
+    datasets: [{ data: ACTIVE_MONTHS.map(m => liftDayCount(activityMonthBuckets[m.key] || [])), backgroundColor: ACTIVE_MONTHS.map(m => m.color), borderRadius:6, borderSkipped:false }]
   },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} lifting sessions` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:2} } } }
 });
@@ -2344,7 +2345,7 @@ new Chart(document.getElementById('drinksChart'), {
   type: 'bar',
   data: {
     labels: ACTIVE_MONTHS.map(m => m.longLabel),
-    datasets: [{ data: ACTIVE_MONTHS.map(m => data[m.key].filter(d=>d.drinks).length), backgroundColor: ACTIVE_MONTHS.map(m => m.color + '99'), borderRadius:6, borderSkipped:false }]
+    datasets: [{ data: ACTIVE_MONTHS.map(m => drinkDayCount(activityMonthBuckets[m.key] || [])), backgroundColor: ACTIVE_MONTHS.map(m => m.color + '99'), borderRadius:6, borderSkipped:false }]
   },
   options: { ...chartDefaults(), plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => ` ${ctx.parsed.y} drink days` } } }, scales: { x: { ...chartDefaults().scales.x }, y: { ...chartDefaults().scales.y, beginAtZero:true, ticks:{...TICK(),stepSize:1} } } }
 });
