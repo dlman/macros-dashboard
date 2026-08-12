@@ -1966,6 +1966,14 @@ function currentRangeLabel() {
   return `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${last.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
+function daysLeftInYearLabel() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const nextYear = new Date(now.getFullYear() + 1, 0, 1);
+  const daysLeft = Math.max(0, Math.round((nextYear - today) / 86400000) - 1);
+  return `${daysLeft} day${daysLeft === 1 ? '' : 's'} left in ${now.getFullYear()}`;
+}
+
 function formatShortDate(dateStr) {
   if (!dateStr) return '—';
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

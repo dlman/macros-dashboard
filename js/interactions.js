@@ -1805,7 +1805,7 @@ function refreshDashboard() {
   const months = monthBuckets(filteredDays);
   const metricLabels = { protein: 'Daily Protein (g)', carbs: 'Daily Carbs (g)', fat: 'Daily Fat (g)' };
   document.getElementById('macroChartTitle').textContent = metricLabels[currentMetric];
-  document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; compared with ${previousDays.length || 0} prior days from ${compareModeLabel()} &nbsp;|&nbsp; Click any data point for details`;
+  document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${daysLeftInYearLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; compared with ${previousDays.length || 0} prior days from ${compareModeLabel()} &nbsp;|&nbsp; Click any data point for details`;
   document.getElementById('controlSummary').textContent = usingFallback
     ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`
     : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
