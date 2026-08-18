@@ -1239,7 +1239,7 @@ function renderExecutiveSummary() {
   const adjustedNetText = adjustedNetLabel(energyBalance);
   const adjustedNetState = adjustedNetDirection(energyBalance);
   const adjustedNetSub = energyBalance
-    ? `${current.avgAdjustedCalories != null ? energyLabel(Math.round(current.avgAdjustedCalories)) : '—'} adjusted intake vs ~${energyLabel(Math.round(energyBalance.totalMaintenance / Math.max(filteredDays.length, 1)))} maintenance · ${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' total deficit' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' total surplus'}`
+    ? `${current.avgAdjustedCalories != null ? energyLabel(Math.round(current.avgAdjustedCalories)) : '—'} adjusted intake vs ~${energyLabel(Math.round(energyBalance.totalMaintenance / Math.max(filteredDays.length, 1)))} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
     : 'No adjusted intake data';
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
   const lag = getLagMetrics(filteredDays, filteredSleep);

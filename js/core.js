@@ -2191,7 +2191,7 @@ function adjustedNetLabel(balance) {
   if (!balance) return '—';
   const rounded = Math.round(balance.avgDailyDeficit);
   if (rounded === 0) return '0 kcal/day';
-  return `${rounded > 0 ? '−' : '+'}${energyLabel(Math.abs(rounded))}/day`;
+  return `${energyLabel(Math.abs(rounded))} ${rounded > 0 ? 'deficit' : 'surplus'}/day`;
 }
 
 function adjustedNetDirection(balance) {
