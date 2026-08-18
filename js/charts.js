@@ -1230,11 +1230,17 @@ function renderExecutiveSummary() {
     : null;
   const weightDelta = compareDelta(currentTrendLoss, previousTrendLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
+  const adjustedCalDelta = compareDelta(current.avgAdjustedCalories, previous.avgAdjustedCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
   const sleepDelta = compareDelta(current.avgSleepPerf, previous.avgSleepPerf, 'up', v => `${Math.round(v)}%`);
   const drinkDelta = compareDelta(current.drinkNights, previous.drinkNights, 'down', v => `${Math.round(v)}`);
   const trendReality = weightTrendReality(filteredDays);
   const energyBalance = energyBalanceSummary(filteredDays);
+  const adjustedNetText = adjustedNetLabel(energyBalance);
+  const adjustedNetState = adjustedNetDirection(energyBalance);
+  const adjustedNetSub = energyBalance
+    ? `${current.avgAdjustedCalories != null ? energyLabel(Math.round(current.avgAdjustedCalories)) : '—'} adjusted intake vs ~${energyLabel(Math.round(energyBalance.totalMaintenance / Math.max(filteredDays.length, 1)))} maintenance · ${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' total deficit' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' total surplus'}`
+    : 'No adjusted intake data';
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
   const lag = getLagMetrics(filteredDays, filteredSleep);
   const recommendations = recommendationList(current, previous, filteredDays, filteredSleep);
@@ -1246,6 +1252,8 @@ function renderExecutiveSummary() {
   const scorecardDays = behaviorDays.length ? behaviorDays : filteredDays;
   const scorecardSleep = behaviorSleep.length ? behaviorSleep : filteredSleep;
   const behaviorCurrent = summarizeRange(scorecardDays, scorecardSleep);
+  const behaviorEnergyBalance = energyBalanceSummary(scorecardDays);
+  const behaviorAdjustedNet = adjustedNetLabel(behaviorEnergyBalance);
   const behaviorExclusions = baselineExclusionSummary(filteredDays);
   const behaviorScope = behaviorExclusions
     ? `Excl. ${behaviorExclusions.text}.`
@@ -1279,7 +1287,7 @@ function renderExecutiveSummary() {
       <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}. ${plateau.title}</div>
     </div>
     <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}${latestCreatineWater > 0 ? `<br>Includes ~${creatineWaterRangeLabel(latestCreatineWater)} creatine water` : ''}</div></div>
-    <div class="summary-chip"><div class="eyebrow">Calories</div><div class="value">${current.avgCalories != null ? energyLabel(current.avgCalories) : '—'}</div><div class="sub">vs prior: ${calDelta.text}</div></div>
+    <div class="summary-chip"><div class="eyebrow">Adjusted Net</div><div class="value">${adjustedNetText}</div><div class="sub">${adjustedNetSub}</div></div>
     <div class="summary-chip"><div class="eyebrow">Protein Hit Rate</div><div class="value">${Math.round(current.proteinHitRate)}%</div><div class="sub">vs prior: ${proteinDelta.text}</div></div>
     <div class="summary-chip"><div class="eyebrow">Sleep</div><div class="value">${current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—'}</div><div class="sub">${current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h avg` : 'No sleep data'}</div></div>
   `;
@@ -1290,7 +1298,7 @@ function renderExecutiveSummary() {
       latestWeightRollingAvg != null ? `Current 7-day rolling avg ${weightLabel(latestWeightRollingAvg)}` : null,
       latestWeightRollingAvgCreatineAdjusted != null && latestCreatineWater > 0 ? `Ex-creatine comparable ~${creatineAdjustedWeightRangeLabel(latestWeightRollingAvg, latestCreatineWater)}; midpoint ${weightLabel(latestWeightRollingAvgCreatineAdjusted)}` : null
     ].filter(Boolean).join('<br>'), delta: weightDelta },
-    { label: 'Avg Calories', value: current.avgCalories != null ? energyLabel(current.avgCalories) : '—', sub: energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}` : 'No intake data', delta: calDelta },
+    { label: 'Adjusted Net', value: adjustedNetText, sub: `${adjustedNetSub}${adjustedNetState === 'neutral' ? ' · maintenance-adjacent' : ''}`, delta: adjustedCalDelta },
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
     { label: 'Sleep Performance', value: current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—', sub: current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep` : 'No sleep data', delta: sleepDelta },
     { label: 'Drink Nights', value: `${current.drinkNights}`, sub: `${Math.round(current.cleanRate)}% clean-day rate`, delta: drinkDelta, mobileOptional: true },
@@ -1381,7 +1389,7 @@ function renderExecutiveSummary() {
   `).join('');
 
   document.getElementById('behaviorScorecard').innerHTML = [
-    { label: 'Calories', value: `${Math.round(behaviorCurrent.calorieHitRate)}%`, sub: `${scorecardDays.filter(d => d.calories <= goals.calories).length}/${scorecardDays.length} eligible days under calorie goal · ${currentStreak(scorecardDays, d => d.calories <= goals.calories)} current / ${bestStreak(scorecardDays, d => d.calories <= goals.calories)} best streak. ${behaviorScope}` },
+    { label: 'Calories', value: `${Math.round(behaviorCurrent.calorieHitRate)}%`, sub: `${scorecardDays.filter(d => d.calories <= goals.calories).length}/${scorecardDays.length} eligible days under food goal · adjusted net ${behaviorAdjustedNet}. ${behaviorCurrent.avgAdjustedCalories != null ? `${energyLabel(Math.round(behaviorCurrent.avgAdjustedCalories))}/day incl. est. drinks.` : ''} ${behaviorScope}` },
     { label: 'Protein', value: `${Math.round(behaviorCurrent.proteinHitRate)}%`, sub: `${scorecardDays.filter(hitProteinFloor).length}/${scorecardDays.length} eligible days at protein floor (${proteinGoalRangeLabel(scorecardDays)}) · ${currentStreak(scorecardDays, hitProteinFloor)} current / ${bestStreak(scorecardDays, hitProteinFloor)} best. ${behaviorScope}` },
     { label: 'Sleep Perf', value: `${Math.round(behaviorCurrent.sleepHitRate)}%`, sub: `${scorecardSleep.filter(d => d.perf >= goals.sleepPerf).length}/${scorecardSleep.length || 0} eligible nights at sleep target · ${currentStreak(scorecardSleep, d => d.perf >= goals.sleepPerf)} current / ${bestStreak(scorecardSleep, d => d.perf >= goals.sleepPerf)} best. ${behaviorScope}` },
     { label: 'Bedtime', value: `${Math.round(behaviorCurrent.bedtimeHitRate)}%`, sub: `Goal: ${goals.bedtime}. ${behaviorScope}` },

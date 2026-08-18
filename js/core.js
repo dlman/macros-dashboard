@@ -2108,6 +2108,7 @@ function summarizeRange(days, sleep) {
   const lastWeight = weightDays.length ? weightDays[weightDays.length - 1].weight : null;
   const firstWeight = weightDays.length ? weightDays[0].weight : null;
   const avgCalories = avgOrNull(days, 'calories');
+  const avgAdjustedCalories = avgEffectiveCalories(days);
   const avgProtein = avgOrNull(days, 'protein');
   const avgSleepPerf = avgOrNull(sleep, 'perf');
   const avgSleepHours = avgOrNull(sleep, 'hours');
@@ -2134,6 +2135,7 @@ function summarizeRange(days, sleep) {
     lastWeight,
     weightChange: firstWeight != null && lastWeight != null ? lastWeight - firstWeight : null,
     avgCalories,
+    avgAdjustedCalories,
     avgProtein,
     avgSleepPerf,
     avgSleepHours,
@@ -2183,6 +2185,20 @@ function energyBalanceSummary(days, tdee = estimatedTDEE) {
     weeklyPace: (totalDeficit / Math.max(days.length, 1)) * 7,
     fatEquivalent: totalDeficit / 3500
   };
+}
+
+function adjustedNetLabel(balance) {
+  if (!balance) return '—';
+  const rounded = Math.round(balance.avgDailyDeficit);
+  if (rounded === 0) return '0 kcal/day';
+  return `${rounded > 0 ? '−' : '+'}${energyLabel(Math.abs(rounded))}/day`;
+}
+
+function adjustedNetDirection(balance) {
+  if (!balance) return 'neutral';
+  const daily = balance.avgDailyDeficit;
+  if (Math.abs(daily) < 50) return 'neutral';
+  return daily > 0 ? 'deficit' : 'surplus';
 }
 
 function expectedWeightLoss(days) {
