@@ -104,9 +104,11 @@ def fetch_csv(url: str, label: str) -> list[list[str]]:
         except requests.RequestException as exc:
             last_error = exc
             status = response.status_code if response is not None else None
-            if attempt == 3 or status not in {400, 408, 429, 500, 502, 503, 504}:
+            retryable = status is None or status in {408, 429, 500, 502, 503, 504}
+            if attempt == 3 or not retryable:
                 raise
-            print(f"  {label}: fetch attempt {attempt} failed with HTTP {status}; retrying …")
+            reason = f"HTTP {status}" if status is not None else exc.__class__.__name__
+            print(f"  {label}: fetch attempt {attempt} failed with {reason}; retrying …")
             time.sleep(2 * attempt)
     if response is None:
         raise RuntimeError(f"Failed to fetch {label}") from last_error
