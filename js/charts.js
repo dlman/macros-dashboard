@@ -1013,6 +1013,56 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     }
   }
 
+  const runwayEl = document.getElementById('yearEndRunway');
+  if (runwayEl) {
+    const runway = yearEndBodyFatRunway(getAnalyticsDays(allDays));
+    if (!runway) {
+      runwayEl.innerHTML = '';
+    } else {
+      const statusCopy = {
+        achieved: { label: 'Goal reached', detail: `At or below the modeled ${runway.targetBfPct}% target.`, cls: 'achieved' },
+        'on-track': { label: 'On track', detail: runway.bufferDays > 0 ? `Projected with ${runway.bufferDays} days of buffer.` : 'Current pace clears the deadline.', cls: 'on-track' },
+        narrow: { label: 'Narrow margin', detail: 'Current pace is close to the minimum required pace.', cls: 'narrow' },
+        adjustment: { label: 'Adjustment needed', detail: runway.dailyAdjustment > 0 ? `Create about ${energyLabel(runway.dailyAdjustment)}/day more effective deficit.` : 'The 28-day weight trend is not moving toward the target.', cls: 'adjustment' }
+      }[runway.status];
+      const actualPace = runway.actualWeeklyLoss == null
+        ? 'Need more data'
+        : `${runway.actualWeeklyLoss >= 0 ? '−' : '+'}${weightLabel(Math.abs(runway.actualWeeklyLoss), 2)}/wk`;
+      const projectedFinish = runway.projectedDate ? formatShortDate(runway.projectedDate) : 'No finish date';
+      runwayEl.className = `year-end-runway ${statusCopy.cls}`;
+      runwayEl.innerHTML = `
+        <div class="runway-lead">
+          <div class="eyebrow">15% by Dec 31</div>
+          <div class="runway-status">${statusCopy.label}</div>
+          <div class="runway-status-detail">${statusCopy.detail}</div>
+          <div class="runway-days"><strong>${runway.daysRemaining}</strong> days left · projected ${projectedFinish}</div>
+        </div>
+        <div class="runway-metrics">
+          <div class="runway-metric">
+            <span>Remaining</span>
+            <strong>${weightLabel(runway.weightRemaining, 1)}</strong>
+            <small>to ${weightLabel(runway.targetWeight, 1)} cut-state</small>
+          </div>
+          <div class="runway-metric">
+            <span>Required pace</span>
+            <strong>−${weightLabel(runway.requiredWeeklyLoss, 2)}/wk</strong>
+            <small>through Dec 31</small>
+          </div>
+          <div class="runway-metric">
+            <span>Actual 28d pace</span>
+            <strong>${actualPace}</strong>
+            <small>7-day average vs 28 days ago</small>
+          </div>
+          <div class="runway-metric">
+            <span>Effective intake</span>
+            <strong>${energyLabel(runway.effectiveCalorieTarget)}/day</strong>
+            <small>includes drinks and logging error · TDEE ~${energyLabel(runway.maintenance)}</small>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   document.getElementById('forecastStrip').innerHTML = [
     weightProjection
       ? `

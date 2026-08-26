@@ -3309,6 +3309,87 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   };
 }
 
+function rollingAverageWeightPace(days = getAnalyticsDays(), lookbackDays = 28, window = 7) {
+  const weightDays = days.filter(d => d.weight).sort((a, b) => a.date.localeCompare(b.date));
+  if (weightDays.length < window * 2) return null;
+  const latestWindow = weightDays.slice(-window);
+  const latestDate = latestWindow[latestWindow.length - 1].date;
+  const comparisonDate = addDaysToDate(latestDate, -lookbackDays);
+  const priorWindow = weightDays.filter(d => d.date <= comparisonDate).slice(-window);
+  if (priorWindow.length < window) return null;
+  const currentWeight = avg(latestWindow, 'weight');
+  const priorWeight = avg(priorWindow, 'weight');
+  const priorDate = priorWindow[priorWindow.length - 1].date;
+  const spanDays = Math.max(1, daysBetweenDates(priorDate, latestDate));
+  return {
+    currentWeight,
+    priorWeight,
+    latestDate,
+    priorDate,
+    spanDays,
+    weeklyLoss: ((priorWeight - currentWeight) / spanDays) * 7
+  };
+}
+
+function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadline = '2026-12-31') {
+  const analyticsDays = baselineAnalyticsDays(getAnalyticsDays(days));
+  const rollingAnchor = latestRollingWeightAnchor(analyticsDays, 7);
+  const latestWeightPoint = latestWeightPointForScenario(analyticsDays);
+  if (!rollingAnchor || !latestWeightPoint) return null;
+
+  const currentDate = latestWeightPoint.date;
+  const current = estimateBodyCompAtWeight(rollingAnchor.weight, analyticsDays, currentDate);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct);
+  const targetWeight = targetWeights.cutStateTarget;
+  if (!Number.isFinite(targetWeight)) return null;
+
+  const daysRemaining = Math.max(0, daysBetweenDates(currentDate, deadline));
+  const weightRemaining = Math.max(0, rollingAnchor.weight - targetWeight);
+  const requiredWeeklyLoss = daysRemaining > 0 ? (weightRemaining / daysRemaining) * 7 : null;
+  const requiredDailyDeficit = daysRemaining > 0 ? (weightRemaining * 3500) / daysRemaining : null;
+  const pace = rollingAverageWeightPace(analyticsDays, 28, 7);
+  const actualWeeklyLoss = pace?.weeklyLoss ?? null;
+  const actualDailyDeficit = Number.isFinite(actualWeeklyLoss) ? actualWeeklyLoss * 500 : null;
+  const projectedDays = actualWeeklyLoss > 0 ? Math.ceil((weightRemaining / actualWeeklyLoss) * 7) : null;
+  const projectedDate = projectedDays != null ? addDaysToDate(currentDate, projectedDays) : null;
+  const bufferDays = projectedDate ? daysBetweenDates(projectedDate, deadline) : null;
+  const tdeeProfile = workingTDEEProfile(analyticsDays);
+  const effectiveCalorieTarget = Number.isFinite(requiredDailyDeficit)
+    ? Math.round(tdeeProfile.maintenance - requiredDailyDeficit)
+    : null;
+  const dailyAdjustment = Number.isFinite(requiredDailyDeficit) && Number.isFinite(actualDailyDeficit)
+    ? Math.max(0, Math.round(requiredDailyDeficit - actualDailyDeficit))
+    : null;
+
+  let status = 'adjustment';
+  if (weightRemaining <= 0) status = 'achieved';
+  else if (actualWeeklyLoss != null && requiredWeeklyLoss != null && actualWeeklyLoss >= requiredWeeklyLoss * 1.15) status = 'on-track';
+  else if (actualWeeklyLoss != null && requiredWeeklyLoss != null && actualWeeklyLoss >= requiredWeeklyLoss * 0.85) status = 'narrow';
+
+  return {
+    targetBfPct,
+    deadline,
+    status,
+    currentBfPct: current.bodyFatPct,
+    currentWeight: rollingAnchor.weight,
+    currentWeightDate: rollingAnchor.date,
+    targetWeight: +targetWeight.toFixed(1),
+    targetFedWeight: Number.isFinite(targetWeights.fedStateTarget) ? +targetWeights.fedStateTarget.toFixed(1) : null,
+    daysRemaining,
+    weightRemaining,
+    requiredWeeklyLoss,
+    actualWeeklyLoss,
+    requiredDailyDeficit,
+    effectiveCalorieTarget,
+    maintenance: tdeeProfile.maintenance,
+    dailyAdjustment,
+    projectedDate,
+    bufferDays,
+    paceSpanDays: pace?.spanDays ?? null,
+    creatineWater: current.creatineWater || 0
+  };
+}
+
 function scaleNoiseAssessment(days = allDays, sleep = sleepData) {
   const weightDays = days.filter(d => d.weight);
   if (!weightDays.length) return null;

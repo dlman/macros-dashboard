@@ -109,6 +109,24 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .bf-ms-time { margin-top: 0; font-size: 10px; font-weight: 800; color: var(--text-muted); }
 .bf-milestone.next .bf-ms-time { color: var(--col-amber); }
 .bf-ms-weight, .bf-ms-fed { font-size: 9px; color: var(--text-faint); line-height: 1.15; }
+.year-end-runway { display: grid; grid-template-columns: minmax(210px, 0.42fr) minmax(0, 1fr); gap: 14px; margin: -8px 0 18px; padding: 14px 16px; border: 1px solid var(--border-card); border-radius: 14px; background: color-mix(in srgb, var(--bg-card) 94%, transparent); }
+.year-end-runway.on-track, .year-end-runway.achieved { border-color: rgba(52,211,153,0.38); background: linear-gradient(135deg, rgba(52,211,153,0.10), rgba(15,23,42,0.32)); }
+.year-end-runway.narrow { border-color: rgba(251,191,36,0.38); background: linear-gradient(135deg, rgba(251,191,36,0.09), rgba(15,23,42,0.32)); }
+.year-end-runway.adjustment { border-color: rgba(248,113,113,0.38); background: linear-gradient(135deg, rgba(248,113,113,0.09), rgba(15,23,42,0.32)); }
+.runway-lead { min-width: 0; align-self: center; }
+.runway-lead .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 4px; }
+.runway-status { font-size: 22px; line-height: 1.05; font-weight: 800; color: var(--text-primary); }
+.year-end-runway.on-track .runway-status, .year-end-runway.achieved .runway-status { color: var(--col-green); }
+.year-end-runway.narrow .runway-status { color: var(--col-amber); }
+.year-end-runway.adjustment .runway-status { color: var(--col-red); }
+.runway-status-detail { margin-top: 5px; font-size: 11px; line-height: 1.35; color: var(--text-muted); }
+.runway-days { margin-top: 7px; font-size: 10px; color: var(--text-faint); }
+.runway-days strong { color: var(--text-secondary); }
+.runway-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.runway-metric { min-width: 0; padding: 10px 11px; border: 1px solid rgba(148,163,184,0.16); border-radius: 10px; background: color-mix(in srgb, var(--bg-input) 82%, transparent); }
+.runway-metric span { display: block; font-size: 9px; line-height: 1.2; text-transform: uppercase; letter-spacing: 0.65px; color: var(--text-faint); }
+.runway-metric strong { display: block; margin-top: 4px; font-size: 16px; line-height: 1.15; color: var(--text-primary); white-space: nowrap; }
+.runway-metric small { display: block; margin-top: 4px; font-size: 9px; line-height: 1.3; color: var(--text-muted); }
 .forecast-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: -2px 0 18px; }
 .forecast-card { background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(245,158,11,0.05)); border: 1px solid var(--border-card); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 144px; }
 .forecast-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }
@@ -873,6 +891,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .bf-milestone-strip { grid-template-columns: 1fr; gap: 14px; padding: 14px; margin-bottom: 14px; }
   .bf-strip-current { font-size: 21px; }
   .bf-track-wrap { padding: 26px 4px 44px; }
+  .year-end-runway { grid-template-columns: 1fr; padding: 14px; margin-bottom: 14px; }
+  .runway-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .forecast-strip { grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
   .forecast-card { padding: 11px 12px; }
   .forecast-card .value { font-size: 18px; }
@@ -986,6 +1006,10 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .bf-milestone.next { border-color: rgba(251,191,36,0.34); background: rgba(251,191,36,0.08); }
   .bf-dot { display: none; }
   .bf-ms-label { margin-top: 0; }
+  .year-end-runway { padding: 12px; margin-top: -6px; }
+  .runway-status { font-size: 20px; }
+  .runway-metric { padding: 9px; }
+  .runway-metric strong { font-size: 15px; white-space: normal; }
   .mini-metric-grid { grid-template-columns: 1fr; }
   .forecast-strip { margin-bottom: 12px; }
   .forecast-strip .forecast-card.mobile-secondary { display: none; }
