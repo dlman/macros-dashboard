@@ -56,8 +56,11 @@ def parse_data_js(path):
     step_re = re.compile(r'\{date:"(\d{4}-\d{2}-\d{2})",steps:(\d+)\}')
     steps_map = {m.group(1): int(m.group(2)) for m in step_re.finditer(src)}
 
-    print(f"  Parsed {len(days)} macro days, {len(steps_map)} step days")
-    return days, steps_map, src
+    vacation_match = re.search(r'const vacationDates\s*=\s*\[(.*?)\];', src, re.DOTALL)
+    vacation_dates = set(re.findall(r'"(\d{4}-\d{2}-\d{2})"', vacation_match.group(1))) if vacation_match else set()
+
+    print(f"  Parsed {len(days)} macro days, {len(steps_map)} step days, {len(vacation_dates)} vacation dates")
+    return days, steps_map, vacation_dates, src
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -122,13 +125,60 @@ def daterange(start_dt, end_dt_exclusive):
         cur += timedelta(days=1)
 
 
-def estimate_activity_terms(days, steps_map, end_date=None):
+def default_tdee_exclusions(vacation_dates=None):
+    excluded = set(vacation_dates or [])
+    break_start = datetime.strptime(DIET_BREAK_START, '%Y-%m-%d')
+    break_end = datetime.strptime(DIET_BREAK_END, '%Y-%m-%d') + timedelta(days=1)
+    excluded.update(day.strftime('%Y-%m-%d') for day in daterange(break_start, break_end))
+    return excluded
+
+
+def contiguous_exclusion_ranges(excluded_dates, end_date=None):
+    dates = sorted(date for date in set(excluded_dates or []) if not end_date or date <= end_date)
+    if not dates:
+        return []
+    ranges = []
+    start = previous = dates[0]
+    for date_str in dates[1:]:
+        expected = (datetime.strptime(previous, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+        if date_str != expected:
+            ranges.append((start, previous))
+            start = date_str
+        previous = date_str
+    ranges.append((start, previous))
+    return ranges
+
+
+def clean_tdee_segments(days, excluded_dates, end_date):
+    exclusion_ranges = contiguous_exclusion_ranges(excluded_dates, end_date)
+    segments = {}
+    for day in sorted(days, key=lambda item: item['date']):
+        if day['date'] > end_date or day['date'] in excluded_dates:
+            continue
+        segment_id = sum(1 for _, range_end in exclusion_ranges if range_end < day['date'])
+        segments.setdefault(segment_id, []).append(day)
+    return list(segments.values())
+
+
+def interval_crosses_exclusion(start_date, end_date, excluded_dates):
+    return any(start_date <= date_str < end_date for date_str in excluded_dates)
+
+
+def estimate_activity_terms(days, steps_map, end_date=None, excluded_dates=None):
     yesterday = end_date or (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    days_sorted = sorted([d for d in days if d['date'] <= yesterday], key=lambda d: d['date'])
+    excluded_dates = set(excluded_dates or [])
+    days_sorted = sorted(
+        [d for d in days if d['date'] <= yesterday and d['date'] not in excluded_dates],
+        key=lambda d: d['date']
+    )
     if not days_sorted:
       return None
 
-    valid_steps = [v for k, v in steps_map.items() if k <= yesterday]
+    range_start = days_sorted[0]['date']
+    valid_steps = [
+        value for date_str, value in steps_map.items()
+        if range_start <= date_str <= yesterday and date_str not in excluded_dates
+    ]
     avg_steps = float(np.mean(valid_steps)) if valid_steps else 6000.0
     days_by_date = {d['date']: d for d in days_sorted}
     weight_days = [d for d in days_sorted if d['weight'] is not None]
@@ -140,7 +190,7 @@ def estimate_activity_terms(days, steps_map, end_date=None):
         start_dt = datetime.strptime(prev['date'], '%Y-%m-%d')
         end_dt = datetime.strptime(cur['date'], '%Y-%m-%d')
         span = (end_dt - start_dt).days
-        if span < 1:
+        if span < 1 or interval_crosses_exclusion(prev['date'], cur['date'], excluded_dates):
             continue
         segment_dates = [(start_dt + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(span)]
         segment_days = [days_by_date.get(ds) for ds in segment_dates if days_by_date.get(ds)]
@@ -208,153 +258,140 @@ def estimate_activity_terms(days, steps_map, end_date=None):
         'avgSteps': round(avg_steps)
     }
 
-def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, prior_sigma=400.0, verbose=True):
-    """
-    Bayesian linear regression for TDEE over a supplied day slice.
-
-    For every weight observation w[i] at calendar day t_i (days since first
-    weight-in), define:
-
-        Y[i] = (w[i] − w_ref) × 3500 − cumNetCal[i]   [kcal]
-
-    where cumNetCal[i] = Σ (effectiveCal[t] − stepNEAT[t]) for t < t_i.
-
-    Energy balance gives:  Y[i] ≈ −TDEE × t_i + noise[i]
-
-    Fitting a line through all Y[i] vs t[i] simultaneously lets water-weight
-    noise average out (instead of blowing up each 1-day pair estimate).
-
-    Model:
-        Y = α + β × t + ε,   ε ~ N(0, σ_resid²)
-        TDEE_MLE = −β
-
-    Bayesian update with prior TDEE ~ N(prior_mean, prior_sigma²),
-    then add SIGMA_CAL_BIAS in quadrature as an irreducible floor.
-    """
+def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, prior_sigma=400.0, verbose=True, excluded_dates=None):
+    """Estimate one TDEE slope across clean, separately anchored diet segments."""
     yesterday = end_date or (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    candidate_days = [day for day in days if day['date'] <= yesterday]
+    if not candidate_days:
+        raise ValueError("Need macro data inside the requested TDEE window")
+    range_start = min(day['date'] for day in candidate_days)
+    excluded_dates = {
+        date for date in set(excluded_dates or [])
+        if range_start <= date <= yesterday
+    }
 
-    # Average steps (exclude today)
-    valid_steps = [v for k, v in steps_map.items() if k <= yesterday]
-    avg_steps   = float(np.mean(valid_steps)) if valid_steps else 6000.0
+    valid_steps = [
+        value for date_str, value in steps_map.items()
+        if range_start <= date_str <= yesterday and date_str not in excluded_dates
+    ]
+    avg_steps = float(np.mean(valid_steps)) if valid_steps else 6000.0
+    all_days_sorted = sorted(
+        [d for d in days if d['date'] <= yesterday and d['date'] not in excluded_dates],
+        key=lambda d: d['date']
+    )
 
-    # All days sorted, capped at yesterday
-    all_days_sorted = sorted([d for d in days if d['date'] <= yesterday],
-                             key=lambda d: d['date'])
-
-    # Build a per-date net-calorie map; impute missing with mean later
     cal_by_date = {}
-    for d in all_days_sorted:
-        if d['calories']:
-            steps    = steps_map.get(d['date'], avg_steps)
+    for day in all_days_sorted:
+        if day['calories']:
+            steps = steps_map.get(day['date'], avg_steps)
             neat_adj = (steps - avg_steps) * KCAL_PER_STEP
-            cal_by_date[d['date']] = effective_calories(d) - neat_adj
-
-    # Mean net calories for imputation (use only logged days)
+            cal_by_date[day['date']] = effective_calories(day) - neat_adj
     mean_net_cal = float(np.mean(list(cal_by_date.values()))) if cal_by_date else 1900.0
 
-    # Reference point: first day that has a weight reading
-    weight_days = [d for d in all_days_sorted if d['weight'] is not None]
-    if len(weight_days) < 5:
-        raise ValueError("Need at least 5 weight observations")
+    usable_segments = []
+    for segment in clean_tdee_segments(days, excluded_dates, yesterday):
+        weight_days = [day for day in segment if day['weight'] is not None]
+        if len(weight_days) >= 3:
+            usable_segments.append(weight_days)
+    if sum(len(weight_days) - 1 for weight_days in usable_segments) < 5:
+        raise ValueError("Need at least 5 clean weight observations outside excluded ranges")
 
-    ref_date = datetime.strptime(weight_days[0]['date'], '%Y-%m-%d')
-    w_ref    = weight_days[0]['weight']
+    t_vals, y_vals, segment_ids = [], [], []
+    obs_details, used_weight_days, segment_spans = [], [], []
+    for segment_id, weight_days in enumerate(usable_segments):
+        ref_date = datetime.strptime(weight_days[0]['date'], '%Y-%m-%d')
+        last_date = datetime.strptime(weight_days[-1]['date'], '%Y-%m-%d')
+        ref_weight = weight_days[0]['weight']
+        segment_spans.append((last_date - ref_date).days)
+        used_weight_days.extend(weight_days)
 
-    # Build cumulative net-cal from ref_date forward (1 entry per calendar day)
-    def to_t(date_str):
-        return (datetime.strptime(date_str, '%Y-%m-%d') - ref_date).days
+        cum_net_cal = {}
+        running = 0.0
+        current = ref_date
+        while current <= last_date:
+            date_str = current.strftime('%Y-%m-%d')
+            cum_net_cal[date_str] = running
+            running += cal_by_date.get(date_str, mean_net_cal)
+            current += timedelta(days=1)
 
-    # Cumulative cal up to (but not including) day t
-    cum_net_cal = {}         # date → cumulative net kcal from ref_date
-    running = 0.0
-    cur = ref_date
-    last_date = datetime.strptime(weight_days[-1]['date'], '%Y-%m-%d')
-    while cur <= last_date:
-        ds = cur.strftime('%Y-%m-%d')
-        cum_net_cal[ds] = running
-        running += cal_by_date.get(ds, mean_net_cal)
-        cur += timedelta(days=1)
-
-    # Assemble regression inputs: one row per weight observation
-    t_vals, Y_vals = [], []
-    obs_details    = []
-    for d in weight_days[1:]:          # skip the anchor (Y[0] = 0 by construction)
-        t_i = to_t(d['date'])
-        if t_i <= 0:
-            continue
-        cum = cum_net_cal.get(d['date'], 0.0)
-        Y_i = (d['weight'] - w_ref) * 3500.0 - cum   # ≈ -TDEE * t_i
-        t_vals.append(t_i)
-        Y_vals.append(Y_i)
-        obs_details.append({'date': d['date'], 't': t_i, 'Y': round(Y_i), 'implied': round(-Y_i / t_i)})
+        for day in weight_days[1:]:
+            t_i = (datetime.strptime(day['date'], '%Y-%m-%d') - ref_date).days
+            if t_i <= 0:
+                continue
+            y_i = (day['weight'] - ref_weight) * 3500.0 - cum_net_cal.get(day['date'], 0.0)
+            t_vals.append(t_i)
+            y_vals.append(y_i)
+            segment_ids.append(segment_id)
+            obs_details.append({
+                'date': day['date'],
+                'segment': segment_id + 1,
+                't': t_i,
+                'Y': round(y_i),
+                'implied': round(-y_i / t_i)
+            })
 
     t_arr = np.array(t_vals, dtype=float)
-    Y_arr = np.array(Y_vals, dtype=float)
+    y_arr = np.array(y_vals, dtype=float)
+    segment_count = len(usable_segments)
+    intercepts = np.zeros((len(t_arr), segment_count), dtype=float)
+    intercepts[np.arange(len(t_arr)), np.array(segment_ids, dtype=int)] = 1.0
+    design = np.column_stack([intercepts, t_arr])
+    coef, _, _, _ = np.linalg.lstsq(design, y_arr, rcond=None)
+    tdee_mle = -coef[-1]
 
-    # ── Weighted least squares (no intercept; the intercept absorbs w[0] noise)
-    # Design: [1, t]
-    X_mat = np.column_stack([np.ones_like(t_arr), t_arr])
-    coef, residuals, rank, sv = np.linalg.lstsq(X_mat, Y_arr, rcond=None)
-    alpha_hat, beta_hat = coef          # β ≈ −TDEE
-    TDEE_mle = -beta_hat
+    residuals = y_arr - (design @ coef)
+    n, p = len(t_arr), segment_count + 1
+    sigma_resid = float(np.std(residuals, ddof=p))
+    covariance = sigma_resid**2 * np.linalg.inv(design.T @ design)
+    se_tdee = float(np.sqrt(covariance[-1, -1]))
 
-    # Residual std (scatter of weight around the linear trend)
-    y_pred   = X_mat @ coef
-    resids   = Y_arr - y_pred
-    n, p     = len(t_arr), 2
-    sigma_resid = float(np.std(resids, ddof=p))
-
-    # Standard error of β from the covariance matrix of OLS
-    cov_mat  = sigma_resid**2 * np.linalg.inv(X_mat.T @ X_mat)
-    SE_beta  = float(np.sqrt(cov_mat[1, 1]))   # SE of the slope
-    SE_TDEE  = SE_beta                           # same magnitude, sign flipped
-
-    # ── Bayesian update (Normal prior on TDEE) ────────────────────────────────
-    mu_prior    = float(prior_mean)
-    sigma_prior = float(prior_sigma)
-    prec_prior  = 1.0 / sigma_prior**2
-    prec_data   = 1.0 / SE_TDEE**2
-
-    sigma_post  = float(np.sqrt(1.0 / (prec_prior + prec_data)))
-    mu_post     = sigma_post**2 * (mu_prior * prec_prior + TDEE_mle * prec_data)
-
-    # ── Add systematic calorie-logging bias in quadrature ─────────────────────
+    prior_precision = 1.0 / float(prior_sigma)**2
+    data_precision = 1.0 / se_tdee**2
+    sigma_post = float(np.sqrt(1.0 / (prior_precision + data_precision)))
+    mu_post = sigma_post**2 * (float(prior_mean) * prior_precision + tdee_mle * data_precision)
     sigma_final = float(np.sqrt(sigma_post**2 + SIGMA_CAL_BIAS**2))
-
-    activity_terms = estimate_activity_terms(all_days_sorted, steps_map, yesterday)
+    activity_terms = estimate_activity_terms(days, steps_map, yesterday, excluded_dates)
 
     if verbose:
-        print(f"  OLS TDEE: {round(TDEE_mle)} kcal  SE={round(SE_TDEE)} kcal  resid_std={round(sigma_resid)} kcal")
+        print(f"  OLS TDEE: {round(tdee_mle)} kcal  SE={round(se_tdee)} kcal  resid_std={round(sigma_resid)} kcal")
+        print(f"  Clean segments: {segment_count}; excluded dates: {len(excluded_dates)}")
         print(f"  Bayesian posterior (before bias floor): {round(mu_post)} ± {round(sigma_post)}")
         print(f"  After +{SIGMA_CAL_BIAS} kcal bias floor: ± {round(sigma_final)}")
         if activity_terms:
             print(f"  Activity terms: {activity_terms['stepPer1k']} kcal/1k steps, {activity_terms['liftDay']} kcal lift-day, {activity_terms['drinkDay']} kcal drink-day (R²={activity_terms['r2']})")
 
     return {
-        'date':        yesterday,
-        'mean':        round(mu_post),
-        'sigma':       round(sigma_final, 1),
-        'ci95Low':     round(mu_post - 1.96 * sigma_final),
-        'ci95High':    round(mu_post + 1.96 * sigma_final),
-        'ci68Low':     round(mu_post - sigma_final),
-        'ci68High':    round(mu_post + sigma_final),
-        'nObs':        len(obs_details),
-        'avgSteps':    round(avg_steps),
-        'SE_TDEE':     round(SE_TDEE),
-        'windowStart': weight_days[0]['date'],
-        'windowEnd':   weight_days[-1]['date'],
-        'spanDays':    to_t(weight_days[-1]['date']),
+        'date': yesterday,
+        'mean': round(mu_post),
+        'sigma': round(sigma_final, 1),
+        'ci95Low': round(mu_post - 1.96 * sigma_final),
+        'ci95High': round(mu_post + 1.96 * sigma_final),
+        'ci68Low': round(mu_post - sigma_final),
+        'ci68High': round(mu_post + sigma_final),
+        'nObs': len(obs_details),
+        'avgSteps': round(avg_steps),
+        'SE_TDEE': round(se_tdee),
+        'windowStart': used_weight_days[0]['date'],
+        'windowEnd': used_weight_days[-1]['date'],
+        'spanDays': sum(segment_spans),
+        'segmentCount': segment_count,
+        'excludedDays': len(excluded_dates),
+        'excludedRanges': [
+            {'start': start, 'end': end}
+            for start, end in contiguous_exclusion_ranges(excluded_dates, yesterday)
+        ],
         'activityTerms': activity_terms,
         'observations': obs_details,
     }
 
 
-def bayesian_tdee(days, steps_map):
-    return bayesian_tdee_profile(days, steps_map)
+def bayesian_tdee(days, steps_map, excluded_dates=None):
+    return bayesian_tdee_profile(days, steps_map, excluded_dates=excluded_dates)
 
 
-def bayesian_tdee_timeline(days, steps_map, window_days=35, min_weight_obs=5, min_span_days=14):
+def bayesian_tdee_timeline(days, steps_map, excluded_dates=None, window_days=35, min_weight_obs=5, min_span_days=14):
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    excluded_dates = set(excluded_dates or [])
     all_days_sorted = sorted([d for d in days if d['date'] <= yesterday], key=lambda d: d['date'])
     if not all_days_sorted:
         return []
@@ -373,7 +410,13 @@ def bayesian_tdee_timeline(days, steps_map, window_days=35, min_weight_obs=5, mi
         if span_days < min_span_days:
             continue
         try:
-            profile = bayesian_tdee_profile(window_slice, steps_map, end_date=target_date, verbose=False)
+            profile = bayesian_tdee_profile(
+                window_slice,
+                steps_map,
+                end_date=target_date,
+                verbose=False,
+                excluded_dates=excluded_dates,
+            )
         except Exception:
             continue
         timeline.append({
@@ -391,6 +434,9 @@ def bayesian_tdee_timeline(days, steps_map, window_days=35, min_weight_obs=5, mi
             'windowEnd': profile['windowEnd'],
             'spanDays': profile['spanDays'],
             'windowDays': window_days,
+            'segmentCount': profile.get('segmentCount', 1),
+            'excludedDays': profile.get('excludedDays', 0),
+            'excludedRanges': profile.get('excludedRanges', []),
             'activityTerms': profile.get('activityTerms')
         })
     return timeline
@@ -529,10 +575,11 @@ if __name__ == '__main__':
     data_js = sys.argv[1] if len(sys.argv) > 1 else 'js/data.js'
 
     print("── Parsing data.js ──────────────────────────────────────")
-    days, steps_map, src = parse_data_js(data_js)
+    days, steps_map, vacation_dates, src = parse_data_js(data_js)
+    excluded_dates = default_tdee_exclusions(vacation_dates)
 
     print("\n── Bayesian TDEE (full-trajectory regression) ───────────")
-    bt = bayesian_tdee(days, steps_map)
+    bt = bayesian_tdee(days, steps_map, excluded_dates)
     print(f"  Posterior: {bt['mean']} ± {bt['sigma']} kcal")
     print(f"  68% CI:   [{bt['ci68Low']}, {bt['ci68High']}]")
     print(f"  95% CI:   [{bt['ci95Low']}, {bt['ci95High']}]")
@@ -542,7 +589,7 @@ if __name__ == '__main__':
         print(f"    {obs['date']} (t={obs['t']}d): implied {obs['implied']} kcal")
 
     print("\n── Rolling Bayesian TDEE timeline ───────────────────────")
-    timeline = bayesian_tdee_timeline(days, steps_map)
+    timeline = bayesian_tdee_timeline(days, steps_map, excluded_dates)
     if timeline:
         print(f"  Timeline points: {len(timeline)}")
         print(f"  First point: {timeline[0]['date']}  ~{timeline[0]['mean']} kcal")

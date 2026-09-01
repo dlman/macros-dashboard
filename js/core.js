@@ -3118,6 +3118,9 @@ function freshBayesianTimelinePoint(days = allDays) {
 function workingTDEEProfile(days = allDays) {
   const bayes = freshBayesianPosterior(days);
   if (bayes) {
+    const segmentMethod = bayes.segmentCount > 1
+      ? ` across ${bayes.segmentCount} clean segments, excluding ${bayes.excludedDays || 0} vacation/diet-break days`
+      : '';
     return {
       maintenance: bayes.mean,
       weightedIntake: null,
@@ -3129,7 +3132,7 @@ function workingTDEEProfile(days = allDays) {
       confidenceScore: 0.82,
       rangeLow: bayes.ci68Low,
       rangeHigh: bayes.ci68High,
-      method: 'Bayesian posterior from full-range weight-change intervals and step-adjusted intake.',
+      method: `Bayesian posterior from full-range weight-change intervals and step-adjusted intake${segmentMethod}.`,
       source: 'bayesian',
       posterior: bayes
     };
@@ -3148,7 +3151,7 @@ function workingTDEEProfile(days = allDays) {
       confidenceScore,
       rangeLow: timelinePoint.ci68Low,
       rangeHigh: timelinePoint.ci68High,
-      method: `Rolling Bayesian posterior from a ${timelinePoint.windowDays || 35}-day step-aware window ending ${timelinePoint.date}.`,
+      method: `Rolling Bayesian posterior from a ${timelinePoint.windowDays || 35}-day step-aware window ending ${timelinePoint.date}${timelinePoint.segmentCount > 1 ? `, split into ${timelinePoint.segmentCount} clean segments around vacation/diet-break dates` : ''}.`,
       source: 'bayesian_timeline',
       posterior: timelinePoint
     };

@@ -1396,7 +1396,7 @@ function renderExecutiveSummary() {
         <div class="value">${fullBayesTdee ? `~${energyLabel(fullBayesTdee.mean)}` : '—'}</div>
         <div class="sub">${fullBayesTdee ? `${energyLabel(fullBayesTdee.ci68Low)}–${energyLabel(fullBayesTdee.ci68High)} 68% credible interval` : 'Bayesian posterior is only available when the cached model matches the current full analytics range.'}</div>
         ${fullBayesTdee ? '<div class="confidence-pill high">High confidence</div>' : '<div class="confidence-pill low">Low confidence</div>'}
-        <div class="tiny">${fullBayesTdee ? `${fullBayesTdee.nObs} weight-change intervals · avg steps ${Math.round(fullBayesTdee.avgSteps || 0).toLocaleString()}/day` : 'Run update_bayes.py after adding new data to restore the Bayesian full-range posterior.'}</div>
+        <div class="tiny">${fullBayesTdee ? `${fullBayesTdee.nObs} weight-change intervals across ${fullBayesTdee.segmentCount || 1} clean segment${fullBayesTdee.segmentCount === 1 ? '' : 's'} · ${fullBayesTdee.excludedDays || 0} vacation/diet-break days excluded · avg steps ${Math.round(fullBayesTdee.avgSteps || 0).toLocaleString()}/day` : 'Run update_bayes.py after adding new data to restore the Bayesian full-range posterior.'}</div>
       </div>
       <div class="tdee-detail-card">
         <div class="eyebrow">Recent-Window Bayes</div>

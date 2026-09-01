@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 PY_FILES = [
     ROOT / "update_bayes.py",
+    ROOT / "scripts" / "test_update_bayes.py",
     ROOT / "scripts" / "sync_google_sheets.py",
     ROOT / "scripts" / "sync_whoop.py",
     ROOT / "scripts" / "dev_sync.py",
@@ -77,6 +78,7 @@ def main() -> None:
         run_check([sys.executable, "-m", "py_compile", str(py_file)], f"Python syntax: {py_file.relative_to(ROOT)}")
     for js_file in JS_FILES:
         run_check(["node", "--check", str(js_file)], f"JS syntax: {js_file.relative_to(ROOT)}")
+    run_check([sys.executable, str(ROOT / "scripts" / "test_update_bayes.py")], "Bayesian TDEE segmentation tests")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 
