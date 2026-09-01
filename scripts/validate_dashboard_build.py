@@ -19,6 +19,7 @@ PY_FILES = [
     ROOT / "update_bayes.py",
     ROOT / "scripts" / "test_update_bayes.py",
     ROOT / "scripts" / "sync_google_sheets.py",
+    ROOT / "scripts" / "sync_steps.py",
     ROOT / "scripts" / "sync_whoop.py",
     ROOT / "scripts" / "dev_sync.py",
     ROOT / "scripts" / "validate_dashboard_build.py",

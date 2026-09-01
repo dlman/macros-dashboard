@@ -103,6 +103,7 @@ If both are provided, the payload rows are merged first and the single-day row i
 ```bash
 python3 scripts/sync_steps.py --date 2026-04-21 --steps 8450
 python3 scripts/sync_steps.py --payload-json '[{"date":"2026-04-20","steps":7544},{"date":"2026-04-21","steps":8450}]'
+python3 scripts/sync_steps.py --apple-health-export "/path/to/apple_health_export/export.xml" --start-date 2026-01-01
 python3 update_bayes.py js/data.js
 ```
 

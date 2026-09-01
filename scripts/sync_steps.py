@@ -5,6 +5,7 @@ Merge Apple Health step rows into js/data.js.
 Supports either:
   1. a single day update via --date / --steps
   2. a JSON payload via --payload-json
+  3. an Apple Health export.xml via --apple-health-export
 
 Examples:
   python scripts/sync_steps.py --date 2026-04-21 --steps 8450
@@ -23,7 +24,8 @@ import argparse
 import json
 import os
 import re
-from collections import OrderedDict
+import xml.etree.ElementTree as ET
+from collections import OrderedDict, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -91,8 +93,51 @@ def _load_payload_entries(payload_json: str) -> list[dict[str, Any]]:
     return [_normalize_entry(entry) for entry in entries]
 
 
+def _load_apple_health_export(path: str, start_date: str | None = None, end_date: str | None = None) -> list[dict[str, Any]]:
+    export_path = Path(path).expanduser().resolve()
+    if not export_path.is_file():
+        raise SystemExit(f"Apple Health export not found: {export_path}")
+
+    totals: defaultdict[str, float] = defaultdict(float)
+    sources: set[str] = set()
+    for _, element in ET.iterparse(export_path, events=("end",)):
+        attrs = element.attrib
+        if element.tag == "Record" and attrs.get("type") == "HKQuantityTypeIdentifierStepCount":
+            date = parse_date(attrs.get("startDate", "")[:10])
+            if date and (not start_date or date >= start_date) and (not end_date or date <= end_date):
+                try:
+                    totals[date] += float(attrs.get("value", "0"))
+                except ValueError as exc:
+                    raise SystemExit(f"Invalid step value in Apple Health export: {attrs.get('value')!r}") from exc
+                sources.add(attrs.get("sourceName", "unknown"))
+        element.clear()
+
+    if not totals:
+        raise SystemExit(f"No Apple Health step records found in {export_path}")
+    if len(sources) > 1:
+        source_list = ", ".join(sorted(sources))
+        raise SystemExit(
+            "Apple Health export contains multiple step sources, which may overlap and double-count. "
+            f"Found: {source_list}"
+        )
+
+    print(f"Parsed {len(totals)} Apple Health step days from {next(iter(sources))}")
+    return [{"date": date, "steps": round(totals[date])} for date in sorted(totals)]
+
+
 def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
     updates: list[dict[str, Any]] = []
+
+    if args.apple_health_export:
+        start_date = parse_date(args.start_date) if args.start_date else None
+        end_date = parse_date(args.end_date) if args.end_date else None
+        if args.start_date and not start_date:
+            raise SystemExit(f"Invalid Apple Health start date: {args.start_date!r}")
+        if args.end_date and not end_date:
+            raise SystemExit(f"Invalid Apple Health end date: {args.end_date!r}")
+        if start_date and end_date and start_date > end_date:
+            raise SystemExit("Apple Health start date must be on or before the end date.")
+        updates.extend(_load_apple_health_export(args.apple_health_export, start_date, end_date))
 
     payload_json = (
         args.payload_json
@@ -114,7 +159,7 @@ def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
         updates.append(_normalize_entry({"date": raw_date, "steps": raw_steps}))
 
     if not updates:
-        raise SystemExit("No step updates provided. Use --date/--steps or --payload-json.")
+        raise SystemExit("No step updates provided. Use --apple-health-export, --date/--steps, or --payload-json.")
 
     merged: OrderedDict[str, dict[str, Any]] = OrderedDict()
     for entry in sorted(updates, key=lambda row: row["date"]):
@@ -135,6 +180,9 @@ def main() -> None:
     parser.add_argument("--date", help="Single date to update, e.g. 2026-04-21")
     parser.add_argument("--steps", help="Single steps value to merge for --date")
     parser.add_argument("--payload-json", help="JSON list/object of step rows")
+    parser.add_argument("--apple-health-export", help="Path to an Apple Health export.xml file")
+    parser.add_argument("--start-date", help="Optional first date to import from Apple Health")
+    parser.add_argument("--end-date", help="Optional last date to import from Apple Health")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
     args = parser.parse_args()
 
