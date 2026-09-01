@@ -240,7 +240,9 @@ const data = {
     {date:"2026-08-30",protein:184,carbs:97,fat:82,calories:1940,weight:152.9,lifting:"Y",drinks:null,notes:"coconut water, kimchi jigae, chicken sausages, edamame snack, david protein bar, protein shake"},
     {date:"2026-08-31",protein:153,carbs:86,fat:45,calories:1410,weight:153.8,lifting:null,drinks:"4.5 drinks",notes:"lunch pho, chicken meatballs, protein bar, protein shake, edamame snack 2x"}
   ],
-  Sep: [],
+  Sep: [
+    {date:"2026-09-01",protein:106,carbs:12,fat:42,calories:880,weight:153.8,lifting:null,drinks:null,notes:"protein shake, chinese lunch buffet, string cheese, chicken sausages"}
+  ],
   Oct: [],
   Nov: [],
   Dec: []
