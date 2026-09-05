@@ -1811,6 +1811,7 @@ function refreshDashboard() {
     : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
   function safe(fn, label) { try { fn(); } catch (e) { console.error(`[Dashboard] ${label} failed:`, e); } }
   safe(() => renderExecutiveSummary(), 'Executive Summary');
+  safe(() => renderPersonalPlanning(), 'Weekly Plan and Progress Changes');
   safe(() => renderStatCards(), 'Stat Cards');
   safe(() => renderHighlights(), 'Highlights');
   safe(() => renderSleepStatCards(), 'Sleep Stat Cards');

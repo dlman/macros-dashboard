@@ -1835,6 +1835,7 @@ const TAB_CHROME = {
     jumps: [
       { label: 'Hero', selector: '.hero-stage[data-tab-section="overview"]' },
       { label: 'Summary', selector: '#overviewSummarySection' },
+      { label: 'This Week', selector: '#personalPlanningSection' },
       { label: 'Latest Week', selector: '#weeklyReportShell' }
     ]
   },

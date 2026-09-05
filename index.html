@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css?v=2026.08.26.2">
+<link rel="stylesheet" href="./styles.css?v=2026.09.04.1">
 </head>
 <body>
 
@@ -135,6 +135,25 @@
       <p>Use this section first. It summarizes the selected range, compares it with the previous period, and highlights the highest-leverage actions.</p>
     </div>
     <div class="kpi-grid" id="executiveKpis"></div>
+    <div class="personal-planning" id="personalPlanningSection">
+      <section class="week-planner" aria-labelledby="weekPlanTitle">
+        <div class="personal-tool-header">
+          <div><h3 id="weekPlanTitle">Rest of This Week</h3><p id="weekPlanRange"></p></div>
+          <button type="button" class="report-btn" id="weekPlanReset">Reset plan</button>
+        </div>
+        <div id="weekPlanResult" class="week-plan-result" aria-live="polite" aria-atomic="true"></div>
+        <div class="week-plan-meta"><span id="weekPlanModel"></span><span id="weekPlanSaveState"></span></div>
+        <div id="weekPlanRows"></div>
+        <details class="week-assumptions"><summary>Assumptions &amp; coverage</summary><p id="weekPlanAssumptions"></p></details>
+      </section>
+      <section class="progress-changes" aria-labelledby="progressChangeTitle">
+        <div class="personal-tool-header">
+          <div><h3 id="progressChangeTitle">What Changed Your Progress?</h3><p id="progressChangeRange"></p></div>
+          <label class="week-input"><span>Compare periods</span><select id="progressChangeWindow"><option value="14">14 days vs prior 14</option><option value="28">28 days vs prior 28</option></select></label>
+        </div>
+        <div id="progressChangeContent"></div>
+      </section>
+    </div>
     <details class="mobile-detail-shell" id="executiveDeepDive" open>
       <summary>Executive Deep Dive</summary>
     <div class="decision-grid">
@@ -751,8 +770,10 @@
 <!-- HEATMAP TOOLTIP -->
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
-<script src="./js/data.js?v=2026.09.01.3"></script>
-<script src="./js/core.js?v=2026.09.01.3"></script>
-<script src="./js/charts.js?v=2026.09.01.3"></script>
-<script src="./js/interactions.js?v=2026.08.26.2"></script>
+<script src="./js/data.js?v=2026.09.04.1"></script>
+<script src="./js/core.js?v=2026.09.04.1"></script>
+<script src="./js/weekly-planning.js?v=2026.09.04.1"></script>
+<script src="./js/weekly-planning-ui.js?v=2026.09.04.1"></script>
+<script src="./js/charts.js?v=2026.09.04.1"></script>
+<script src="./js/interactions.js?v=2026.09.04.1"></script>
 </body></html>

@@ -28,6 +28,8 @@ PY_FILES = [
 JS_FILES = [
     ROOT / "js" / "data.js",
     ROOT / "js" / "core.js",
+    ROOT / "js" / "weekly-planning.js",
+    ROOT / "js" / "weekly-planning-ui.js",
     ROOT / "js" / "charts.js",
     ROOT / "js" / "interactions.js",
 ]
@@ -80,6 +82,7 @@ def main() -> None:
     for js_file in JS_FILES:
         run_check(["node", "--check", str(js_file)], f"JS syntax: {js_file.relative_to(ROOT)}")
     run_check([sys.executable, str(ROOT / "scripts" / "test_update_bayes.py")], "Bayesian TDEE segmentation tests")
+    run_check(["node", "--test", str(ROOT / "scripts" / "test_weekly_planning.cjs")], "Weekly planning and progress-change tests")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 
