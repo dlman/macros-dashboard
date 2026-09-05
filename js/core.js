@@ -1835,7 +1835,6 @@ const TAB_CHROME = {
     jumps: [
       { label: 'Hero', selector: '.hero-stage[data-tab-section="overview"]' },
       { label: 'Summary', selector: '#overviewSummarySection' },
-      { label: 'This Week', selector: '#personalPlanningSection' },
       { label: 'Latest Week', selector: '#weeklyReportShell' }
     ]
   },
@@ -1874,7 +1873,8 @@ const TAB_CHROME = {
       { label: 'Trend', selector: '#exploreTrendSection' },
       { label: 'Food', selector: '#exploreFoodSection' },
       { label: 'Audit', selector: '#exploreAuditSection' },
-      { label: 'Scenario', selector: '#exploreScenarioSection' }
+      { label: 'Scenario', selector: '#exploreScenarioSection' },
+      { label: 'This Week', selector: '#personalPlanningSection' }
     ]
   }
 };
