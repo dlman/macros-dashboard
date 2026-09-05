@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css?v=2026.09.04.1">
+<link rel="stylesheet" href="./styles.css?v=2026.09.04.3">
 </head>
 <body>
 
@@ -630,6 +630,22 @@
         </div>
       </details>
 
+      <details class="explore-module" id="exploreSuccessfulWeeksModule" open>
+        <summary>Easiest Successful Weeks</summary>
+        <div class="explore-module-inner">
+          <div class="personal-tool-header" id="successfulWeeksSection">
+            <div><h3>Easiest Successful Weeks</h3><p id="successfulWeeksStatus"></p></div>
+            <label class="week-input"><span>Look back</span><select id="successfulWeeksLookback"><option value="12">Last 12 weeks</option><option value="0">Year to date</option></select></label>
+          </div>
+          <div id="successfulWeeksContent"></div>
+          <details class="week-assumptions successful-method"><summary>Method &amp; excluded weeks</summary>
+            <p>Completed Monday-Sunday weeks with 7 food logs. Mean weight must fall at least 0.2 lbs versus the prior week and remain at or below that level the following week, with at least 4 weigh-ins in each week. The highest food intake ranks first; alcohol does not improve rank. Steps and sleep require 5 recorded days for an average. Lift days count marked lifting entries on logged days.</p>
+            <p>All three weeks must be free of vacation/diet-break days and a modeled creatine-water change above 0.25 lbs. Scale changes can still include water. Higher food intake is a proxy for less restriction, not a measurement of hunger or effort. Earlier weeks may reflect a different body weight and maintenance level. Intake is logged, not error-adjusted; small differences may be logging noise.</p>
+            <p id="successfulWeeksCoverage"></p>
+          </details>
+        </div>
+      </details>
+
       <details class="explore-module" id="exploreCorrModule" open>
         <summary>📊 Full Correlation Matrix</summary>
         <div class="explore-module-inner">
@@ -771,9 +787,9 @@
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
 <script src="./js/data.js?v=2026.09.04.1"></script>
-<script src="./js/core.js?v=2026.09.04.2"></script>
-<script src="./js/weekly-planning.js?v=2026.09.04.1"></script>
-<script src="./js/weekly-planning-ui.js?v=2026.09.04.1"></script>
+<script src="./js/core.js?v=2026.09.04.3"></script>
+<script src="./js/weekly-planning.js?v=2026.09.04.3"></script>
+<script src="./js/weekly-planning-ui.js?v=2026.09.04.3"></script>
 <script src="./js/charts.js?v=2026.09.04.1"></script>
 <script src="./js/interactions.js?v=2026.09.04.1"></script>
 </body></html>

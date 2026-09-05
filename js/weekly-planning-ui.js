@@ -1,5 +1,6 @@
 const WEEK_PLAN_STORAGE = 'macros_dashboard_week_plans_v1';
 let progressChangeWindow = 14;
+let successfulWeeksLookback = 12;
 let weekPlanStorageAvailable = true;
 let weekPlanState = (() => {
   try {
@@ -19,6 +20,7 @@ function planningDays(endDate) {
       ...day, date,
       drinkCalories: day ? estimateDrinkCalories(day.drinks) : null,
       steps: getStepForDate(date),
+      sleepHours: sleepByDate[date]?.hours ?? null,
       excluded: isVacationDate(date) || isInDietBreak(date),
       creatineWater: creatineScaleAdjustmentForDate(date)
     };
@@ -176,6 +178,43 @@ function renderPersonalPlanning() {
   renderWeekPlanRows(plan);
   updateWeekPlanResults(plan);
   renderProgressChanges();
+  renderSuccessfulWeeks();
+}
+
+function renderSuccessfulWeeks() {
+  const root = document.getElementById('successfulWeeksContent');
+  if (!root) return;
+  const expanded = new Set([...root.querySelectorAll('.successful-week[open]')].map(row => row.dataset.week));
+  const endDate = analyticsCutoffDate();
+  const result = WeeklyPlanning.successfulWeeks({ endDate, days: planningDays(endDate), lookbackWeeks: successfulWeeksLookback });
+  const recent = result.recent;
+  const range = week => `${formatShortDate(week.start)} - ${formatShortDate(week.end)}`;
+  const signed = (value, format) => value === null ? 'Unavailable' : `${value > 0 ? '+' : value < 0 ? '\u2212' : ''}${format(Math.abs(value))}`;
+  const metrics = [
+    { label: 'Mean weight', key: 'weight', format: weightLabel, coverage: 'weightDays' },
+    { label: 'Food / day', key: 'food', format: energyLabel, coverage: 'foodDays' },
+    { label: 'Alcohol est. / day', key: 'alcohol', format: energyLabel, coverage: 'foodDays' },
+    { label: 'Steps / day', key: 'steps', format: value => value === null ? '\u2014' : Math.round(value).toLocaleString(), coverage: 'stepDays' },
+    { label: 'Sleep / night', key: 'sleep', format: value => value === null ? '\u2014' : `${value.toFixed(1)}h`, coverage: 'sleepDays' },
+    { label: 'Lift days', key: 'lifts', format: value => value === null ? '\u2014' : String(value), coverage: 'eventDays' },
+    { label: 'Drink nights', key: 'drinkNights', format: value => value === null ? '\u2014' : String(value), coverage: 'foodDays' }
+  ];
+  document.getElementById('successfulWeeksStatus').textContent = `${result.matches.length > 5 ? 'Top 5 of ' : ''}${result.matches.length} qualifying weeks of ${result.considered} reviewed. Ranked by food intake, not alcohol. Comparison: ${range(recent)}${recent.excluded ? ' (vacation / break)' : ''}.`;
+  root.innerHTML = result.matches.length ? result.matches.slice(0, 5).map((week, index) => `<details class="successful-week" data-week="${week.start}" ${expanded.has(week.start) ? 'open' : ''}>
+    <summary><span class="successful-week-date"><strong>${range(week)}</strong><small>#${index + 1} by food intake</small></span>
+      <span><strong>${energyLabel(week.food)}</strong><small>food / day</small></span>
+      <span class="plan-positive"><strong>${signed(week.change, weightLabel)}</strong><small>7-day avg change</small></span></summary>
+    <div class="successful-week-detail">
+      <div class="successful-weight-sequence"><span>Prior week<strong>${weightLabel(week.priorWeight)}</strong><small>${week.priorWeightDays}/7 weigh-ins</small></span><span>This week<strong>${weightLabel(week.weight)}</strong><small>${week.weightDays}/7 weigh-ins</small></span><span>Following week<strong>${weightLabel(week.nextWeight)}</strong><small>${week.nextWeightDays}/7 weigh-ins</small></span></div>
+      <table class="successful-comparison"><thead><tr><th scope="col">Routine</th><th scope="col">This week</th><th scope="col">Latest week</th><th scope="col">Difference</th></tr></thead>
+        <tbody>${metrics.map(({ label, key, format, coverage }) => {
+          const difference = week[key] === null || recent[key] === null ? null : week[key] - recent[key];
+          return `<tr><th scope="row">${label}</th><td>${format(week[key])}<small>${week[coverage]}/7 days</small></td><td>${format(recent[key])}<small>${recent[coverage]}/7 days</small></td><td>${signed(difference, format)}</td></tr>`;
+        }).join('')}</tbody></table>
+      <p class="successful-context">Food + alcohol: ${energyLabel(week.food + week.alcohol)}/day. Weekly mean weights use ${week.weightDays}/7 weigh-ins here. These are observed patterns, not proof of fat loss or a calorie prescription.</p>
+    </div></details>`).join('') : '<p class="successful-empty">No weeks qualify in this window yet. Incomplete logs and unconfirmed weight drops are not ranked.</p>';
+  const labels = { pending: 'awaiting following week', vacation: 'vacation / break overlap', food: 'incomplete food logs', weight: 'insufficient weigh-ins', creatine: 'creatine transition', trend: 'no sustained drop' };
+  document.getElementById('successfulWeeksCoverage').textContent = Object.entries(result.skipped).filter(([, count]) => count).map(([key, count]) => `${count} ${labels[key]}`).join(' \u00b7 ') || 'All reviewed weeks qualify.';
 }
 
 document.getElementById('weekPlanRows').addEventListener('input', event => {
@@ -200,4 +239,8 @@ document.getElementById('weekPlanReset').addEventListener('click', () => {
 document.getElementById('progressChangeWindow').addEventListener('change', event => {
   progressChangeWindow = Number(event.target.value) === 28 ? 28 : 14;
   renderProgressChanges();
+});
+document.getElementById('successfulWeeksLookback').addEventListener('change', event => {
+  successfulWeeksLookback = event.target.value === '0' ? 0 : 12;
+  renderSuccessfulWeeks();
 });

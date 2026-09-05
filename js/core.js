@@ -1874,7 +1874,8 @@ const TAB_CHROME = {
       { label: 'Food', selector: '#exploreFoodSection' },
       { label: 'Audit', selector: '#exploreAuditSection' },
       { label: 'Scenario', selector: '#exploreScenarioSection' },
-      { label: 'This Week', selector: '#personalPlanningSection' }
+      { label: 'This Week', selector: '#personalPlanningSection' },
+      { label: 'Successful Weeks', selector: '#successfulWeeksSection' }
     ]
   }
 };

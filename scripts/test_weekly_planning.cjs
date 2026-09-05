@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { weekStart, shift, planWeek, progressChanges } = require('../js/weekly-planning.js');
+const { weekStart, shift, planWeek, progressChanges, successfulWeeks } = require('../js/weekly-planning.js');
 
 const settings = { today: '2026-09-04', days: [], foodGoal: 2000, maintenance: { mean: 2500, low: 2300, high: 2700 }, baselineSteps: 7000 };
 const loggedDays = Array.from({ length: 4 }, (_, i) => ({ date: shift('2026-08-31', i), calories: 2000, drinkCalories: 0, steps: 7000 }));
@@ -131,4 +131,90 @@ test('calendar windows stay fixed and ignore data after their end date', () => {
   assert.equal(result.priorStart, '2026-08-07');
   assert.equal(result.currentCoverage, 14);
   assert.equal(result.food.after, 2100);
+});
+
+function successfulHistory() {
+  return Array.from({ length: 56 }, (_, i) => ({
+    date: shift('2026-06-01', i), calories: 2000 + Math.floor(i / 7) * 100,
+    weight: 160 - i * 0.1, drinkCalories: i < 14 ? 1000 : 0,
+    steps: 8000, sleepHours: 6.5, lifting: i % 3 === 0 ? 'Y' : '', creatineWater: 0
+  }));
+}
+
+test('successful weeks rank food, not alcohol or speed, and require next-week confirmation', () => {
+  const result = successfulWeeks({ endDate: '2026-07-26', days: successfulHistory() });
+  assert.equal(result.matches.length, 6);
+  assert.equal(result.matches[0].start, '2026-07-13');
+  assert.equal(result.matches[0].food, 2600);
+  assert.ok(Math.abs(result.matches[0].change + 0.7) < 1e-9);
+  assert.equal(result.skipped.pending, 1);
+  assert.equal(result.recent.start, '2026-07-20');
+  assert.equal(result.recent.end, '2026-07-26');
+});
+
+test('a transient drop followed by rebound is not a successful week', () => {
+  const days = successfulHistory().map((day, i) => ({ ...day, weight: i >= 49 ? 170 : day.weight }));
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  assert.ok(!result.matches.some(week => week.start === '2026-07-13'));
+  assert.ok(result.skipped.trend > 0);
+});
+
+test('the exact 0.2-pound threshold is not lost to floating-point rounding', () => {
+  const days = successfulHistory().map((day, index) => ({ ...day, weight: 160 - index * 0.2 / 7 }));
+  assert.equal(successfulWeeks({ endDate: '2026-07-26', days }).matches.length, 6);
+});
+
+test('vacation and re-entry windows cannot rank as successful weeks', () => {
+  const days = successfulHistory();
+  days[30].excluded = true;
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  for (const start of ['2026-06-22', '2026-06-29', '2026-07-06']) {
+    assert.ok(!result.matches.some(week => week.start === start));
+  }
+  assert.equal(result.skipped.vacation, 3);
+});
+
+test('incomplete food logs and sparse weight records do not rank', () => {
+  const days = successfulHistory();
+  days[43].calories = null;
+  for (let i = 28; i < 32; i++) days[i].weight = null;
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  assert.ok(result.skipped.food > 0);
+  assert.ok(result.skipped.weight > 0);
+  assert.ok(!result.matches.some(week => week.start === '2026-07-13'));
+});
+
+test('missing steps and sleep remain unknown instead of looking like an easier routine', () => {
+  const days = successfulHistory().map(day => ({ ...day, steps: null, sleepHours: null }));
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  assert.equal(result.matches.length, 6);
+  assert.equal(result.matches[0].steps, null);
+  assert.equal(result.matches[0].sleep, null);
+  assert.equal(result.matches[0].stepDays, 0);
+});
+
+test('null lifting flags on logged days mean unmarked, not missing records', () => {
+  const days = successfulHistory().map(day => ({ ...day, lifting: day.lifting || null }));
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  assert.equal(result.matches[0].lifts, 3);
+  assert.equal(result.matches[0].eventDays, 7);
+  assert.equal(result.matches[0].priorWeightDays, 7);
+  assert.equal(result.matches[0].nextWeightDays, 7);
+});
+
+test('changing creatine loading is excluded, stabilized loading is retained', () => {
+  const days = successfulHistory().map((day, i) => ({ ...day, creatineWater: i >= 21 ? 1.8 : 0 }));
+  const result = successfulWeeks({ endDate: '2026-07-26', days });
+  assert.equal(result.skipped.creatine, 2);
+  assert.ok(result.matches.some(week => week.start === '2026-07-13'));
+});
+
+test('successful-week scope respects complete weeks, lookback, and future data', () => {
+  const days = successfulHistory().concat({ date: '2026-08-03', calories: 9999, weight: 1 });
+  const result = successfulWeeks({ endDate: '2026-07-23', days, lookbackWeeks: 2 });
+  assert.equal(result.recent.start, '2026-07-13');
+  assert.equal(result.considered, 2);
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].start, '2026-07-06');
+  assert.equal(successfulWeeks({ endDate: '2026-07-23', days: [] }).matches.length, 0);
 });

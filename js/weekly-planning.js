@@ -127,7 +127,60 @@
     };
   }
 
-  const api = { weekStart, shift, planWeek, progressChanges };
+  function successfulWeeks({ endDate, days, lookbackWeeks = 12 }) {
+    const byDate = new Map(days.filter(day => day.date <= endDate).map(day => [day.date, day]));
+    const latestStart = shift(weekStart(shift(endDate, 1)), -7);
+    const firstDate = [...byDate.keys()].sort()[0] || endDate;
+    const earliest = lookbackWeeks === 0 ? `${endDate.slice(0, 4)}-01-01` : shift(latestStart, -7 * (lookbackWeeks - 1));
+    const rowsFor = start => dates(start, 7).map(date => ({ ...byDate.get(date), date }));
+    function describe(start) {
+      const rows = rowsFor(start);
+      const food = rows.filter(hasFood);
+      const weights = rows.filter(row => finite(row.weight) && row.weight > 0);
+      const steps = rows.filter(row => finite(row.steps) && row.steps >= 0);
+      const sleep = rows.filter(row => finite(row.sleepHours) && row.sleepHours > 0);
+      // Unmarked lifting is null in the source; only a missing daily log is unknown.
+      const events = rows.filter(hasFood);
+      return {
+        start, end: shift(start, 6), foodDays: food.length, weightDays: weights.length,
+        stepDays: steps.length, sleepDays: sleep.length, eventDays: events.length,
+        food: food.length === 7 ? mean(food.map(row => row.calories)) : null,
+        alcohol: food.length === 7 ? mean(food.map(row => row.drinkCalories || 0)) : null,
+        weight: weights.length >= 4 ? mean(weights.map(row => row.weight)) : null,
+        steps: steps.length >= 5 ? mean(steps.map(row => row.steps)) : null,
+        sleep: sleep.length >= 5 ? mean(sleep.map(row => row.sleepHours)) : null,
+        lifts: events.length === 7 ? events.filter(row => row.lifting === 'Y').length : null,
+        drinkNights: food.length === 7 ? food.filter(row => row.drinkCalories > 0).length : null,
+        excluded: rows.some(row => row.excluded)
+      };
+    }
+    const recent = describe(latestStart);
+    const matches = [];
+    const skipped = { pending: 0, vacation: 0, food: 0, weight: 0, creatine: 0, trend: 0 };
+    let considered = 0;
+    for (let start = latestStart; start >= earliest && start >= firstDate; start = shift(start, -7)) {
+      considered++;
+      const current = describe(start);
+      const prior = describe(shift(start, -7));
+      const next = describe(shift(start, 7));
+      if (next.end > endDate) { skipped.pending++; continue; }
+      if (prior.excluded || current.excluded || next.excluded) { skipped.vacation++; continue; }
+      if (current.food === null) { skipped.food++; continue; }
+      if ([prior, current, next].some(week => week.weight === null)) { skipped.weight++; continue; }
+      const context = [...rowsFor(prior.start), ...rowsFor(start), ...rowsFor(next.start)];
+      const creatine = context.map(row => row.creatineWater).filter(finite);
+      if (creatine.length && Math.max(...creatine) - Math.min(...creatine) > 0.25) { skipped.creatine++; continue; }
+      const change = current.weight - prior.weight;
+      if (change > -0.2 + 1e-9 || next.weight > current.weight + 1e-9) { skipped.trend++; continue; }
+      matches.push({ ...current, change, priorWeight: prior.weight, nextWeight: next.weight,
+        priorWeightDays: prior.weightDays, nextWeightDays: next.weightDays });
+    }
+    // Rank food, not total intake: alcohol calories should not improve the ranking.
+    matches.sort((a, b) => b.food - a.food || b.start.localeCompare(a.start));
+    return { matches, recent, considered, skipped, earliest, endDate };
+  }
+
+  const api = { weekStart, shift, planWeek, progressChanges, successfulWeeks };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.WeeklyPlanning = api;
 })(typeof window === 'undefined' ? globalThis : window);
