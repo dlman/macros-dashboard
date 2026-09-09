@@ -83,6 +83,7 @@ def main() -> None:
         run_check(["node", "--check", str(js_file)], f"JS syntax: {js_file.relative_to(ROOT)}")
     run_check([sys.executable, str(ROOT / "scripts" / "test_update_bayes.py")], "Bayesian TDEE segmentation tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_weekly_planning.cjs")], "Weekly planning and progress-change tests")
+    run_check(["node", "--test", str(ROOT / "scripts" / "test_body_composition.cjs")], "Body composition consistency tests")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 
