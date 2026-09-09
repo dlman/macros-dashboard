@@ -244,6 +244,13 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .forecast-card .value { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 .forecast-card .sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.45; }
 .forecast-card .tiny { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
+.tdee-sensitivity { margin-top: 10px; border-top: 1px solid var(--border-card); padding-top: 8px; min-width: 0; }
+.tdee-sensitivity summary { cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-primary); }
+.tdee-sensitivity p { font-size: 10px; line-height: 1.5; color: var(--text-muted); margin: 8px 0 0; overflow-wrap: anywhere; }
+.tdee-sensitivity table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.tdee-sensitivity caption { text-align: left; color: var(--text-muted); margin-bottom: 4px; font-size: 10px; }
+.tdee-sensitivity th, .tdee-sensitivity td { padding: 5px 1px; border-bottom: 1px solid var(--border-card); text-align: right; overflow-wrap: anywhere; color: var(--text-primary); }
+.tdee-sensitivity th:first-child { text-align: left; }
 .scale-noise-card.high { background: linear-gradient(135deg, rgba(52,211,153,0.10), rgba(56,189,248,0.06)); }
 .scale-noise-card.medium { background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(56,189,248,0.05)); }
 .scale-noise-card.low { background: linear-gradient(135deg, rgba(248,113,113,0.10), rgba(245,158,11,0.05)); }

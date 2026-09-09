@@ -385,8 +385,58 @@ def bayesian_tdee_profile(days, steps_map, end_date=None, prior_mean=2500.0, pri
     }
 
 
+def tdee_logging_sensitivity(days, steps_map, base_profile, excluded_dates=None):
+    """Refit food-only bias assumptions; compare intake and burn on matched days."""
+    end_date = base_profile['date']
+    excluded = set(excluded_dates or [])
+    budget_dates = set()
+    for segment in clean_tdee_segments(days, excluded, end_date):
+        weights = [day for day in segment if day['weight'] is not None]
+        if len(weights) < 3:
+            continue
+        # Morning-to-morning weight changes use food before the ending weigh-in.
+        start = datetime.strptime(weights[0]['date'], '%Y-%m-%d')
+        end = datetime.strptime(weights[-1]['date'], '%Y-%m-%d')
+        budget_dates.update(day.strftime('%Y-%m-%d') for day in daterange(start, end))
+    logged = [day for day in days if day['date'] in budget_dates
+              and day['calories'] is not None and np.isfinite(day['calories']) and day['calories'] > 0]
+    if not logged:
+        return None
+    mean_food = float(np.mean([day['calories'] for day in logged]))
+    mean_alcohol = float(np.mean([estimate_drink_calories(day.get('drinks')) for day in logged]))
+    rows = []
+    for factor in (1.0, 1.10, 1.15):
+        scaled = [{**day, 'calories': None if day['calories'] is None else day['calories'] * factor}
+                  for day in days]
+        profile = base_profile if factor == 1.0 else bayesian_tdee_profile(
+            scaled, steps_map, end_date=end_date, excluded_dates=excluded, verbose=False)
+        # Match burn to the activity of the same logged days used for intake.
+        step_adjustment = float(np.mean([
+            (steps_map.get(day['date'], profile['avgSteps']) - profile['avgSteps']) * KCAL_PER_STEP
+            for day in logged
+        ]))
+        intake = mean_food * factor + mean_alcohol
+        tdee = profile['mean'] + step_adjustment
+        rows.append({
+            'foodMultiplier': factor,
+            'tdee': round(tdee, 2),
+            'intake': round(intake, 2),
+            'food': round(mean_food * factor, 2),
+            'alcohol': round(mean_alcohol, 2),
+            'netDeficit': round(tdee - intake, 2),
+        })
+    return {
+        'start': min(budget_dates), 'end': max(budget_dates),
+        'asOf': end_date, 'loggedDays': len(logged), 'eligibleDays': len(budget_dates),
+        'stepDays': sum(day['date'] in steps_map for day in logged),
+        'rows': rows,
+    }
+
+
 def bayesian_tdee(days, steps_map, excluded_dates=None):
-    return bayesian_tdee_profile(days, steps_map, excluded_dates=excluded_dates)
+    profile = bayesian_tdee_profile(days, steps_map, excluded_dates=excluded_dates)
+    profile['loggingSensitivity'] = tdee_logging_sensitivity(days, steps_map, profile, excluded_dates)
+    return profile
 
 
 def bayesian_tdee_timeline(days, steps_map, excluded_dates=None, window_days=35, min_weight_obs=5, min_span_days=14):
@@ -437,7 +487,8 @@ def bayesian_tdee_timeline(days, steps_map, excluded_dates=None, window_days=35,
             'segmentCount': profile.get('segmentCount', 1),
             'excludedDays': profile.get('excludedDays', 0),
             'excludedRanges': profile.get('excludedRanges', []),
-            'activityTerms': profile.get('activityTerms')
+            'activityTerms': profile.get('activityTerms'),
+            'loggingSensitivity': tdee_logging_sensitivity(window_slice, steps_map, profile, excluded_dates),
         })
     return timeline
 

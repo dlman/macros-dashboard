@@ -922,6 +922,29 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   `;
 }
 
+function renderTdeeLoggingSensitivity(profile) {
+  const sensitivity = profile?.loggingSensitivity;
+  if (!sensitivity?.rows?.length) return '';
+  const covered = sensitivity.loggedDays >= sensitivity.eligibleDays * 0.8;
+  const rows = sensitivity.rows.map(row => {
+    const net = energyValue(row.netDeficit);
+    const label = row.foodMultiplier === 1 ? 'Logged' : `+${Math.round((row.foodMultiplier - 1) * 100)}%`;
+    return `<tr><th scope="row">${label}</th><td>${energyValue(row.tdee).toLocaleString()}</td><td>${energyValue(row.intake).toLocaleString()}</td><td>${covered ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</td></tr>`;
+  }).join('');
+  return `<details class="tdee-sensitivity" id="tdeeLoggingSensitivity">
+    <summary>Food logging sensitivity</summary>
+    <p>${profile.windowDays ? `Recent ${profile.windowDays}-day model` : 'Full-range model'} · as of ${formatShortDate(sensitivity.asOf)}</p>
+    <table aria-label="Food logging assumptions and recalculated energy balance">
+      <caption>${energyUnit()}/day · positive net = deficit</caption>
+      <thead><tr><th scope="col">Food</th><th scope="col">TDEE</th><th scope="col">Intake</th><th scope="col">Net</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p>Alcohol: ${energyLabel(sensitivity.rows[0].alcohol)}/day, unchanged in every row. Food and TDEE are both recalculated.</p>
+    <p>Net covers ${formatShortDate(sensitivity.start)}–${formatShortDate(sensitivity.end)}: ${sensitivity.loggedDays}/${sensitivity.eligibleDays} eligible food days, ${sensitivity.stepDays}/${sensitivity.loggedDays} step days. Vacation and diet-break periods excluded.${covered ? '' : ' Net withheld below 80% food coverage.'}</p>
+    <p>Sensitivity, not a confidence interval or a measured TDEE. The same logging bias is assumed across the window; weight, steps and alcohol are held fixed. Missing steps use the model baseline.</p>
+  </details>`;
+}
+
 function renderForecastStrip(filteredDays, filteredSleep) {
   const weightProjection = observedWeightProjection(filteredDays, 30);
   const deficitPace = deficitProjection(filteredDays, 30);
@@ -1114,7 +1137,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           const bp = bayesPosterior;
           if (bp) {
             return `<div class="value">${energyLabel(bp.ci68Low)}–${energyLabel(bp.ci68High)}</div>
-        <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval — there's a ~2-in-3 chance your true maintenance sits here.</div>
+        <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval conditional on the model and logged intake.</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
         <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
         <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>
@@ -1127,6 +1150,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="confidence-pill ${workingProfile.confidence.cls}">${workingProfile.confidence.label}</div>
         <div class="tiny">Conservative trend estimate: ~${energyLabel(overallTDEEEnsemble.filtered.maintenance)} · Full-cut estimate: ~${energyLabel(overallTDEEEnsemble.endpoint.maintenance)} · Recent-window estimate: ~${energyLabel(overallTDEEEnsemble.recent.maintenance)} · Working midpoint: ~${energyLabel(workingProfile.maintenance)}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>`;
         })()}
+        ${renderTdeeLoggingSensitivity(bayesTimelineLatest || bayesPosterior)}
       </div>
     `,
     latestGlycogen
