@@ -3181,7 +3181,6 @@ function setScenarioInputs(values) {
     ['whatifWeeks', values.weeks],
     ['whatifWeeksSlider', values.weeks],
     ['whatifSleep', values.sleep],
-    ['whatifSleepSlider', values.sleep],
     ['whatifDrinks', values.drinks],
     ['whatifDrinksSlider', values.drinks]
   ];
@@ -3204,10 +3203,11 @@ function runScenarioPlanner() {
   const recentWindow = currentSetupWindow(rangeDays, rangeSleep, 7);
   const recentDays = recentWindow.days;
   const recentSleepDays = recentWindow.sleep;
-  const cal = parseInt(document.getElementById('whatifCal').value) || goals.calories;
+  const foodInput = parseFloat(document.getElementById('whatifCal').value);
+  const cal = Number.isFinite(foodInput) && foodInput >= 0 ? foodInput : goals.calories;
   const weeksInput = Math.max(1, parseInt(document.getElementById('whatifWeeks').value) || 4);
   const sleepHours = parseFloat(document.getElementById('whatifSleep').value) || goals.sleep;
-  const drinkNights = parseFloat(document.getElementById('whatifDrinks').value) || 0;
+  const drinkNights = Math.max(0, Math.min(7, parseFloat(document.getElementById('whatifDrinks').value) || 0));
   const targetBfPct = parseFloat(document.getElementById('whatifGoalBf').value) || 18;
   const activeValues = { calories: cal, weeks: weeksInput, sleep: sleepHours, drinks: drinkNights, targetBfPct };
   const goalProjection = scenarioPlannerMode === 'goal'
@@ -3240,9 +3240,9 @@ function runScenarioPlanner() {
   if (scenarioPlannerMode === 'goal') {
     if (!goalProjection?.achievable) {
       html += `<div><strong>${energyLabel(cal)}/day</strong> gives an effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>, which is not enough to project a reliable path to <strong>${targetBfPct.toFixed(1)}% BF</strong>.</div>`;
-      html += `<div>Try lower calories, higher sleep, or fewer drink nights to create a stronger downward pace.</div>`;
+      html += `<div>This food and alcohol setup does not project enough tissue loss to reach the goal.</div>`;
     } else {
-      html += `<div><strong>${energyLabel(cal)}/day</strong> with <strong>${sleepHours.toFixed(1)}h</strong> sleep and <strong>${drinkNights.toFixed(1)}</strong> drink nights/week points to <strong>${targetBfPct.toFixed(1)}% BF</strong> in about <strong>${goalProjection.daysToTarget} days</strong> (${goalProjection.weeksToTarget} weeks).</div>`;
+      html += `<div><strong>${energyLabel(cal)}/day</strong> food and <strong>${drinkNights.toFixed(1)}</strong> drink nights/week points to <strong>${targetBfPct.toFixed(1)}% BF</strong> in about <strong>${goalProjection.daysToTarget} days</strong> (${goalProjection.weeksToTarget} weeks).</div>`;
       html += `<div>Creatine-adjusted target weights: <strong>${weightLabel(goalProjection.cutTargetWeight)}</strong> cut-state or <strong>${weightLabel(goalProjection.fedTargetWeight)}</strong> fuller fed-state at the same BF.</div>`;
       html += `<div>Current pace under this setup is about <strong>${weightLabel(Math.abs(goalProjection.weeklyPace), 2)}/week</strong> with an effective ${goalProjection.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(goalProjection.effectiveDeficit)}/day</strong>.</div>`;
       html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the first ${weeks}-week chart window.</div>`;
@@ -3254,12 +3254,16 @@ function runScenarioPlanner() {
     html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
     html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
   }
+  const alcoholBasis = r.alcohol.source === 'logged'
+    ? `${energyLabel(r.alcohol.caloriesPerNight)}/night from ${r.alcohol.sampleSize} logged non-vacation/non-break drink nights`
+    : `No drink history in range; assumes one ${energyLabel(r.alcohol.caloriesPerNight)} drink per night`;
+  html += `<div>Daily intake: ${energyLabel(cal)} food + ${energyLabel(r.alcohol.dailyAlcoholCalories)} alcohol = <strong>${energyLabel(r.totalDailyIntake)}</strong>. ${alcoholBasis}.</div>`;
   document.getElementById('whatifResult').innerHTML = html;
 
   const horizonCards = [
     {
       value: `${r.effectiveDeficit >= 0 ? '+' : ''}${energyLabel(r.effectiveDeficit)}`,
-      sub: `Effective daily deficit after ${energyLabel(r.sleepPenalty)} sleep drag and ${energyLabel(r.drinkPenalty)} drink-day calorie drag`
+      sub: `Daily deficit: ${energyLabel(r.tdee)} maintenance minus ${energyLabel(r.totalDailyIntake)} food + alcohol intake`
     },
     {
       value: weightLabel(Math.abs(tissueChange), 1),
@@ -3287,7 +3291,7 @@ function runScenarioPlanner() {
     },
     {
       value: r.drinkSleepPenalty ? `${Math.round(r.drinkSleepPenalty)} pts` : '—',
-      sub: r.drinkSleepPenalty ? `Historical next-morning sleep hit after drink nights` : 'No strong drink-related sleep penalty in the current range'
+      sub: r.drinkSleepPenalty ? `Observed next-morning sleep difference; not a calorie adjustment` : 'No observed next-morning sleep gap in this range'
     }
   ];
   const goalCards = goalProjection?.achievable ? [
@@ -3368,7 +3372,8 @@ function runScenarioPlanner() {
   const creatineAssumption = `Creatine is modeled from ${CREATINE_START_DATE} as roughly ${creatineWaterRangeLabel(CREATINE_FULL_WATER_LBS)} of non-fat water over ${CREATINE_RAMP_DAYS} days; calculations use the ${weightLabel(CREATINE_FULL_WATER_LBS, 1)} midpoint, subtract it from tissue trend, and add it back to lean/water scale weight.`;
   document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
     ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path. ${creatineAssumption} Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`
-    : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, daily calories here mean food calories before drink calories, drink frequency adds your historical drink-day calorie drag, average sleep is ${currentAvgSleep.toFixed(1)}h, drink frequency is ${currentDrinkNights.toFixed(1)} nights/week, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state. ${creatineAssumption}${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;
+    : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state. ${creatineAssumption}${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;
+  document.getElementById('scenarioAssumptions').textContent += ` Food excludes alcohol; estimated alcohol is added once using the same drink parser as the dashboard. ${alcoholBasis}. Sleep is context only and adds no calorie penalty.`;
   const forecastCopy = document.getElementById('scenarioForecastCopy');
   if (forecastCopy) {
     forecastCopy.textContent = scenarioPlannerMode === 'goal'

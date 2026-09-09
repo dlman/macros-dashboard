@@ -702,7 +702,7 @@ document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(btn => {
     updateBodyCompChart(getFilteredDays());
   });
 });
-['whatifCal', 'whatifWeeks', 'whatifGoalBf', 'whatifSleep', 'whatifDrinks'].forEach(id => {
+['whatifCal', 'whatifWeeks', 'whatifGoalBf', 'whatifDrinks'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => {
     scenarioPreset = '';
     syncScenarioPresetButtons();
@@ -712,7 +712,6 @@ document.querySelectorAll('#bodyCompStateToggle .mtab').forEach(btn => {
   ['whatifCal', 'whatifCalSlider'],
   ['whatifWeeks', 'whatifWeeksSlider'],
   ['whatifGoalBf', 'whatifGoalBfSlider'],
-  ['whatifSleep', 'whatifSleepSlider'],
   ['whatifDrinks', 'whatifDrinksSlider']
 ].forEach(([inputId, sliderId]) => bindScenarioFieldPair(inputId, sliderId));
 syncScenarioModeUi();
