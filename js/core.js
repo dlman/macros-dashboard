@@ -1169,12 +1169,13 @@ function bodyCompTargetWeight(targetBfPct, shares, creatineWater, fedDelta = 0) 
   return (low + high) / 2 + fedDelta;
 }
 
-function bodyFatTargetWeightsFromCurrent(currentState, targetBfPct, days = allDays) {
+function bodyFatTargetWeightsFromCurrent(currentState, targetBfPct, days = allDays, targetDate = null) {
   if (!currentState || !Number.isFinite(currentState.weight) || !Number.isFinite(currentState.fat)) {
     return { cutStateTarget: null, fedStateTarget: null, scanStateGap: null };
   }
   const shares = bodyCompModelShares(days);
-  const targetCreatineWater = Math.max(CREATINE_FULL_WATER_LBS, currentState.creatineWater || 0);
+  const targetCreatineWater = targetDate ? creatineScaleAdjustmentForDate(targetDate)
+    : Math.max(CREATINE_FULL_WATER_LBS, currentState.creatineWater || 0);
   const fedDelta = Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
   const cutStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater);
   const fedStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, fedDelta);
@@ -1548,6 +1549,7 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
   return {
     currentWeight,
     projectedWeight: projectedWeight.toFixed(1),
+    projectedWeightExact: projectedWeight,
     weightChange: scaleChange.toFixed(1),
     tissueWeightChange: tissueWeightChange.toFixed(1),
     creatineScaleDelta,
@@ -1561,67 +1563,58 @@ function calculateWhatIf(dailyCal, weeks, avgSleep, drinkNightsPerWeek = 0, days
   };
 }
 
+function bodyFatGoalTimeline(currentWeight, currentDate, dailyTissueLoss, targetBfPct, days = allDays, weightOffset = 0, maxDays = 3650) {
+  const unavailable = { achievable: false, alreadyThere: false, daysToTarget: null, projectedDate: null, projectedWeight: null, bodyComp: null };
+  if (!Number.isFinite(currentWeight) || currentWeight <= 0 || !Number.isFinite(targetBfPct)
+    || targetBfPct <= 0 || targetBfPct >= 100 || !Number.isFinite(weightOffset)
+    || !Number.isFinite(Date.parse(`${currentDate}T12:00:00`))) return unavailable;
+  const shares = bodyCompModelShares(days);
+  const pointAt = day => {
+    const date = addDaysToDate(currentDate, day);
+    const weight = currentWeight + weightOffset - (day === 0 ? 0 : dailyTissueLoss * day)
+      + creatineScaleDeltaFromAnchor(currentDate, date);
+    return { date, weight, comp: bodyCompAtWeightForModel(weight, shares, creatineScaleAdjustmentForDate(date)) };
+  };
+  const result = (point, day) => ({ achievable: true, alreadyThere: day === 0, daysToTarget: day,
+    projectedDate: point.date, projectedWeight: point.weight, bodyComp: point.comp });
+  const current = pointAt(0);
+  if (current.comp.bodyFatPct <= targetBfPct + 1e-10) return result(current, 0);
+  if (!Number.isFinite(dailyTissueLoss) || dailyTissueLoss <= 0) return unavailable;
+  // Evaluate the dated scale path, not a gap to a fully-loaded future weight.
+  for (let day = 1; day <= maxDays; day++) {
+    const point = pointAt(day);
+    if (point.comp.bodyFatPct <= targetBfPct + 1e-10) return result(point, day);
+  }
+  return unavailable;
+}
+
+function creatineAdjustedWeightDays(days) {
+  return days.map(day => Number.isFinite(day.weight) && day.weight > 0
+    ? { ...day, weight: day.weight - creatineScaleAdjustmentForDate(day.date) } : day);
+}
+
 function scenarioTimeToBodyFatGoal(values, targetBfPct = 18, days = allDays, sleep = sleepData) {
   const scenario = calculateWhatIf(values.calories, 1, values.sleep, values.drinks, days, sleep);
   const currentWeight = scenario.currentWeight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const currentStates = scenarioProjectedBodyComp(currentWeight, days, currentDate);
-  const targetWeights = bodyFatTargetWeightsFromCurrent(currentStates.cutState, targetBfPct, days);
+  const dailyPace = scenario.effectiveDeficit / 3500;
+  const timeline = bodyFatGoalTimeline(currentWeight, currentDate, dailyPace, targetBfPct, days);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(currentStates.cutState, targetBfPct, days, timeline.projectedDate);
   const cutTargetWeight = targetWeights.cutStateTarget;
   const fedTargetWeight = targetWeights.fedStateTarget;
-  const dailyPace = scenario.effectiveDeficit / 3500;
-  const targetStates = scenarioProjectedBodyComp(cutTargetWeight, days, addDaysToDate(currentDate, 42));
+  const targetStates = timeline.achievable
+    ? scenarioProjectedBodyComp(timeline.projectedWeight, days, timeline.projectedDate) : null;
   if (!Number.isFinite(cutTargetWeight) || !Number.isFinite(fedTargetWeight)) return null;
-  if (currentStates.cutState.bodyFatPct <= targetBfPct) {
-    return {
-      achievable: true,
-      alreadyThere: true,
-      targetBfPct,
-      currentWeight,
-      currentBfPct: currentStates.cutState.bodyFatPct,
-      currentFedBfPct: currentStates.fedState.bodyFatPct,
-      cutTargetWeight,
-      fedTargetWeight,
-      daysToTarget: 0,
-      weeksToTarget: 0,
-      dailyPace,
-      weeklyPace: dailyPace * 7,
-      effectiveDeficit: scenario.effectiveDeficit,
-      currentStates,
-      targetStates
-    };
-  }
-  if (!Number.isFinite(dailyPace) || dailyPace <= 0) {
-    return {
-      achievable: false,
-      alreadyThere: false,
-      targetBfPct,
-      currentWeight,
-      currentBfPct: currentStates.cutState.bodyFatPct,
-      currentFedBfPct: currentStates.fedState.bodyFatPct,
-      cutTargetWeight,
-      fedTargetWeight,
-      daysToTarget: null,
-      weeksToTarget: null,
-      dailyPace,
-      weeklyPace: dailyPace * 7,
-      effectiveDeficit: scenario.effectiveDeficit,
-      currentStates,
-      targetStates
-    };
-  }
-  const daysToTarget = Math.max(0, Math.ceil((currentWeight - cutTargetWeight) / dailyPace));
   return {
-    achievable: true,
-    alreadyThere: false,
+    ...timeline,
     targetBfPct,
     currentWeight,
     currentBfPct: currentStates.cutState.bodyFatPct,
     currentFedBfPct: currentStates.fedState.bodyFatPct,
     cutTargetWeight,
     fedTargetWeight,
-    daysToTarget,
-    weeksToTarget: +(daysToTarget / 7).toFixed(1),
+    weeksToTarget: timeline.daysToTarget == null ? null : +(timeline.daysToTarget / 7).toFixed(1),
     dailyPace,
     weeklyPace: dailyPace * 7,
     effectiveDeficit: scenario.effectiveDeficit,
@@ -2629,7 +2622,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
         enabled: true,
         targetWeek: (goalProjection.daysToTarget || 0) / 7,
         targetDate: addDaysToDate(activeSeries.dates[0], goalProjection.daysToTarget || 0),
-        targetWeight: weightValue(goalProjection.cutTargetWeight),
+        targetWeight: weightValue(goalProjection.projectedWeight),
         targetBfPct
       }
     : { enabled: false };
@@ -2779,7 +2772,8 @@ function stateSpaceMaintenanceSeed(days, weightedIntake) {
 }
 
 function stateSpaceWeightTrendPoints(days, maintenanceGuess = null) {
-  const key = `${daysSignature(days)}::${maintenanceGuess == null ? 'auto' : Math.round(maintenanceGuess)}`;
+  const valuesKey = JSON.stringify(days.map(d => [d.weight, d.calories, d.drinks]));
+  const key = `${daysSignature(days)}::${valuesKey}::${maintenanceGuess == null ? 'auto' : Math.round(maintenanceGuess)}`;
   if (weightStateCache.has(key)) return weightStateCache.get(key);
 
   const weightDays = days.filter(d => d.weight);
@@ -3235,7 +3229,7 @@ function latestRollingWeightAnchor(days = allDays, window = 7) {
   };
 }
 
-function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, dailySlope, confidence, residualStdDev = null) {
+function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, dailySlope, confidence, residualStdDev, currentDate, targetBfPct, days) {
   const confidencePadding = confidence?.cls === 'high' ? 1.1 : confidence?.cls === 'medium' ? 1.7 : 2.4;
   const residualPadding = Math.min(0.9, Math.max(0, residualStdDev || 0) * 0.35);
   const weightPadding = +(confidencePadding + residualPadding).toFixed(1);
@@ -3243,16 +3237,15 @@ function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, da
   const cutHigh = targetWeight + weightPadding;
   const fedLow = fedTargetWeight - weightPadding;
   const fedHigh = fedTargetWeight + weightPadding;
-  const slopeAbs = Math.abs(dailySlope || 0);
+  const slopeAbs = dailySlope < 0 ? -dailySlope : 0;
   const slopeUncertainty = confidence?.cls === 'high' ? 0.22 : confidence?.cls === 'medium' ? 0.34 : 0.48;
   const fastSlope = slopeAbs * (1 + slopeUncertainty);
   const slowSlope = slopeAbs * Math.max(0.25, 1 - slopeUncertainty);
-  const daysLow = slopeAbs
-    ? Math.max(0, Math.floor(Math.max(0, currentWeight - cutHigh) / fastSlope))
-    : null;
-  const daysHigh = slopeAbs
-    ? Math.max(0, Math.ceil(Math.max(0, currentWeight - cutLow) / slowSlope))
-    : null;
+  const central = bodyFatGoalTimeline(currentWeight, currentDate, slopeAbs, targetBfPct, days);
+  const low = bodyFatGoalTimeline(currentWeight, currentDate, fastSlope, targetBfPct, days, -weightPadding);
+  const high = bodyFatGoalTimeline(currentWeight, currentDate, slowSlope, targetBfPct, days, weightPadding);
+  const daysLow = central.alreadyThere ? 0 : slopeAbs && low.daysToTarget != null ? Math.max(1, low.daysToTarget) : null;
+  const daysHigh = central.alreadyThere ? 0 : slopeAbs ? high.daysToTarget : null;
   return {
     weightPadding,
     cutLow: +cutLow.toFixed(1),
@@ -3265,46 +3258,27 @@ function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, da
 }
 
 function bodyFatTargetProjection(days, targetBfPct = 18) {
-  const wp = observedWeightProjection(days, 1);
-  if (!wp || !wp.dailySlope || wp.dailySlope >= 0) return null;
+  const wp = observedWeightProjection(creatineAdjustedWeightDays(days), 1);
   const rollingAnchor = latestRollingWeightAnchor(days, 7);
-  const currentWeight = rollingAnchor?.weight ?? wp.latestTrendWeight;
+  if (!rollingAnchor) return null;
+  const currentWeight = rollingAnchor.weight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const current = estimateBodyCompAtWeight(currentWeight, days, currentDate);
   const latestGlycogenDay = [...days].reverse().find(d => glycogenByDate[d.date]) || null;
   const currentGlycogenState = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const fedStateDelta = currentGlycogenState ? +(glycogenRefState.massLbs - currentGlycogenState.massLbs).toFixed(2) : 0;
-  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct, days);
+  const dailySlope = wp?.dailySlope ?? null;
+  const timeline = bodyFatGoalTimeline(currentWeight, currentDate, dailySlope == null ? null : -dailySlope, targetBfPct, days);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct, days, timeline.projectedDate);
   const cutStateTarget = targetWeights.cutStateTarget;
   const fedStateTarget = targetWeights.fedStateTarget;
-  const targetWeight = cutStateTarget ?? current.weight;
-  const fedStateTargetWeight = fedStateTarget ?? +(targetWeight + fedStateDelta).toFixed(1);
-  const range = bodyFatProjectionRange(targetWeight, fedStateTargetWeight, currentWeight, wp.dailySlope, wp.confidence, wp.residualStdDev);
-  if (current.bodyFatPct <= targetBfPct) return {
-    alreadyThere: true,
-    daysToTarget: 0,
-    targetWeight,
-    cutStateTargetWeight: +targetWeight.toFixed(1),
-    fedStateTargetWeight,
-    targetRange: range,
-    currentBfPct: current.bodyFatPct,
-    targetBfPct,
-    currentWeight,
-    currentWeightAnchor: rollingAnchor ? '7-day average' : 'filtered trend',
-    currentWeightAnchorDate: rollingAnchor?.date || currentDate,
-    currentWeightAnchorSampleSize: rollingAnchor?.sampleSize || null,
-    confidence: wp.confidence,
-    currentGlycogenState,
-    fedStateDelta,
-    creatineWater: current.creatineWater || 0,
-    fullCreatineWater: CREATINE_FULL_WATER_LBS,
-    scanStateGap: targetWeights.scanStateGap,
-    dailySlope: wp.dailySlope
-  };
-  const weightToDrop = currentWeight - targetWeight;
-  const daysToTarget = Math.ceil(weightToDrop / Math.abs(wp.dailySlope));
+  if (!Number.isFinite(cutStateTarget) || !Number.isFinite(fedStateTarget)) return null;
+  const targetWeight = cutStateTarget;
+  const fedStateTargetWeight = fedStateTarget;
+  const confidence = wp?.confidence ?? projectionConfidence(0.2);
+  const range = bodyFatProjectionRange(targetWeight, fedStateTargetWeight, currentWeight, dailySlope, confidence, wp?.residualStdDev, currentDate, targetBfPct, days);
   return {
-    daysToTarget,
+    ...timeline,
     targetWeight,
     cutStateTargetWeight: +targetWeight.toFixed(1),
     fedStateTargetWeight: +fedStateTargetWeight.toFixed(1),
@@ -3320,8 +3294,8 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     creatineWater: current.creatineWater || 0,
     fullCreatineWater: CREATINE_FULL_WATER_LBS,
     scanStateGap: targetWeights.scanStateGap,
-    dailySlope: wp.dailySlope,
-    confidence: wp.confidence
+    dailySlope,
+    confidence
   };
 }
 
@@ -3355,19 +3329,22 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
 
   const currentDate = latestWeightPoint.date;
   const current = estimateBodyCompAtWeight(rollingAnchor.weight, analyticsDays, currentDate);
-  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct, analyticsDays);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct, analyticsDays, deadline);
   const targetWeight = targetWeights.cutStateTarget;
   if (!Number.isFinite(targetWeight)) return null;
 
   const daysRemaining = Math.max(0, daysBetweenDates(currentDate, deadline));
   const weightRemaining = Math.max(0, rollingAnchor.weight - targetWeight);
-  const requiredWeeklyLoss = daysRemaining > 0 ? (weightRemaining / daysRemaining) * 7 : null;
-  const requiredDailyDeficit = daysRemaining > 0 ? (weightRemaining * 3500) / daysRemaining : null;
-  const pace = rollingAverageWeightPace(analyticsDays, 28, 7);
+  const alreadyThere = current.bodyFatPct <= targetBfPct + 1e-10;
+  const tissueWeightRemaining = alreadyThere ? 0 : Math.max(0,
+    current.tissueWeight - (targetWeight - creatineScaleAdjustmentForDate(deadline)));
+  const requiredWeeklyLoss = daysRemaining > 0 ? (tissueWeightRemaining / daysRemaining) * 7 : null;
+  const requiredDailyDeficit = daysRemaining > 0 ? (tissueWeightRemaining * 3500) / daysRemaining : null;
+  const pace = rollingAverageWeightPace(creatineAdjustedWeightDays(analyticsDays), 28, 7);
   const actualWeeklyLoss = pace?.weeklyLoss ?? null;
   const actualDailyDeficit = Number.isFinite(actualWeeklyLoss) ? actualWeeklyLoss * 500 : null;
-  const projectedDays = actualWeeklyLoss > 0 ? Math.ceil((weightRemaining / actualWeeklyLoss) * 7) : null;
-  const projectedDate = projectedDays != null ? addDaysToDate(currentDate, projectedDays) : null;
+  const timeline = bodyFatGoalTimeline(rollingAnchor.weight, currentDate, actualWeeklyLoss == null ? null : actualWeeklyLoss / 7, targetBfPct, analyticsDays);
+  const projectedDate = timeline.projectedDate;
   const bufferDays = projectedDate ? daysBetweenDates(projectedDate, deadline) : null;
   const tdeeProfile = workingTDEEProfile(analyticsDays);
   const effectiveCalorieTarget = Number.isFinite(requiredDailyDeficit)
@@ -3378,7 +3355,7 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
     : null;
 
   let status = 'adjustment';
-  if (weightRemaining <= 0) status = 'achieved';
+  if (alreadyThere) status = 'achieved';
   else if (actualWeeklyLoss != null && requiredWeeklyLoss != null && actualWeeklyLoss >= requiredWeeklyLoss * 1.15) status = 'on-track';
   else if (actualWeeklyLoss != null && requiredWeeklyLoss != null && actualWeeklyLoss >= requiredWeeklyLoss * 0.85) status = 'narrow';
 
@@ -3395,6 +3372,7 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
     targetFedWeight: Number.isFinite(targetWeights.fedStateTarget) ? +targetWeights.fedStateTarget.toFixed(1) : null,
     daysRemaining,
     weightRemaining,
+    tissueWeightRemaining,
     requiredWeeklyLoss,
     actualWeeklyLoss,
     requiredDailyDeficit,
@@ -3402,6 +3380,7 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
     maintenance: tdeeProfile.maintenance,
     dailyAdjustment,
     projectedDate,
+    daysToTarget: timeline.daysToTarget,
     bufferDays,
     paceSpanDays: pace?.spanDays ?? null,
     creatineWater: current.creatineWater || 0

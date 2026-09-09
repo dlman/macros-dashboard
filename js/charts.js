@@ -963,6 +963,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
     .filter(Boolean);
   const targetDaysLabel = target => {
     if (target.daysToTarget === 0) return 'Now';
+    if (target.daysToTarget == null) return 'No ETA';
     const range = target.targetRange;
     if (!range || range.daysLow == null || range.daysHigh == null) return `~${target.daysToTarget}d`;
     if (range.daysLow === range.daysHigh) return `~${range.daysLow}d`;
@@ -979,7 +980,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       milestoneEl.innerHTML = '';
     } else {
       const currentBf = bfTargets[0].currentBfPct;
-      const nextTarget = bfTargets.find(target => target.daysToTarget > 0);
+      const nextTarget = bfTargets.find(target => !target.alreadyThere);
       const markerPct = clamp01((18 - currentBf) / 3) * 100;
       const creatineWater = bfTargets[0].creatineWater || 0;
       const creatineRangeLabel = creatineWaterRangeLabel(creatineWater);
@@ -1035,23 +1036,23 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="eyebrow">15% working deadline · Nov 15</div>
           <div class="runway-status">${statusCopy.label}</div>
           <div class="runway-status-detail">${statusCopy.detail}</div>
-          <div class="runway-days"><strong>${runway.daysRemaining}</strong> days to Nov 15 · projected ${projectedFinish} · ${runway.finalBufferDays}-day buffer to Dec 31</div>
+          <div class="runway-days">As of ${formatShortDate(runway.currentWeightDate)}: <strong>${runway.daysRemaining}</strong> days to Nov 15 · projected ${projectedFinish} · ${runway.finalBufferDays}-day buffer to Dec 31</div>
         </div>
         <div class="runway-metrics">
           <div class="runway-metric">
-            <span>Remaining</span>
-            <strong>${weightLabel(runway.weightRemaining, 1)}</strong>
+            <span>Tissue remaining</span>
+            <strong>${weightLabel(runway.tissueWeightRemaining, 1)}</strong>
             <small>to ${weightLabel(runway.targetWeight, 1)} cut-state</small>
           </div>
           <div class="runway-metric">
             <span>Required pace</span>
             <strong>−${weightLabel(runway.requiredWeeklyLoss, 2)}/wk</strong>
-            <small>through Nov 15</small>
+            <small>tissue loss through Nov 15</small>
           </div>
           <div class="runway-metric">
             <span>Actual 28d pace</span>
             <strong>${actualPace}</strong>
-            <small>7-day average vs 28 days ago</small>
+            <small>7-day average vs 28 days ago; creatine-adjusted</small>
           </div>
           <div class="runway-metric">
             <span>Effective intake</span>

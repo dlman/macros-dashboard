@@ -166,3 +166,158 @@ test('milestones, scenario goals and year-end runway use the same target model f
     near(runway.targetFedWeight, Number(expected.fedStateTarget.toFixed(1)));
   }
 });
+
+test('goal ETA is the first dated body-fat crossing before, during and after the creatine ramp', () => {
+  const cases = run(`['2026-06-01', '2026-07-03', '2026-07-15', '2026-09-03'].flatMap(date =>
+    [0.03, 0.1, 0.25].map(pace => {
+      const target = 18;
+      const timeline = bodyFatGoalTimeline(159.9, date, pace, target, allDays);
+      const prevDate = addDaysToDate(date, timeline.daysToTarget - 1);
+      const prevWeight = 159.9 - pace * (timeline.daysToTarget - 1) + creatineScaleDeltaFromAnchor(date, prevDate);
+      return { timeline, target,
+        previous: estimateBodyCompAtWeight(prevWeight, allDays, prevDate).bodyFatPct,
+        expectedDate: addDaysToDate(date, timeline.daysToTarget) };
+    }))`);
+  for (const p of cases) {
+    assert.ok(p.timeline.daysToTarget > 0);
+    assert.ok(p.timeline.bodyComp.bodyFatPct <= p.target + 1e-10);
+    assert.ok(p.previous > p.target);
+    assert.equal(p.timeline.projectedDate, p.expectedDate);
+  }
+});
+
+test('a future loaded target above current weight cannot imply zero days now', () => {
+  const p = run(`(() => {
+    const date = '2026-07-03';
+    const weight = 159.9;
+    const current = estimateBodyCompAtWeight(weight, allDays, date);
+    const target = current.bodyFatPct - 0.1;
+    const future = bodyFatTargetWeightsFromCurrent(current, target, allDays);
+    return { future: future.cutStateTarget, weight,
+      timeline: bodyFatGoalTimeline(weight, date, 0.05, target, allDays) };
+  })()`);
+  assert.ok(p.future > p.weight);
+  assert.ok(p.timeline.daysToTarget > 0);
+  assert.equal(p.timeline.alreadyThere, false);
+});
+
+test('already reached goals remain zero days even with no loss pace', () => {
+  const cases = run(`[null, NaN, Infinity, 0, -0.1, 0.1].map(pace =>
+    bodyFatGoalTimeline(147, '2026-09-03', pace, 18, allDays))`);
+  for (const p of cases) {
+    assert.equal(p.daysToTarget, 0);
+    assert.equal(p.alreadyThere, true);
+    assert.equal(p.projectedDate, '2026-09-03');
+    near(p.projectedWeight, 147);
+  }
+});
+
+test('unreached goals with invalid, zero or gaining pace have no ETA', () => {
+  const cases = run(`[null, NaN, Infinity, 0, -0.1].map(pace =>
+    bodyFatGoalTimeline(160, '2026-09-03', pace, 15, allDays)).concat([
+      bodyFatGoalTimeline(160, '2026-09-03', 0.001, 15, allDays, 0, 30),
+      bodyFatGoalTimeline(160, 'invalid', 0.1, 15, allDays),
+      bodyFatGoalTimeline(160, '2026-09-03', 0.1, NaN, allDays)
+    ])`);
+  for (const p of cases) {
+    assert.equal(p.achievable, false);
+    assert.equal(p.daysToTarget, null);
+    assert.equal(p.projectedDate, null);
+  }
+});
+
+test('scenario ETA, projected weight, BF and date all describe the same point', () => {
+  const cases = run(`['2026-07-03', '2026-09-03'].flatMap(date => [18, 20.5].map(target => {
+    const days = [{date, weight: 163, calories: 1900, protein: 160}];
+    const goal = scenarioTimeToBodyFatGoal({calories: 1500, sleep: 7, drinks: 0}, target, days, []);
+    const forecast = calculateWhatIf(1500, goal.daysToTarget / 7, 7, 0, days, []);
+    const state = scenarioProjectedBodyComp(forecast.projectedWeightExact, days, forecast.projectedDate);
+    const before = calculateWhatIf(1500, (goal.daysToTarget - 1) / 7, 7, 0, days, []);
+    return {goal, forecast, state,
+      before: scenarioProjectedBodyComp(before.projectedWeightExact, days, before.projectedDate).cutState.bodyFatPct};
+  }))`);
+  for (const {goal, forecast, state, before} of cases) {
+    assert.ok(goal.daysToTarget > 0);
+    near(goal.projectedWeight, forecast.projectedWeightExact);
+    assert.equal(goal.projectedDate, forecast.projectedDate);
+    near(goal.targetStates.cutState.bodyFatPct, state.cutState.bodyFatPct);
+    assert.ok(state.cutState.bodyFatPct <= goal.targetBfPct + 1e-10);
+    assert.ok(before > goal.targetBfPct);
+  }
+});
+
+test('date-specific target weights round-trip during the ramp instead of assuming full water', () => {
+  const p = run(`(() => {
+    const date = '2026-07-05';
+    const current = estimateBodyCompAtWeight(160, allDays, date);
+    const target = bodyFatTargetWeightsFromCurrent(current, 20, allDays, date);
+    return {actual: estimateBodyCompAtWeight(target.cutStateTarget, allDays, date).bodyFatPct};
+  })()`);
+  near(p.actual, 20);
+});
+
+test('stable creatine reproduces the ordinary weight-gap ETA including year rollover', () => {
+  const p = run(`(() => {
+    const weight = 155;
+    const date = '2026-12-28';
+    const current = estimateBodyCompAtWeight(weight, allDays, date);
+    const target = bodyFatTargetWeightsFromCurrent(current, 15, allDays, date).cutStateTarget;
+    return {expected: Math.ceil((weight - target) / 0.1),
+      timeline: bodyFatGoalTimeline(weight, date, 0.1, 15, allDays)};
+  })()`);
+  assert.equal(p.timeline.daysToTarget, p.expected);
+  assert.ok(p.timeline.projectedDate.startsWith('2027-'));
+});
+
+test('raw and creatine-adjusted trend inputs cannot collide in the cache', () => {
+  const p = run(`(() => {
+    const days = Array.from({length: 21}, (_, i) => ({date: addDaysToDate('2026-07-02', i),
+      weight: 160 - i * 0.04 + creatineScaleAdjustmentForDate(addDaysToDate('2026-07-02', i)), calories: 2000}));
+    const raw = stateSpaceWeightTrendPoints(days);
+    const adjusted = stateSpaceWeightTrendPoints(creatineAdjustedWeightDays(days));
+    const rawAgain = stateSpaceWeightTrendPoints(days);
+    return {same: raw === adjusted, cached: raw === rawAgain,
+      rawWeight: raw.at(-1).rawWeight, adjustedWeight: adjusted.at(-1).rawWeight};
+  })()`);
+  assert.equal(p.same, false);
+  assert.equal(p.cached, true);
+  near(p.rawWeight - p.adjustedWeight, 1.8);
+});
+
+test('milestone ETA ranges bracket the point estimate and never report negative days', () => {
+  const cases = run(`['2026-07-03', '2026-09-03'].flatMap(date => [18, 20.5].map(target => {
+    const days = Array.from({length: 14}, (_, i) => ({date: addDaysToDate(date, i - 13),
+      weight: 161 - i * 0.1, calories: 1900, protein: 160}));
+    return bodyFatTargetProjection(days, target);
+  }))`);
+  for (const p of cases) {
+    assert.ok(p);
+    if (p.daysToTarget != null) {
+      assert.ok(p.daysToTarget >= 0);
+      assert.ok(p.targetRange.daysLow <= p.daysToTarget);
+      assert.ok(p.targetRange.daysHigh >= p.daysToTarget);
+    }
+  }
+});
+
+test('sparse unreached milestones stay visible without inventing an ETA', () => {
+  const p = run(`bodyFatTargetProjection([{date:'2026-09-03', weight:160}], 15)`);
+  assert.ok(p);
+  assert.equal(p.daysToTarget, null);
+  assert.equal(p.alreadyThere, false);
+  assert.equal(p.targetRange.daysLow, null);
+});
+
+test('year-end ETA uses the dated path and deadline budget counts tissue, not future water', () => {
+  const p = run(`(() => {
+    const days = Array.from({length: 40}, (_, i) => ({date: addDaysToDate('2026-05-25', i),
+      weight: 163 - i * 0.08 + creatineScaleAdjustmentForDate(addDaysToDate('2026-05-25', i)), calories: 2000, protein: 160}));
+    const result = yearEndBodyFatRunway(days, 18, '2026-07-15');
+    const baseline = baselineAnalyticsDays(getAnalyticsDays(days));
+    const timeline = bodyFatGoalTimeline(result.currentWeight, result.currentWeightDate, result.actualWeeklyLoss / 7, 18, baseline);
+    return {result, timeline, waterDelta: creatineScaleDeltaFromAnchor(result.currentWeightDate, '2026-07-15')};
+  })()`);
+  assert.equal(p.result.projectedDate, p.timeline.projectedDate);
+  near(p.result.requiredDailyDeficit * p.result.daysRemaining / 3500, p.result.tissueWeightRemaining);
+  near(p.result.tissueWeightRemaining - p.result.weightRemaining, p.waterDelta);
+});
