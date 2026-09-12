@@ -652,13 +652,36 @@ function dayOfWeekMacroAverages(days) {
   }));
 }
 
-// Carb/fat ratio → sleep quality (same-day and lag-1)
+// WHOOP dates are wake dates: offset 0 pairs waking-day food; -1 pairs prior-day behavior.
+function sleepDayPairs(days, sleep, dayOffset = 0) {
+  const byDate = new Map(getAnalyticsDays(days).map(day => [day.date, day]));
+  return getAnalyticsDays(sleep).filter(night => Number.isFinite(night.perf)).flatMap(night => {
+    const day = byDate.get(dayOffset === -1 ? prevDay(night.date) : night.date);
+    return day ? [{ day, sleep: night }] : [];
+  });
+}
+
+function sleepIntakePairs(days, sleep) {
+  return sleepDayPairs(days, sleep).filter(({ day }) => Number.isFinite(day.calories) && day.calories > 0)
+    .map(({ day, sleep: night }) => ({ date: night.date, perf: night.perf, intake: effectiveCalories(day) }));
+}
+
+function drinkSleepCohorts(days, sleep) {
+  const afterDrink = [], afterClean = [];
+  sleepDayPairs(days, sleep, -1).forEach(({ day, sleep: night }) => {
+    if (isVacationDay(day)) return;
+    if (day.drinks) afterDrink.push(night.perf);
+    else if (Number.isFinite(day.calories) && day.calories > 0) afterClean.push(night.perf);
+  });
+  return { afterDrink, afterClean };
+}
+
+// Daytime macros -> the following night's sleep, dated by wake-up.
 function macroSleepCorrelations(days, sleep) {
   const pairs = [];
-  days.forEach(d => {
-    if (!d.calories || d.calories === 0) return;
-    const s = sleepByDate[d.date];
-    if (!s || s.perf == null) return;
+  sleepDayPairs(days, sleep, -1).forEach(({ day: d, sleep: s }) => {
+    if (!Number.isFinite(d.calories) || d.calories <= 0) return;
+    if (![d.carbs, d.fat, d.protein].every(Number.isFinite)) return;
     pairs.push({
       carbPct: (d.carbs * 4) / d.calories,
       fatPct: (d.fat * 9) / d.calories,
@@ -903,7 +926,7 @@ function stepAdjustedCalories(day, avgSteps) {
   return base - (s - avgSteps) * KCAL_PER_STEP;
 }
 
-function stepsCorrelations(days) {
+function stepsCorrelations(days, sleep = sleepData) {
   const avgStepsVal = (() => {
     const vals = days.map(d => getStepForDate(d.date)).filter(s => s != null);
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
@@ -911,9 +934,8 @@ function stepsCorrelations(days) {
 
   // Steps vs same-night sleep performance
   const stepSleepPairs = [];
-  days.forEach(d => {
+  sleepDayPairs(days, sleep, -1).forEach(({ day: d, sleep: sl }) => {
     const s = getStepForDate(d.date);
-    const sl = sleepByDate[d.date];
     if (s != null && sl?.perf != null) stepSleepPairs.push([s, sl.perf]);
   });
 
@@ -921,6 +943,7 @@ function stepsCorrelations(days) {
   const weightDays = days.filter(d => d.weight);
   const stepWeightPairs = [];
   for (let i = 0; i < weightDays.length - 1; i++) {
+    if (weightDays[i + 1].date !== nextDayStr(weightDays[i].date)) continue;
     const s = getStepForDate(weightDays[i].date);
     const wDelta = weightDays[i + 1].weight - weightDays[i].weight;
     if (s != null) stepWeightPairs.push([s, wDelta]);
@@ -939,9 +962,8 @@ function stepsCorrelations(days) {
   let highSleepAvg = null, lowSleepAvg = null;
   if (medianSteps != null) {
     const high = [], low = [];
-    days.forEach(d => {
+    sleepDayPairs(days, sleep, -1).forEach(({ day: d, sleep: sl }) => {
       const s = getStepForDate(d.date);
-      const sl = sleepByDate[d.date];
       if (s != null && sl?.perf != null) {
         if (s >= medianSteps) high.push(sl.perf); else low.push(sl.perf);
       }
@@ -2459,8 +2481,7 @@ function historicalDrinkEffects(days, sleep) {
   const avgCleanCalories = avgEffectiveCalories(cleanDays);
   const calorieDelta = avgDrinkCalories != null && avgCleanCalories != null ? Math.max(0, avgDrinkCalories - avgCleanCalories) : 0;
 
-  const afterDrink = sleep.filter(d => drinkDates.has(prevDay(d.date))).map(d => d.perf);
-  const afterClean = sleep.filter(d => !drinkDates.has(prevDay(d.date))).map(d => d.perf);
+  const { afterDrink, afterClean } = drinkSleepCohorts(days, sleep);
   const drinkSleepPenalty = afterDrink.length && afterClean.length
     ? Math.max(0, avgOrNull(afterClean.map(v => ({ v })), 'v') - avgOrNull(afterDrink.map(v => ({ v })), 'v'))
     : 0;
@@ -3636,15 +3657,10 @@ function foodPatternSummary(days) {
 }
 
 function getLagMetrics(days, sleep) {
-  const afterDrink = [];
-  const afterClean = [];
-  sleep.forEach(day => (drinkDates.has(prevDay(day.date)) ? afterDrink : afterClean).push(day.perf));
+  const { afterDrink, afterClean } = drinkSleepCohorts(days, sleep);
   const afterDrinkAvg = avgOrNull(afterDrink.map(v => ({ v })), 'v');
   const afterCleanAvg = avgOrNull(afterClean.map(v => ({ v })), 'v');
-  const poorSleepPairs = sleep.map(day => {
-    const nextMacro = macroByDate[nextDayStr(day.date)];
-    return nextMacro ? { perf: day.perf, intake: effectiveCalories(nextMacro) } : null;
-  }).filter(Boolean);
+  const poorSleepPairs = sleepIntakePairs(days, sleep);
   const poorSleepDays = poorSleepPairs.filter(pair => pair.perf < goals.sleepPerf);
   const goodSleepDays = poorSleepPairs.filter(pair => pair.perf >= goals.sleepPerf);
   const poorSleepNextDayAvg = avgOrNull(poorSleepDays.map(pair => ({ v: pair.intake })), 'v');
@@ -3653,6 +3669,7 @@ function getLagMetrics(days, sleep) {
   const bedtimeCorr = pearson(sleep.map(normalizedBedtimeHour), sleep.map(day => day.perf));
   const nextDayWeightMoves = days.map((day, idx) => {
     if (idx >= days.length - 1 || day.weight == null || days[idx + 1].weight == null) return null;
+    if (days[idx + 1].date !== nextDayStr(day.date)) return null;
     return { lift: day.lifting === 'Y', delta: days[idx + 1].weight - day.weight };
   }).filter(Boolean);
   const liftFollowUps = nextDayWeightMoves.filter(move => move.lift).map(move => move.delta);
@@ -3749,11 +3766,11 @@ function getDriverRanking(days, sleep) {
       sample: `n=${sleep.length}`
     },
     {
-      title: 'Poor sleep predicts higher next-day calories',
+      title: 'Sleep and waking-day intake',
       score: Math.abs(lag.poorSleepNextDayGap ?? lag.nextDayCalCorr ?? 0),
       text: lag.poorSleepNextDayGap != null
         ? `${energyLabel(lag.poorSleepNextDayAvg)} after poor sleep vs ${energyLabel(lag.goodSleepNextDayAvg)} after good sleep`
-        : `r=${lag.nextDayCalCorr.toFixed(2)} between sleep performance and next-day calorie intake`,
+        : `r=${lag.nextDayCalCorr.toFixed(2)} between sleep performance and waking-day calorie intake`,
       sample: `n=${lag.nextDayCalSample}`
     },
     {

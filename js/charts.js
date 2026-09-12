@@ -1483,7 +1483,7 @@ function renderExecutiveSummary() {
     { title: 'Weekend effect', text: current.avgWeekendSleep != null && current.avgWeekdaySleep != null ? `Weekend sleep averages ${current.avgWeekendSleep.toFixed(1)}% vs ${current.avgWeekdaySleep.toFixed(1)}% on weekdays.` : 'Not enough sleep data to compare weekends vs weekdays.' },
     { title: 'Plateau vs noise', text: plateau.text },
     { title: 'Drink-following mornings', text: lag.drinkSleepGap != null ? `${lag.afterDrinkAvg.toFixed(1)}% sleep after drink nights vs ${lag.afterCleanAvg.toFixed(1)}% after clean nights (gap: ${lag.drinkSleepGap.toFixed(1)} pts).` : 'Need more drink-vs-clean sleep contrast in the selected range.' },
-    { title: 'Sleep to next-day intake', text: lag.poorSleepNextDayGap != null ? `${energyLabel(lag.poorSleepNextDayAvg)} after poor sleep vs ${energyLabel(lag.goodSleepNextDayAvg)} after good sleep.` : 'Need more sleep/intake pairs to quantify the next-day intake effect.' },
+    { title: 'Sleep to waking-day intake', text: lag.poorSleepNextDayGap != null ? `${energyLabel(lag.poorSleepNextDayAvg)} after poor sleep vs ${energyLabel(lag.goodSleepNextDayAvg)} after good sleep.` : 'Need more sleep/intake pairs to compare waking-day intake.' },
     { title: 'Highest-calorie outlier', text: `${outliers.highCal.date.slice(5)} at ${energyLabel(outliers.highCal.calories)}.` },
     { title: 'Lowest sleep outlier', text: outliers.lowSleep ? `${outliers.lowSleep.date.slice(5)} at ${outliers.lowSleep.perf}% sleep performance after ${outliers.lowSleep.hours}h.` : 'No sleep entries.' },
     { title: 'Largest logged weight drop', text: outliers.biggestWeightDrop ? `${outliers.biggestWeightDrop.date.slice(5)} moved ${weightValue(Math.abs(outliers.biggestWeightDrop.delta))} ${weightUnit()} vs the previous weigh-in.` : 'Not enough weigh-ins to detect jumps.' }
@@ -1550,14 +1550,7 @@ function renderSleepInsights() {
     return;
   }
 
-  const afterDrink = [];
-  const afterClean = [];
-  filteredSleep.forEach(d => {
-    if (drinkDates.has(prevDay(d.date))) afterDrink.push(d.perf);
-    else afterClean.push(d.perf);
-  });
-  const avgAfterDrink = afterDrink.length ? +(afterDrink.reduce((a, b) => a + b, 0) / afterDrink.length).toFixed(1) : 0;
-  const avgAfterClean = afterClean.length ? +(afterClean.reduce((a, b) => a + b, 0) / afterClean.length).toFixed(1) : 0;
+  const lag = getLagMetrics(getFilteredDays(), filteredSleep);
   const bedtimeCorr = pearson(
     filteredSleep.map(d => (d.bedtime_hour > 12 ? d.bedtime_hour - 24 : d.bedtime_hour)),
     filteredSleep.map(d => d.perf)
@@ -1567,20 +1560,15 @@ function renderSleepInsights() {
   const dowLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const bestDowIdx = dowAvg.indexOf(Math.max(...dowAvg));
   const worstDowIdx = dowAvg.indexOf(Math.min(...dowAvg.filter(v => v > 0)));
-  const goodSleepCals = filteredSleep.filter(d => d.perf >= goals.sleepPerf).map(d => macroByDate[d.date]?.calories).filter(Boolean);
-  const badSleepCals = filteredSleep.filter(d => d.perf < goals.sleepPerf).map(d => macroByDate[d.date]?.calories).filter(Boolean);
-  const lag = getLagMetrics(getFilteredDays(), filteredSleep);
-  const avgBadSleepCals = badSleepCals.length ? Math.round(badSleepCals.reduce((a, b) => a + b, 0) / badSleepCals.length) : 0;
-  const avgGoodSleepCals = goodSleepCals.length ? Math.round(goodSleepCals.reduce((a, b) => a + b, 0) / goodSleepCals.length) : 0;
   const respStart = filteredSleep[0]?.resp;
   const respEnd = filteredSleep[filteredSleep.length - 1]?.resp;
 
   badges.innerHTML = `
-    <div class="badge rose"><strong>${avgAfterDrink.toFixed(1)}% vs ${avgAfterClean.toFixed(1)}%</strong>Previous-night drinks vs clean nights on next-morning sleep (n=${afterDrink.length}/${afterClean.length})</div>
+    <div class="badge rose"><strong>${lag.afterDrinkAvg?.toFixed(1) ?? '—'}% vs ${lag.afterCleanAvg?.toFixed(1) ?? '—'}%</strong>Previous-night drinks vs logged clean nights on next-morning sleep (n=${lag.afterDrinkCount}/${lag.afterCleanCount})</div>
     <div class="badge rose"><strong>r = ${bedtimeCorr.toFixed(2)}</strong>Normalized bedtime vs same-night sleep quality (n=${filteredSleep.length})</div>
     <div class="badge amber"><strong>${bucketData.map(b => `${Math.round(b.value)}%`).join(' → ')}</strong>Sleep perf by bedtime bucket with explicit lag framing</div>
     <div class="badge blue"><strong>${dowLabels[bestDowIdx]} ${dowAvg[bestDowIdx].toFixed(1)}% · ${dowLabels[worstDowIdx]} ${dowAvg[worstDowIdx].toFixed(1)}%</strong>Best vs worst day of week for sleep</div>
-    <div class="badge green"><strong>${energyLabel(lag.poorSleepNextDayAvg ?? avgBadSleepCals)} vs ${energyLabel(lag.goodSleepNextDayAvg ?? avgGoodSleepCals)}</strong>Next-day calories after poor vs good sleep (n=${lag.nextDayCalSample})</div>
+    <div class="badge green"><strong>${lag.poorSleepNextDayAvg != null ? energyLabel(lag.poorSleepNextDayAvg) : '—'} vs ${lag.goodSleepNextDayAvg != null ? energyLabel(lag.goodSleepNextDayAvg) : '—'}</strong>Waking-day food + alcohol after poor vs good sleep (n=${lag.nextDayCalSample})</div>
     <div class="badge sky"><strong>${lag.liftNextDayWeightGap != null ? formatSignedWeight(lag.liftNextDayWeightGap) : '—'}</strong>Next-day scale move after lift days vs rest days (lag framing)</div>
     <div class="badge sky"><strong>${respStart?.toFixed(1) ?? '—'} → ${respEnd?.toFixed(1) ?? '—'} rpm</strong>Respiratory rate change across selected range</div>
   `;
@@ -2836,10 +2824,9 @@ allCharts.sleepDebtChart = new Chart(document.getElementById('sleepDebtChart'), 
 // CROSS-INSIGHT CHARTS
 // =====================================================================
 // Drink vs Clean sleep
-const afterDrink = [], afterClean = [];
-sleepData.forEach(d => { const prev = prevDay(d.date); if (drinkDates.has(prev)) afterDrink.push(d.perf); else afterClean.push(d.perf); });
-const avgAfterDrink = (afterDrink.reduce((a,b)=>a+b,0)/afterDrink.length).toFixed(1);
-const avgAfterClean = (afterClean.reduce((a,b)=>a+b,0)/afterClean.length).toFixed(1);
+const { afterDrink, afterClean } = drinkSleepCohorts(allDays, sleepData);
+const avgAfterDrink = afterDrink.length ? (afterDrink.reduce((a,b)=>a+b,0)/afterDrink.length).toFixed(1) : null;
+const avgAfterClean = afterClean.length ? (afterClean.reduce((a,b)=>a+b,0)/afterClean.length).toFixed(1) : null;
 new Chart(document.getElementById('drinkSleepChart'), {
   type: 'bar',
   data: { labels: [`After Drink (n=${afterDrink.length})`, `After Clean (n=${afterClean.length})`], datasets: [{ data:[avgAfterDrink,avgAfterClean], backgroundColor:['rgba(248,113,113,0.7)','rgba(52,211,153,0.7)'], borderRadius:8, borderSkipped:false }] },
@@ -2881,14 +2868,14 @@ new Chart(document.getElementById('respRateChart'), {
 });
 
 // Cal vs Sleep scatter
-const scatterPoints = sleepData.map(d => { const macro = macroByDate[d.date]; if (!macro) return null; return {x:macro.calories,y:d.perf,date:d.date}; }).filter(Boolean);
+const scatterPoints = sleepIntakePairs(allDays, sleepData).map(p => ({ x: p.intake, y: p.perf, date: p.date }));
 new Chart(document.getElementById('calSleepScatterChart'), {
   type: 'scatter',
   data: { datasets: [{ data:scatterPoints.map(p=>({x:p.x,y:p.y})), backgroundColor:scatterPoints.map(p=>perfColor(p.y,0.7)), pointRadius:6, pointHoverRadius:9 }] },
   options: {
     ...chartDefaults(),
     plugins: { ...chartDefaults().plugins, tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { label: ctx => { const p=scatterPoints[ctx.dataIndex]; return [` ${p.date}`,` Cal: ${p.x}`,` Sleep: ${p.y}%`]; } } } },
-    scales: { x:{...chartDefaults().scales.x,min:1000,max:3500,title:{display:true,text:'Calories',color:'#64748b',font:{size:11}},ticks:{...TICK(),callback:v=>v.toLocaleString()}}, y:{...chartDefaults().scales.y,min:0,max:100,title:{display:true,text:'Sleep perf',color:'#64748b',font:{size:11}},ticks:{...TICK(),stepSize:10,callback:v=>v+'%'}} }
+    scales: { x:{...chartDefaults().scales.x,suggestedMin:1000,suggestedMax:3500,title:{display:true,text:'Food + alcohol (kcal)',color:'#64748b',font:{size:11}},ticks:{...TICK(),callback:v=>v.toLocaleString()}}, y:{...chartDefaults().scales.y,min:0,max:100,title:{display:true,text:'Sleep perf',color:'#64748b',font:{size:11}},ticks:{...TICK(),stepSize:10,callback:v=>v+'%'}} }
   }
 });
 
@@ -2901,9 +2888,9 @@ new Chart(document.getElementById('sleepAnnotatedChart'), {
       label:'Sleep Performance',
       data: sleepData.map(d => d.perf),
       borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.07)',
-      pointRadius: sleepData.map(d => { const prev=prevDay(d.date); return drinkDates.has(prev)||liftDates.has(d.date)?7:3; }),
-      pointStyle: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev)) return 'triangle'; if(liftDates.has(d.date)) return 'rectRot'; return 'circle'; }),
-      pointBackgroundColor: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev))return EVENT_COLORS.drink; if(liftDates.has(d.date))return EVENT_COLORS.lift; return EVENT_COLORS.normal; }),
+      pointRadius: sleepData.map(d => { const prev=prevDay(d.date); return drinkDates.has(prev)||liftDates.has(prevDay(d.date))?7:3; }),
+      pointStyle: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev)) return 'triangle'; if(liftDates.has(prevDay(d.date))) return 'rectRot'; return 'circle'; }),
+      pointBackgroundColor: sleepData.map(d => { const prev=prevDay(d.date); if(drinkDates.has(prev))return EVENT_COLORS.drink; if(liftDates.has(prevDay(d.date)))return EVENT_COLORS.lift; return EVENT_COLORS.normal; }),
       pointBorderColor:'rgba(15,17,23,0.85)', pointBorderWidth: 1.5, tension:0.3, fill:true
     }]
   },
@@ -2914,9 +2901,9 @@ new Chart(document.getElementById('sleepAnnotatedChart'), {
       legend: { display:true, labels: { generateLabels: () => [
         {text:'● Normal day',fillStyle:EVENT_COLORS.normal,strokeStyle:'transparent',fontColor:'#94a3b8'},
         {text:'▲ After drinking',fillStyle:EVENT_COLORS.drink,strokeStyle:'transparent',fontColor:'#94a3b8'},
-        {text:'■ Lifting day',fillStyle:EVENT_COLORS.lift,strokeStyle:'transparent',fontColor:'#94a3b8'},
+        {text:'■ After lifting',fillStyle:EVENT_COLORS.lift,strokeStyle:'transparent',fontColor:'#94a3b8'},
       ], color:'#94a3b8', font:{size:11}, boxWidth:10, padding:14 } },
-      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { title: ctx => sleepData[ctx[0].dataIndex].date, label: ctx => { const d=sleepData[ctx.dataIndex]; const prev=prevDay(d.date); const f=[]; if(drinkDates.has(prev))f.push('🍹 drank prev'); if(liftDates.has(d.date))f.push('🏋️ lifted'); return [` Perf: ${d.perf}%  Sleep: ${d.hours}h`, ...f]; } } }
+      tooltip: { ...chartDefaults().plugins.tooltip, callbacks: { title: ctx => sleepData[ctx[0].dataIndex].date, label: ctx => { const d=sleepData[ctx.dataIndex]; const prev=prevDay(d.date); const f=[]; if(drinkDates.has(prev))f.push('🍹 drank prev'); if(liftDates.has(prevDay(d.date)))f.push('🏋️ lifted previous day'); return [` Perf: ${d.perf}%  Sleep: ${d.hours}h`, ...f]; } } }
     },
     scales: { x:{...chartDefaults().scales.x,ticks:{...TICK(),maxTicksLimit:20}}, y:{...chartDefaults().scales.y,min:0,max:100,ticks:{...TICK(),stepSize:10,callback:v=>v+'%'}} }
   }
@@ -2931,12 +2918,9 @@ function renderCorrMatrix() {
   const corrSleep = getFilteredSleep();
   // Build paired data
   const labels = ['Calories','Protein','Carbs','Fat','Sleep Perf','Sleep Hrs','Deep','REM','Efficiency','Resp Rate','Drink?','Lift?'];
-  const paired = corrSleep.map(d => {
-    const m = macroByDate[d.date];
-    if (!m) return null;
-    const prev = prevDay(d.date);
-    return [m.calories, m.protein, m.carbs, m.fat, d.perf, d.hours, d.deep, d.rem, d.efficiency, d.resp, drinkDates.has(prev)?1:0, liftDates.has(d.date)?1:0];
-  }).filter(Boolean);
+  const paired = sleepDayPairs(getFilteredDays(), corrSleep, -1)
+    .filter(({ day: m }) => Number.isFinite(m.calories) && m.calories > 0)
+    .map(({ day: m, sleep: d }) => [m.calories, m.protein, m.carbs, m.fat, d.perf, d.hours, d.deep, d.rem, d.efficiency, d.resp, m.drinks?1:0, m.lifting === 'Y'?1:0]);
 
   const n = labels.length;
   const corr = [];

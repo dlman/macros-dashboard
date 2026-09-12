@@ -1615,15 +1615,11 @@ function updateSleepCharts(days) {
 }
 
 function updateInsightCharts(days) {
-  const afterDrink = [];
-  const afterClean = [];
-  days.forEach(d => {
-    if (drinkDates.has(prevDay(d.date))) afterDrink.push(d.perf);
-    else afterClean.push(d.perf);
-  });
+  const macroDays = getFilteredDays();
+  const { afterDrink, afterClean } = drinkSleepCohorts(macroDays, days);
   const drinkSleepChart = Chart.getChart(document.getElementById('drinkSleepChart'));
-  const avgAfterDrink = afterDrink.length ? +(afterDrink.reduce((a, b) => a + b, 0) / afterDrink.length).toFixed(1) : 0;
-  const avgAfterClean = afterClean.length ? +(afterClean.reduce((a, b) => a + b, 0) / afterClean.length).toFixed(1) : 0;
+  const avgAfterDrink = afterDrink.length ? +(afterDrink.reduce((a, b) => a + b, 0) / afterDrink.length).toFixed(1) : null;
+  const avgAfterClean = afterClean.length ? +(afterClean.reduce((a, b) => a + b, 0) / afterClean.length).toFixed(1) : null;
   drinkSleepChart.data.labels = [`After Drink (n=${afterDrink.length})`, `After Clean (n=${afterClean.length})`];
   drinkSleepChart.data.datasets[0].data = [avgAfterDrink, avgAfterClean];
   drinkSleepChart.update();
@@ -1659,42 +1655,39 @@ function updateInsightCharts(days) {
   respChart.update();
 
   const calSleepChart = Chart.getChart(document.getElementById('calSleepScatterChart'));
-  const scatter = days.map(d => {
-    const nextMacro = macroByDate[nextDayStr(d.date)];
-    return nextMacro ? { x: energyValue(nextMacro.calories), y: d.perf, date: d.date, nextDate: nextMacro.date } : null;
-  }).filter(Boolean);
+  const scatter = sleepIntakePairs(macroDays, days).map(p => ({ x: energyValue(p.intake), y: p.perf, date: p.date }));
   calSleepChart.data.datasets[0].data = scatter.map(p => ({ x: p.x, y: p.y }));
   calSleepChart.data.datasets[0].backgroundColor = scatter.map(p => perfColor(p.y, 0.7));
   calSleepChart.options.plugins.tooltip.callbacks.label = ctx => {
     const p = scatter[ctx.dataIndex];
-    return [` Sleep: ${p.date}`, ` Next-day calories (${p.nextDate}): ${p.x.toLocaleString()} ${energyUnit()}`, ` Sleep: ${p.y}%`];
+    return [` Wake date: ${p.date}`, ` Waking-day intake: ${p.x.toLocaleString()} ${energyUnit()}`, ` Sleep: ${p.y}%`];
   };
-  calSleepChart.options.scales.x.title.text = `Calories (${energyUnit()})`;
+  calSleepChart.options.scales.x.title.text = `Food + alcohol (${energyUnit()})`;
   calSleepChart.options.scales.x.ticks.callback = v => `${v.toLocaleString()} ${energyUnit()}`;
   calSleepChart.update();
 
   const annotatedChart = Chart.getChart(document.getElementById('sleepAnnotatedChart'));
   annotatedChart.data.labels = days.map(d => d.date.slice(5));
   annotatedChart.data.datasets[0].data = days.map(d => d.perf);
-  annotatedChart.data.datasets[0].pointRadius = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(d.date) ? 7 : 3);
+  annotatedChart.data.datasets[0].pointRadius = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(prevDay(d.date)) ? 7 : 3);
   annotatedChart.data.datasets[0].pointStyle = days.map(d => {
     if (drinkDates.has(prevDay(d.date))) return 'triangle';
-    if (liftDates.has(d.date)) return 'rectRot';
+    if (liftDates.has(prevDay(d.date))) return 'rectRot';
     return 'circle';
   });
   annotatedChart.data.datasets[0].pointBackgroundColor = days.map(d => {
     if (drinkDates.has(prevDay(d.date))) return EVENT_COLORS.drink;
-    if (liftDates.has(d.date)) return EVENT_COLORS.lift;
+    if (liftDates.has(prevDay(d.date))) return EVENT_COLORS.lift;
     return EVENT_COLORS.normal;
   });
-  annotatedChart.data.datasets[0].pointBorderColor = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(d.date) ? 'rgba(15,17,23,0.85)' : 'transparent');
-  annotatedChart.data.datasets[0].pointBorderWidth = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(d.date) ? 1.5 : 0);
+  annotatedChart.data.datasets[0].pointBorderColor = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(prevDay(d.date)) ? 'rgba(15,17,23,0.85)' : 'transparent');
+  annotatedChart.data.datasets[0].pointBorderWidth = days.map(d => drinkDates.has(prevDay(d.date)) || liftDates.has(prevDay(d.date)) ? 1.5 : 0);
   annotatedChart.options.plugins.tooltip.callbacks.title = ctx => days[ctx[0].dataIndex]?.date || '';
   annotatedChart.options.plugins.tooltip.callbacks.label = ctx => {
     const d = days[ctx.dataIndex];
     const flags = [];
     if (drinkDates.has(prevDay(d.date))) flags.push('🍹 drank prev');
-    if (liftDates.has(d.date)) flags.push('🏋️ lifted');
+    if (liftDates.has(prevDay(d.date))) flags.push('🏋️ lifted previous day');
     return [` Perf: ${d.perf}%  Sleep: ${d.hours}h`, ...flags];
   };
   annotatedChart.update();
@@ -1736,7 +1729,7 @@ function updateStepsChart(days) {
 function renderStepsCorrelations(days) {
   const el = document.getElementById('stepsCorrelationInsight');
   if (!el) return;
-  const corr = stepsCorrelations(days);
+  const corr = stepsCorrelations(days, getFilteredSleep());
   if (!corr || corr.n_sleep < 5) { el.innerHTML = ''; return; }
   const fmtR = r => r == null ? '—' : (r > 0 ? '+' : '') + r.toFixed(2);
   const rColor = r => r == null ? 'var(--text-faint)' : Math.abs(r) >= 0.2 ? (r > 0 ? 'var(--col-green)' : 'var(--col-red)') : 'var(--col-amber)';

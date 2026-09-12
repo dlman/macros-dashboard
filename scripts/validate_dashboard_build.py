@@ -85,6 +85,7 @@ def main() -> None:
     run_check(["node", "--test", str(ROOT / "scripts" / "test_weekly_planning.cjs")], "Weekly planning and progress-change tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_body_composition.cjs")], "Body composition consistency tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_scenario_energy.cjs")], "Scenario energy accounting tests")
+    run_check(["node", "--test", str(ROOT / "scripts" / "test_sleep_alignment.cjs")], "Sleep wake-date alignment tests")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 
