@@ -11,6 +11,7 @@ then writes the results back into data.js so the dashboard can use them.
 import re, json, sys
 import numpy as np
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -67,37 +68,60 @@ def parse_data_js(path):
 # 2. Drink calorie estimation (mirrors JS exactly)
 # ─────────────────────────────────────────────────────────────────
 
-DRINK_PATTERNS = [
-    (r'(\d+(?:\.\d+)?)\s*(?:jameson|jamesons|whiskey|whiskeys)', 110),
-    (r'(\d+(?:\.\d+)?)\s*(?:tequila|tequilas)',                  100),
-    (r'(\d+(?:\.\d+)?)\s*(?:beer|beers)',                        150),
-    (r'(\d+(?:\.\d+)?)\s*(?:wine)',                              125),
-    (r'(\d+(?:\.\d+)?)\s*(?:champagne)',                         125),
-    (r"(\d+(?:\.\d+)?)\s*(?:sake|sake's)",                       135),
-    (r'(\d+(?:\.\d+)?)\s*(?:white claw|white claws)',            100),
-    (r'(\d+(?:\.\d+)?)\s*(?:old fashioned|old fashioneds)',      170),
-    (r'(\d+(?:\.\d+)?)\s*(?:highball|highballs)',                130),
-    (r'(\d+(?:\.\d+)?)\s*(?:negroni|negronis)',                  180),
-    (r'(\d+(?:\.\d+)?)\s*(?:drink|drinks)',                      140),
+DRINK_RULES = [
+    (r'(?:jamesons?|whiskeys?|whiskies)', 110, None),
+    (r'tequilas?', 100, None), (r'beers?', 150, None), (r'wines?', 125, None),
+    (r'champagnes?', 125, None), (r"sake(?:'s)?(?: shots?)?", 135, None),
+    (r'white claws?', 100, None), (r'old fashioneds?', 170, None),
+    (r'(?:whiskey )?highballs?', 130, None), (r'negronis?', 180, None),
+    (r'soju bottles?', 540, None), (r'soju', 270, 'soju_half_bottle'),
+    (r'(?:drinks?|cocktails?)', 140, 'generic_serving'),
 ]
 
+def parse_drinks(drinks):
+    """Mirror JS parseDrinks, including provisional estimates and review reasons."""
+    result = {'calories': 0, 'needsReview': False, 'assumptions': [], 'unparsed': []}
+    text = re.sub(r'\s+', ' ', str(drinks if drinks is not None else '')).lower().strip()
+    counts = dict(a=1, an=1, one=1, two=2, three=3, four=4, five=5,
+                  six=6, seven=7, eight=8, nine=9, ten=10, half=0.5)
+    no_alcohol = r'(?:0|none|no|n/a|no (?:alcohol|drinks?)|zero (?:alcohol|drinks?))'
+    if not text or re.fullmatch(no_alcohol, text):
+        return result
+    for part in filter(None, re.split(r'\s*(?:[,;+&]|\band\b)\s*', text)):
+        if re.fullmatch(no_alcohol, part):
+            continue
+        match = re.fullmatch(r'(\d+/\d+|\d+(?:\.\d+)?|\.\d+|half|one|two|three|four|five|six|seven|eight|nine|ten|an?)(?:\s+(?:a|an))?\s+(.+)', part)
+        count, name = 1, part
+        if match:
+            token, name = match.groups()
+            if token in counts:
+                count = counts[token]
+            elif '/' in token:
+                numerator, denominator = map(float, token.split('/'))
+                count = numerator / denominator if denominator else float('inf')
+            else:
+                count = float(token)
+        rule = next((rule for rule in DRINK_RULES if re.fullmatch(rule[0], name)), None)
+        if rule is None or not np.isfinite(count) or count < 0 or count > 100:
+            result['calories'] += 140
+            result['unparsed'].append(part)
+            continue
+        result['calories'] += count * rule[1]
+        if count > 0:
+            if not match:
+                result['assumptions'].append('quantity_one')
+            if rule[2]:
+                result['assumptions'].append(rule[2])
+    # Match JS Math.round for nonnegative calorie totals, not Python's ties-to-even.
+    result['calories'] = int(np.floor(result['calories'] + 0.5))
+    result['assumptions'] = list(dict.fromkeys(result['assumptions']))
+    result['needsReview'] = bool(result['assumptions'] or result['unparsed'])
+    return result
+
+
+@lru_cache(maxsize=1024)
 def estimate_drink_calories(drinks):
-    if not drinks:
-        return 0
-    text = drinks.lower()
-    total = 0.0
-    for pattern, kcal in DRINK_PATTERNS:
-        for m in re.finditer(pattern, text):
-            total += float(m.group(1)) * kcal
-    soju_m = re.search(r'(?:(half)|(\d+(?:\.\d+)?))\s*soju bottle', text)
-    if soju_m:
-        count = 0.5 if soju_m.group(1) else float(soju_m.group(2) or '1')
-        total += count * 540
-    elif 'soju' in text and total == 0:
-        total += 270
-    if not total and text.strip():
-        total += 140
-    return round(total)
+    return parse_drinks(drinks)['calories']
 
 def effective_calories(day):
     return (day['calories'] or 0) + estimate_drink_calories(day.get('drinks'))

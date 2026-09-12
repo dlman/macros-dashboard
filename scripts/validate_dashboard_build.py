@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PY_FILES = [
     ROOT / "update_bayes.py",
     ROOT / "scripts" / "test_update_bayes.py",
+    ROOT / "scripts" / "test_drink_parser.py",
     ROOT / "scripts" / "sync_google_sheets.py",
     ROOT / "scripts" / "sync_steps.py",
     ROOT / "scripts" / "sync_whoop.py",
@@ -86,6 +87,8 @@ def main() -> None:
     run_check(["node", "--test", str(ROOT / "scripts" / "test_body_composition.cjs")], "Body composition consistency tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_scenario_energy.cjs")], "Scenario energy accounting tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_sleep_alignment.cjs")], "Sleep wake-date alignment tests")
+    run_check(["node", "--test", str(ROOT / "scripts" / "test_drink_parser.cjs")], "Alcohol parser fixtures")
+    run_check([sys.executable, str(ROOT / "scripts" / "test_drink_parser.py")], "Python/JS alcohol parser parity")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 

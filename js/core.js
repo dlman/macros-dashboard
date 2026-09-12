@@ -1447,34 +1447,53 @@ function sleepDebt(days = sleepData) {
   });
 }
 
-function estimateDrinkCalories(drinks) {
-  if (!drinks) return 0;
-  const text = String(drinks).toLowerCase();
-  let total = 0;
-  const drinkPatterns = [
-    { re: /(\d+(?:\.\d+)?)\s*(?:jameson|jamesons|whiskey|whiskeys)/g, kcal: 110 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:tequila|tequilas)/g, kcal: 100 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:beer|beers)/g, kcal: 150 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:wine)/g, kcal: 125 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:champagne)/g, kcal: 125 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:sake|sake's)/g, kcal: 135 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:white claw|white claws)/g, kcal: 100 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:old fashioned|old fashioneds)/g, kcal: 170 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:highball|highballs)/g, kcal: 130 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:negroni|negronis)/g, kcal: 180 },
-    { re: /(\d+(?:\.\d+)?)\s*(?:drink|drinks)/g, kcal: 140 }
+// Keep serving rules and parsing behavior in sync with update_bayes.py; shared fixtures enforce parity.
+function parseDrinks(drinks) {
+  const result = { calories: 0, needsReview: false, assumptions: [], unparsed: [] };
+  const text = String(drinks ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const counts = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10, half: 0.5 };
+  const rules = [
+    [/^(?:jamesons?|whiskeys?|whiskies)$/, 110],
+    [/^tequilas?$/, 100], [/^beers?$/, 150], [/^wines?$/, 125], [/^champagnes?$/, 125],
+    [/^sake(?:'s)?(?: shots?)?$/, 135], [/^white claws?$/, 100],
+    [/^old fashioneds?$/, 170], [/^(?:whiskey )?highballs?$/, 130], [/^negronis?$/, 180],
+    [/^soju bottles?$/, 540], [/^soju$/, 270, 'soju_half_bottle'],
+    [/^(?:drinks?|cocktails?)$/, 140, 'generic_serving']
   ];
-  drinkPatterns.forEach(({ re, kcal }) => {
-    for (const match of text.matchAll(re)) total += parseFloat(match[1]) * kcal;
-  });
-  const sojuMatch = text.match(/(?:(half)|(\d+(?:\.\d+)?))\s*soju bottle/);
-  if (sojuMatch) {
-    const count = sojuMatch[1] ? 0.5 : parseFloat(sojuMatch[2] || '1');
-    total += count * 540;
+  const noAlcohol = /^(?:0|none|no|n\/a|no (?:alcohol|drinks?)|zero (?:alcohol|drinks?))$/;
+  if (!text || noAlcohol.test(text)) return result;
+  for (const part of text.split(/\s*(?:[,;+&]|\band\b)\s*/).filter(Boolean)) {
+    if (noAlcohol.test(part)) continue;
+    const match = part.match(/^(\d+\/\d+|\d+(?:\.\d+)?|\.\d+|half|one|two|three|four|five|six|seven|eight|nine|ten|an?)(?:\s+(?:a|an))?\s+(.+)$/);
+    let count = 1, name = part;
+    if (match) {
+      name = match[2];
+      const token = match[1];
+      count = token in counts ? counts[token] : token.includes('/')
+        ? Number(token.split('/')[0]) / Number(token.split('/')[1]) : Number(token);
+    }
+    const rule = rules.find(([pattern]) => pattern.test(name));
+    if (!rule || !Number.isFinite(count) || count < 0 || count > 100) {
+      // Preserve a visible provisional estimate instead of silently dropping unknown text.
+      result.calories += 140;
+      result.unparsed.push(part);
+      continue;
+    }
+    result.calories += count * rule[1];
+    if (count > 0) {
+      if (!match) result.assumptions.push('quantity_one');
+      if (rule[2]) result.assumptions.push(rule[2]);
+    }
   }
-  if (!total && text.includes('soju')) total += 270;
-  if (!total && text.trim()) total += 140;
-  return Math.round(total);
+  result.calories = Math.round(result.calories);
+  result.assumptions = [...new Set(result.assumptions)];
+  result.needsReview = !!(result.assumptions.length || result.unparsed.length);
+  return result;
+}
+
+function estimateDrinkCalories(drinks) {
+  return parseDrinks(drinks).calories;
 }
 
 function effectiveCalories(day) {
@@ -2708,6 +2727,7 @@ function qualityAudit(days, sleep) {
     noteCoverage,
     macroAgreement,
     mismatchFlagged,
+    drinkReview: days.map(day => ({ date: day.date, ...parseDrinks(day.drinks) })).filter(day => day.needsReview),
     missingSleepDates,
     longestGap,
     noteMissing: days.length - noteDays.length,

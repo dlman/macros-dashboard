@@ -61,10 +61,22 @@ function openPanel(dateStr) {
   }
 
   // Drink calorie estimate breakdown
-  const drinkCalEst = estimateDrinkCalories(day.drinks);
+  const drinkEstimate = parseDrinks(day.drinks);
+  const drinkCalEst = drinkEstimate.calories;
   if (drinkCalEst > 0) {
     const effectiveCal = effectiveCalories(day);
     badges.innerHTML += `<span class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444;">🔥 ~${energyLabel(drinkCalEst)} drink cals · ~${energyLabel(effectiveCal)} effective total</span>`;
+  }
+  if (drinkEstimate.needsReview) {
+    const review = document.createElement('span');
+    review.className = 'pill';
+    const reasons = [];
+    if (drinkEstimate.assumptions.includes('quantity_one')) reasons.push('unlisted quantities assumed 1 serving');
+    if (drinkEstimate.assumptions.includes('soju_half_bottle')) reasons.push('soju assumed half bottle per serving');
+    if (drinkEstimate.assumptions.includes('generic_serving')) reasons.push('generic drinks/cocktails use 140 kcal each');
+    if (drinkEstimate.unparsed.length) reasons.push(`unrecognized text uses 140 kcal per entry: ${drinkEstimate.unparsed.join('; ')}`);
+    review.textContent = `Alcohol estimate: ${reasons.join(' · ')}`;
+    badges.appendChild(review);
   }
 
   // Food pills

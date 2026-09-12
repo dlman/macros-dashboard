@@ -3090,6 +3090,14 @@ function renderExploreDiagnostics() {
   `).join('');
 
   const qualityItems = [];
+  if (quality.drinkReview.length) {
+    const unresolved = quality.drinkReview.filter(day => day.unparsed.length).length;
+    qualityItems.push({
+      cls: 'warn',
+      title: 'Alcohol estimates need review',
+      text: `${quality.drinkReview.length} days use assumed quantities or generic servings; ${unresolved} contain unrecognized text with a provisional 140 kcal per entry. Dates include ${quality.drinkReview.slice(0, 4).map(day => formatShortDate(day.date)).join(', ')}.`
+    });
+  }
   if (quality.longestGap) {
     qualityItems.push({
       cls: quality.longestGap.days > 6 ? 'bad' : quality.longestGap.days > 4 ? 'warn' : 'good',
