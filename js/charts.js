@@ -1003,6 +1003,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       milestoneEl.innerHTML = '';
     } else {
       const currentBf = bfTargets[0].currentBfPct;
+      const scanAnchored = bfTargets[0].anchorDate >= DXA_SCAN_LATEST.date;
       const nextTarget = bfTargets.find(target => !target.alreadyThere);
       const markerPct = clamp01((18 - currentBf) / 3) * 100;
       const creatineWater = bfTargets[0].creatineWater || 0;
@@ -1015,8 +1016,8 @@ function renderForecastStrip(filteredDays, filteredSleep) {
             <div class="bf-dot"></div>
             <div class="bf-ms-label">${target.targetBfPct}%</div>
             <div class="bf-ms-time">${targetDaysLabel(target)}</div>
-            <div class="bf-ms-weight">${targetWeightRangeLabel(target, 'cutLow', 'cutHigh', target.cutStateTargetWeight)} cut</div>
-            <div class="bf-ms-fed">${targetWeightRangeLabel(target, 'fedLow', 'fedHigh', target.fedStateTargetWeight)} fed</div>
+            <div class="bf-ms-weight">${targetWeightRangeLabel(target, 'cutLow', 'cutHigh', target.cutStateTargetWeight)} ${scanAnchored ? 'scan-state' : 'cut'}</div>
+            ${scanAnchored ? '' : `<div class="bf-ms-fed">${targetWeightRangeLabel(target, 'fedLow', 'fedHigh', target.fedStateTargetWeight)} fed</div>`}
           </div>
         `;
       }).join('');
@@ -1024,7 +1025,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} cut-state.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${creatineWater > 0 ? ` Scale includes ~${creatineRangeLabel} modeled creatine water; BF math uses the ${weightLabel(creatineWater, 1)} midpoint and excludes it from fat trend.` : ''}</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, 'cutLow', 'cutHigh', nextTarget.cutStateTargetWeight)} ${bodyCompStateLabel(bfTargets[0].anchorDate)}.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${scanAnchored ? ` ${formatShortDate(DXA_SCAN_LATEST.date)} DXA anchor; creatine already included. Scan preparation unconfirmed; no extra fed-state offset applied.` : creatineWater > 0 ? ` Scale includes ~${creatineRangeLabel} modeled creatine water; BF math uses the ${weightLabel(creatineWater, 1)} midpoint and excludes it from fat trend.` : ''}</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1065,7 +1066,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="runway-metric">
             <span>Tissue remaining</span>
             <strong>${weightLabel(runway.tissueWeightRemaining, 1)}</strong>
-            <small>to ${weightLabel(runway.targetWeight, 1)} cut-state</small>
+            <small>to ${weightLabel(runway.targetWeight, 1)} ${bodyCompStateLabel(runway.anchorDate)}</small>
           </div>
           <div class="runway-metric">
             <span>Required pace</span>
@@ -1959,7 +1960,7 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
           }
           return [
             `  Estimated from dynamic DXA model`,
-            d.creatineWater ? `  Creatine water adjustment: ~${creatineWaterRangeLabel(d.creatineWater)} lean/water modeled (midpoint ${weightLabel(d.creatineWater, 1)}), excluded from fat trend` : '',
+            bodyCompCreatineNote(d),
             `  Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
             `  Total: ${weightLabel(d.weight)}`,
             glycoNote
@@ -1999,8 +2000,8 @@ allCharts.bodyCompChart = new Chart(document.getElementById('bodyCompChart'), {
   );
 
   // Mark the two DXA scan dates
-  const dxaDates = [DXA_SCAN_PREV.date, DXA_SCAN.date];
-  const dxaLabels = { [DXA_SCAN_PREV.date]: 'DXA Jan 6', [DXA_SCAN.date]: 'DXA Apr 8' };
+  const dxaDates = DXA_SCANS.map(scan => scan.date);
+  const dxaLabels = Object.fromEntries(DXA_SCANS.map(scan => [scan.date, `DXA ${formatShortDate(scan.date)}`]));
 
   allCharts.glycogenChart = new Chart(el, {
     type: 'line',
@@ -3245,6 +3246,8 @@ function runScenarioPlanner() {
   const projectedComp = projectedStates.cutState;
   const projectedCompFed = projectedStates.fedState;
   const currentStates = scenarioProjectedBodyComp(r.currentWeight, rangeDays, currentScenarioDate);
+  const scanState = currentStates.cutState.anchorDate >= DXA_SCAN_LATEST.date;
+  const stateLabel = bodyCompStateLabel(currentStates.cutState.anchorDate);
   const projectedFatChange = +(currentStates.cutState.fat - projectedComp.fat).toFixed(1);
   const projectedLeanChange = +(projectedComp.lean - currentStates.cutState.lean).toFixed(1);
   const envelope = scenarioForecastEnvelope({ calories: cal, weeks, sleep: sleepHours, drinks: drinkNights }, rangeDays, rangeSleep);
@@ -3259,15 +3262,15 @@ function runScenarioPlanner() {
       html += `<div>This food and alcohol setup does not project enough tissue loss to reach the goal.</div>`;
     } else {
       html += `<div><strong>${energyLabel(cal)}/day</strong> food and <strong>${drinkNights.toFixed(1)}</strong> drink nights/week points to <strong>${targetBfPct.toFixed(1)}% BF</strong> in about <strong>${goalProjection.daysToTarget} days</strong> (${goalProjection.weeksToTarget} weeks).</div>`;
-      html += `<div>Creatine-adjusted target weights: <strong>${weightLabel(goalProjection.cutTargetWeight)}</strong> cut-state or <strong>${weightLabel(goalProjection.fedTargetWeight)}</strong> fuller fed-state at the same BF.</div>`;
+      html += `<div>Target: <strong>${weightLabel(goalProjection.cutTargetWeight)}</strong> ${stateLabel}${scanState ? ' (creatine already in scan anchor)' : ` or <strong>${weightLabel(goalProjection.fedTargetWeight)}</strong> fuller fed-state at the same BF`}.</div>`;
       html += `<div>Current pace under this setup is about <strong>${weightLabel(Math.abs(goalProjection.weeklyPace), 2)}/week</strong> with an effective ${goalProjection.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(goalProjection.effectiveDeficit)}/day</strong>.</div>`;
       html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the first ${weeks}-week chart window.</div>`;
     }
   } else {
     html += `<div><strong>${energyLabel(cal)}/day</strong> for <strong>${weeks} week${weeks === 1 ? '' : 's'}</strong> · maintenance <strong>${energyLabel(r.tdee)}</strong> · effective ${r.effectiveDeficit >= 0 ? '+' : ''}<strong>${energyLabel(r.effectiveDeficit)}/day</strong>.</div>`;
-    html += `<div>Cut-state: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(tissueChange), 1)}</strong> tissue pace${r.creatineScaleDelta ? `, ${r.creatineScaleDelta > 0 ? '+' : '−'}${weightLabel(Math.abs(r.creatineScaleDelta), 1)} creatine water` : ''}) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
+    html += `<div>${stateLabel}: <strong>${weightLabel(parseFloat(r.projectedWeight))}</strong> (${dir} <strong>${weightLabel(Math.abs(tissueChange), 1)}</strong> tissue pace${r.creatineScaleDelta ? `, ${r.creatineScaleDelta > 0 ? '+' : '−'}${weightLabel(Math.abs(r.creatineScaleDelta), 1)} creatine water` : ''}) · likely <strong>${weightLabel(cutLowEnd)}–${weightLabel(cutHighEnd)}</strong> from TDEE uncertainty.</div>`;
     html += `<div>Tissue split: <strong>${projectedFatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(projectedFatChange), 1)}</strong> fat / <strong>${projectedLeanChange >= 0 ? '+' : '−'}${weightLabel(Math.abs(projectedLeanChange), 1)}</strong> lean · body fat <strong>~${projectedComp.bodyFatPct.toFixed(1)}%</strong> (${projectedComp.bodyFatPctLow.toFixed(1)}%–${projectedComp.bodyFatPctHigh.toFixed(1)}%).</div>`;
-    html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
+    if (!scanState) html += `<div>Fed-state comparable: <strong>${weightLabel(projectedCompFed.weight)}</strong> at <strong>~${projectedCompFed.bodyFatPct.toFixed(1)}%</strong> on the fuller Jan-like DXA bracket; the dashed path currently layers about <strong>+${weightLabel(reboundEnd, 1)}</strong> of rebound toward that state.</div>`;
     html += `<div>Vs last 7 days: <strong>${deltaVsBaseline >= 0 ? 'more' : 'less'} movement by ${weightLabel(Math.abs(deltaVsBaseline), 1)}</strong> over the same ${weeks}-week window.</div>`;
   }
   const alcoholBasis = r.alcohol.source === 'logged'
@@ -3347,10 +3350,10 @@ function runScenarioPlanner() {
       value: 'Need a cut',
       sub: `This setup does not create a reliable path to ${targetBfPct.toFixed(1)}% BF`
     }].concat(horizonCards.slice(0, 3));
-  document.getElementById('scenarioResultGrid').innerHTML = (scenarioPlannerMode === 'goal' ? goalCards : horizonCards).map(card => `
+  document.getElementById('scenarioResultGrid').innerHTML = (scenarioPlannerMode === 'goal' ? goalCards : horizonCards).filter(card => !scanState || !/fed-state|Fed-state|fuller fed-state/.test(card.sub)).map(card => `
     <div class="score-card">
       <div class="value">${card.value}</div>
-      <div class="sub">${card.sub}</div>
+      <div class="sub">${scanState ? card.sub.replace(/cut-state/gi, 'scan-state') : card.sub}</div>
     </div>
   `).join('');
 
@@ -3362,7 +3365,7 @@ function runScenarioPlanner() {
         <div class="compare-card${scenarioPreset === key ? ' active-scenario-compare' : ''}">
           <div class="eyebrow">${scenarioPresetLabel(key)}</div>
           <div class="delta">${goalSnap?.achievable ? `~${goalSnap.daysToTarget} days` : 'No path'}</div>
-          <div class="tiny">${goalSnap?.achievable ? `${weightLabel(goalSnap.cutTargetWeight)} cut · ${weightLabel(goalSnap.fedTargetWeight)} fed · ${weightLabel(Math.abs(goalSnap.weeklyPace), 2)}/wk` : 'Current setup does not create a reliable downward pace to target.'}</div>
+          <div class="tiny">${goalSnap?.achievable ? `${weightLabel(goalSnap.cutTargetWeight)} ${stateLabel}${scanState ? '' : ` · ${weightLabel(goalSnap.fedTargetWeight)} fed`} · ${weightLabel(Math.abs(goalSnap.weeklyPace), 2)}/wk` : 'Current setup does not create a reliable downward pace to target.'}</div>
         </div>
       `;
     }
@@ -3370,8 +3373,8 @@ function runScenarioPlanner() {
     return `
       <div class="compare-card${scenarioPreset === key ? ' active-scenario-compare' : ''}">
         <div class="eyebrow">${snapshot.label}</div>
-        <div class="delta">${weightLabel(snapshot.cutState.weight)} cut</div>
-        <div class="tiny">${snapshot.scaleChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.scaleChange), 1)} scale · ${snapshot.fatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.fatChange), 1)} fat · ${weightLabel(snapshot.fedState.weight)} fed</div>
+        <div class="delta">${weightLabel(snapshot.cutState.weight)} ${stateLabel}</div>
+        <div class="tiny">${snapshot.scaleChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.scaleChange), 1)} scale · ${snapshot.fatChange >= 0 ? '−' : '+'}${weightLabel(Math.abs(snapshot.fatChange), 1)} fat${scanState ? '' : ` · ${weightLabel(snapshot.fedState.weight)} fed`}</div>
       </div>
     `;
   }).join('');
@@ -3389,11 +3392,13 @@ function runScenarioPlanner() {
   document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
     ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path. ${creatineAssumption} Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`
     : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state. ${creatineAssumption}${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;
+  if (scanState) document.getElementById('scenarioAssumptions').textContent = `Sep 23 DXA anchor: ${weightLabel(DXA_SCAN_LATEST.totalMass)}, 18.6% reported BF, ${weightLabel(DXA_SCAN_LATEST.fatMass)} fat, ${weightLabel(DXA_SCAN_LATEST.leanMass)} lean and ${weightLabel(DXA_SCAN_LATEST.boneMass)} bone. Creatine water is already included at the anchor; only changes relative to that date affect projections. Scan preparation is unconfirmed, so no separate cut/fed water offset is assumed. Working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}.`;
   document.getElementById('scenarioAssumptions').textContent += ` Food excludes alcohol; estimated alcohol is added once using the same drink parser as the dashboard. ${alcoholBasis}. Sleep is context only and adds no calorie penalty.`;
   const forecastCopy = document.getElementById('scenarioForecastCopy');
   if (forecastCopy) {
     forecastCopy.textContent = scenarioPlannerMode === 'goal'
       ? `Auto-extends to show a plausible path toward ${targetBfPct.toFixed(1)}% BF, with your active setup compared against core preset timelines.`
+      : newerBodyCompScan(rangeDays) ? `Starts from the ${formatShortDate(DXA_SCAN_LATEST.date)} DXA measurement, newer than the last logged weigh-in, and compares your active scenario with current pace and core preset paths.`
       : 'Starts from the latest weigh-in inside the selected range and compares your active scenario with current pace and core preset paths.';
   }
 }

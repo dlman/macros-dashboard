@@ -23,7 +23,7 @@ test('April scan anchor and existing main-model estimate are preserved', () => {
   const scan = run('estimateBodyCompAtWeight(DXA_SCAN.totalMass, allDays, DXA_SCAN.date)');
   near(scan.bodyFatPct, 21.2);
   near(scan.lean, 120.6);
-  const cases = run(`allDays.filter(d => d.weight).map(d => {
+  const cases = run(`allDays.filter(d => d.weight && d.date < DXA_SCAN_LATEST.date).map(d => {
     const p = estimateBodyCompAtWeight(d.weight, allDays, d.date);
     const shares = bodyCompModelShares(allDays);
     const delta = d.weight - p.creatineWater - DXA_SCAN.totalMass;
@@ -31,6 +31,80 @@ test('April scan anchor and existing main-model estimate are preserved', () => {
     return { actual: p.bodyFatPct, expected: (d.weight - p.creatineWater - ffm) / d.weight * 100 };
   })`);
   for (const p of cases) near(p.actual, p.expected);
+});
+
+test('September report uses reported fat, lean and bone and includes creatine exactly once', () => {
+  const result = run(`({scan:DXA_SCAN_LATEST, model:estimateBodyCompRangeAtWeight(156.3, allDays, '2026-09-23')})`);
+  near(result.scan.fatMass,29);
+  near(result.model.fat,29);
+  near(result.model.lean,121.2);
+  near(result.model.bone,6.1);
+  near(result.model.lean+result.model.fat+result.model.bone,156.3);
+  near(result.model.creatineWater,result.model.anchorCreatineWater);
+  assert.equal(result.model.bodyFatPct.toFixed(1),'18.6');
+  assert.ok(result.model.leanLow<=121.2 && result.model.leanHigh>=121.2);
+});
+
+test('all three measured scans stay unmodified in both body-comp views', () => {
+  const result=run(`({cut:bodyCompEstimate(allDays,'cut').filter(p=>p.measured),fed:bodyCompEstimate(allDays,'fed').filter(p=>p.measured)})`);
+  assert.equal(result.cut.length,3);
+  for(let i=0;i<3;i++) {
+    near(result.cut[i].fat,result.fed[i].fat);
+    near(result.cut[i].lean,result.fed[i].lean);
+    near(result.cut[i].weight,result.fed[i].weight);
+    near(result.cut[i].fat+result.cut[i].lean+result.cut[i].bone,result.cut[i].weight);
+  }
+  near(result.cut[2].bodyFatPct,18.6);
+});
+
+test('new DXA can anchor current goals without fabricating a macro log or 7-day weight', () => {
+  const p=run(`({last:allDays.at(-1).date,anchor:bodyCompWeightAnchor(allDays),
+    scenario:latestWeightPointForScenario(allDays),projection:bodyFatTargetProjection(allDays,15)})`);
+  if(p.last< '2026-09-23') {
+    assert.equal(p.anchor.source,'DXA measurement');
+    assert.equal(p.anchor.date,'2026-09-23');
+    near(p.anchor.weight,156.3);
+    near(p.scenario.weight,156.3);
+    assert.equal(p.projection.currentWeightAnchor,'DXA measurement');
+  }
+});
+
+test('post-scan targets and scenarios round-trip without an unconfirmed fed offset', () => {
+  const cases=run(`[15,16,17,18].map(target=>{
+    const days=[{date:'2026-09-24',weight:156.3,protein:170,lifting:'Y'}];
+    const current=estimateBodyCompAtWeight(156.3,days,'2026-09-24');
+    const weights=bodyFatTargetWeightsFromCurrent(current,target,days);
+    return {target,weights,scenario:scenarioProjectedBodyComp(weights.cutStateTarget,days,'2026-10-01'),
+      model:estimateBodyCompRangeAtWeight(weights.cutStateTarget,days,'2026-10-01')};
+  })`);
+  for(const p of cases) {
+    near(p.scenario.cutState.bodyFatPct,p.target);
+    near(p.model.bodyFatPct,p.target);
+    near(p.weights.cutStateTarget,p.weights.fedStateTarget);
+    near(p.scenario.fedDelta,0);
+    near(p.model.lean+p.model.fat+p.model.bone,p.model.weight);
+  }
+});
+
+test('a historical scenario never jumps to a scan unavailable at its starting date', () => {
+  const p=run(`(()=>{
+    const days=[{date:'2026-09-01',weight:160,protein:170,lifting:'Y'}];
+    const forecast=scenarioProjectedBodyComp(155,days,'2026-10-01');
+    const timeline=bodyFatGoalTimeline(160,'2026-09-01',0.03,15,days);
+    return {forecast,timeline};
+  })()`);
+  assert.equal(p.forecast.cutState.anchorDate,'2026-04-08');
+  assert.equal(p.timeline.bodyComp.anchorDate,'2026-04-08');
+});
+
+test('historical date ranges do not acquire the September scan measurement', () => {
+  const p=run(`(()=>{
+    const original=rangeEndIdx;
+    try {rangeEndIdx=allDates.indexOf('2026-08-01');
+      return bodyCompEstimate(allDays.filter(d=>d.date<='2026-08-01')).filter(p=>p.measured).map(p=>p.date);
+    } finally {rangeEndIdx=original;}
+  })()`);
+  assert.deepEqual(Array.from(p),['2026-01-06','2026-04-08']);
 });
 
 test('scenario and main estimates agree before, during and after creatine, in both weight branches', () => {
@@ -112,8 +186,8 @@ test('modeled lean intervals contain their point estimates and exclude bone', ()
     const scenario = scenarioProjectedBodyComp(d.weight, allDays, d.date);
     return [scenario.cutState, scenario.fedState];
   }).concat([estimateBodyCompRangeAtWeight(DXA_SCAN.totalMass, allDays, DXA_SCAN.date)])`);
-  const bone = run('DXA_BONE_MASS');
   for (const p of cases) {
+    const bone = p.bone;
     assert.ok(p.leanLow <= p.lean && p.lean <= p.leanHigh);
     near(p.lean + p.fat + bone, p.weight, 'point mass');
     near(p.leanLow + p.fatHigh + bone, p.weight, 'lower lean mass');
@@ -154,7 +228,7 @@ test('milestones, scenario goals and year-end runway use the same target model f
     const scenario = scenarioTimeToBodyFatGoal({ calories: 1800, sleep: 7, drinks: 0 }, 15, days, []);
     const baseline = baselineAnalyticsDays(getAnalyticsDays(days));
     const runway = yearEndBodyFatRunway(days, 15);
-    const anchor = latestRollingWeightAnchor(baseline);
+    const anchor = bodyCompWeightAnchor(baseline);
     const expected = bodyFatTargetWeightsFromCurrent(
       estimateBodyCompAtWeight(anchor.weight, baseline, anchor.date), 15, baseline);
     return { projection, scenario, runway, expected };
@@ -175,7 +249,7 @@ test('goal ETA is the first dated body-fat crossing before, during and after the
       const prevDate = addDaysToDate(date, timeline.daysToTarget - 1);
       const prevWeight = 159.9 - pace * (timeline.daysToTarget - 1) + creatineScaleDeltaFromAnchor(date, prevDate);
       return { timeline, target,
-        previous: estimateBodyCompAtWeight(prevWeight, allDays, prevDate).bodyFatPct,
+        previous: estimateBodyCompAtWeight(prevWeight, allDays, prevDate, bodyCompAnchorForDate(date)).bodyFatPct,
         expectedDate: addDaysToDate(date, timeline.daysToTarget) };
     }))`);
   for (const p of cases) {

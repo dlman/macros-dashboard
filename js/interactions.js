@@ -1104,7 +1104,7 @@ function updateGlycogenChart(days) {
   const stateByDate = Object.fromEntries(states.map(s => [s.date, s]));
   const dateKeys = chartDateKeysFor(states.map(s => s.date));
   const keyedStates = dateKeys.map(date => stateByDate[date] || null);
-  const dxaDates = [DXA_SCAN_PREV.date, DXA_SCAN.date];
+  const dxaDates = DXA_SCANS.map(scan => scan.date);
   const loadColors = keyedStates.map(s =>
     !s ? 'rgba(100,116,139,0.18)' :
     s.loadPct >= 70 ? 'rgba(52,211,153,0.55)' :
@@ -1129,7 +1129,7 @@ function updateGlycogenChart(days) {
       ` Glyco+water mass: ~${s.massLbs} lbs`,
     ];
     if (s.drinkKcal > 0) lines.push(` 🍺 Alcohol: ~${s.drinkKcal} kcal — impaired synthesis + liver depletion applied`);
-    if (dxaDates.includes(s.date)) lines.unshift(` 📍 ${s.date === DXA_SCAN_PREV.date ? 'DXA Jan 6' : 'DXA Apr 8'}`);
+    if (dxaDates.includes(s.date)) lines.unshift(` 📍 DXA ${formatShortDate(s.date)}`);
     return lines;
   };
   chart.update();
@@ -1140,6 +1140,13 @@ function updateGlycogenChart(days) {
 }
 
 function updateBodyCompChart(days) {
+  document.querySelector('[data-body-comp-state="cut"]').textContent = 'Scan / Baseline';
+  document.querySelector('[data-body-comp-state="fed"]').textContent = 'Historical Fed';
+  const summary = document.getElementById('dxaScanSummary');
+  if (summary) summary.innerHTML = `
+    <div class="dxa-scan-heading"><strong>Latest DXA: ${formatShortDate(DXA_SCAN_LATEST.date)}, 2026 · ${DXA_SCAN_LATEST.bodyFatPct}% BF</strong><span>Measured · ${weightLabel(DXA_SCAN_LATEST.totalMass)}</span></div>
+    <table class="dxa-history"><thead><tr><th>Scan</th><th>BF</th><th>Fat</th><th>Lean</th><th>Bone</th><th>VAT</th></tr></thead><tbody>${DXA_SCANS.map(scan => `<tr><th>${formatShortDate(scan.date)}</th><td>${scan.bodyFatPct.toFixed(1)}%</td><td>${weightValue(scan.fatMass, 1)}</td><td>${weightValue(scan.leanMass, 1)}</td><td>${weightValue(scan.boneMass, 1)}</td><td>${weightValue(scan.visceralFat, 2)}</td></tr>`).join('')}</tbody></table>
+    <div class="dxa-scan-note">Mass in ${weightUnit()} · lean excludes bone · VAT = visceral fat. September vs April (report): fat −${weightLabel(5, 1)}, lean +${weightLabel(0.6, 1)}. Scan preparation unconfirmed.</div>`;
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days, bodyCompState);
@@ -1195,7 +1202,7 @@ function updateBodyCompChart(days) {
     }
     return [
       ` Estimated from dynamic DXA model (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
-      d.creatineWater ? ` Creatine water adjustment: ~${creatineWaterRangeLabel(d.creatineWater)} lean/water modeled (midpoint ${weightLabel(d.creatineWater, 1)}), excluded from fat trend` : '',
+      bodyCompCreatineNote(d),
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
       glycoNote
@@ -1217,11 +1224,15 @@ function updateBodyCompChart(days) {
   chart.options.scales.x.ticks.maxRotation = compact ? 42 : 50;
   chart.update();
 
-  const latestEstimated = [...bodyComp].reverse().find(d => !d.measured) || [...bodyComp].reverse().find(Boolean);
+  const latestEstimated = [...bodyComp].reverse().find(Boolean);
   const bodyCompRangeNote = document.getElementById('bodyCompRangeNote');
   if (bodyCompRangeNote) {
     bodyCompRangeNote.textContent = latestEstimated
-      ? compact
+      ? latestEstimated.measured
+        ? `Latest DXA: ${formatShortDate(latestEstimated.date)} · ${latestEstimated.bodyFatPct.toFixed(1)}% BF · ${weightLabel(latestEstimated.fat)} fat · ${weightLabel(latestEstimated.lean)} lean. Measured values remain unchanged in both views.`
+        : latestEstimated.anchorDate >= DXA_SCAN_LATEST.date
+          ? `Latest scan-state estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF (${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%), anchored to Sep 23. Creatine already included; no extra fed-state offset.`
+      : compact
         ? `Latest ${bodyCompState}-state est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
         : bodyCompState === 'fed'
           ? `Fed-state comparable estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% body fat, with a likely range of ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}% after restoring Jan 6-like glycogen/hydration and creatine water into lean mass.`

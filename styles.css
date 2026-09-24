@@ -1187,3 +1187,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   #exploreShell .explore-module-inner { padding: 12px; }
   #exploreShell .section-title { margin-top: 0; }
 }
+.dxa-scan-summary { margin: 12px 0; max-width: 660px; }
+.dxa-scan-heading { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin-bottom: 10px; }
+.dxa-scan-heading span, .dxa-scan-note { color: var(--text-muted); }
+.dxa-history { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.dxa-history th, .dxa-history td { padding: 7px 3px; text-align: right; border-bottom: 1px solid var(--border-section); }
+.dxa-history th:first-child { width: 62px; text-align: left; }
+.dxa-history thead { color: var(--text-muted); }
+.dxa-scan-note { font-size: 11px; line-height: 1.5; margin-top: 8px; }

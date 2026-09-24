@@ -1160,7 +1160,7 @@ const DXA_SCAN_PREV = {
   leanMass: 123.8
 };
 
-// Apr 8, 2026 scan — current anchor for body comp model
+// April remains the historical cut-state reference; newer scans re-anchor subsequent estimates.
 const DXA_SCAN = {
   date: '2026-04-08',
   totalMass: 160.6,
@@ -1175,12 +1175,52 @@ const DXA_PREV_FAT_MASS = DXA_SCAN_PREV.totalMass * (DXA_SCAN_PREV.bodyFatPct / 
 const DXA_PREV_BONE_MASS = Math.max(DXA_SCAN_PREV.totalMass - DXA_SCAN_PREV.leanMass - DXA_PREV_FAT_MASS, 0);
 const DXA_PREV_FAT_FREE_MASS = DXA_SCAN_PREV.leanMass + DXA_PREV_BONE_MASS;
 
-function bodyCompTargetWeight(targetBfPct, shares, creatineWater, fedDelta = 0) {
+const DXA_SCAN_LATEST = {
+  date: '2026-09-23', totalMass: 156.3, bodyFatPct: 18.6,
+  fatMass: 29.0, leanMass: 121.2, boneMass: 6.1,
+  visceralFat: 0.67, almi: 8.8, ffmi: 19.3, androidGynoidRatio: 1.11,
+  tScore: 0.3, zScore: 0.6, state: 'unspecified',
+  source: 'DexaFit report, September 23, 2026'
+};
+const DXA_MODEL_BASELINE = { ...DXA_SCAN, fatMass: DXA_FAT_MASS, boneMass: DXA_BONE_MASS };
+const DXA_SCANS = [
+  { ...DXA_SCAN_PREV, fatMass: 43.6, boneMass: 6.1, visceralFat: 2.39 },
+  { ...DXA_SCAN, fatMass: 34.0, boneMass: 6.0, visceralFat: 1.31 },
+  DXA_SCAN_LATEST
+];
+
+function bodyCompAnchorForDate(date) {
+  return date >= DXA_SCAN_LATEST.date ? DXA_SCAN_LATEST : DXA_MODEL_BASELINE;
+}
+
+function newerBodyCompScan(days) {
+  const last = days[days.length - 1];
+  // A scan is a separate measurement, not a fabricated food/weight-log day.
+  return last && last.date === allDays[allDays.length - 1]?.date
+    && DXA_SCAN_LATEST.date > last.date && DXA_SCAN_LATEST.date <= YESTERDAY_ISO
+    ? DXA_SCAN_LATEST : null;
+}
+
+function bodyCompFedDelta(anchor) {
+  // Unknown scan preparation cannot justify adding the old Jan/Apr water bracket again.
+  return anchor.date >= DXA_SCAN_LATEST.date ? 0 : Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
+}
+
+function bodyCompStateLabel(date, state = 'cut') {
+  return date >= DXA_SCAN_LATEST.date ? 'scan-state' : `${state}-state`;
+}
+
+function bodyCompCreatineNote(point) {
+  if (point.anchorDate >= DXA_SCAN_LATEST.date) return `Creatine already included in ${formatShortDate(point.anchorDate)} DXA; only changes from the scan-date water assumption are applied.`;
+  return point.creatineWater ? `Creatine water adjustment: ~${creatineWaterRangeLabel(point.creatineWater)} lean/water modeled (midpoint ${weightLabel(point.creatineWater, 1)}), excluded from fat trend` : '';
+}
+
+function bodyCompTargetWeight(targetBfPct, shares, creatineWater, fedDelta = 0, anchor = DXA_MODEL_BASELINE) {
   if (!Number.isFinite(targetBfPct) || targetBfPct <= 0 || targetBfPct >= 100) return null;
   // Invert the same piecewise model used for displayed BF, including lean change.
-  const bfAtWeight = weight => bodyCompAtWeightForModel(weight, shares, creatineWater).fat / (weight + fedDelta) * 100;
-  let low = DXA_BONE_MASS + creatineWater;
-  let high = DXA_SCAN.totalMass + creatineWater;
+  const bfAtWeight = weight => bodyCompAtWeightForModel(weight, shares, creatineWater, anchor).fat / (weight + fedDelta) * 100;
+  let low = anchor.boneMass + creatineWater;
+  let high = anchor.totalMass + creatineWater;
   while (bfAtWeight(high) < targetBfPct && high < 10000) high *= 2;
   if (bfAtWeight(high) < targetBfPct) return null;
   for (let i = 0; i < 80; i++) {
@@ -1198,9 +1238,10 @@ function bodyFatTargetWeightsFromCurrent(currentState, targetBfPct, days = allDa
   const shares = bodyCompModelShares(days);
   const targetCreatineWater = targetDate ? creatineScaleAdjustmentForDate(targetDate)
     : Math.max(CREATINE_FULL_WATER_LBS, currentState.creatineWater || 0);
-  const fedDelta = Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
-  const cutStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater);
-  const fedStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, fedDelta);
+  const anchor = bodyCompAnchorForDate(currentState.anchorDate || latestWeightPointForScenario(days)?.date || YESTERDAY_ISO);
+  const fedDelta = bodyCompFedDelta(anchor);
+  const cutStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, 0, anchor);
+  const fedStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, fedDelta, anchor);
   return {
     cutStateTarget,
     fedStateTarget,
@@ -1226,22 +1267,27 @@ function bodyCompConfidenceScore(days = allDays) {
   return Math.max(0.2, Math.min(0.95, (weightDays.length / 14) * 0.45 + (spanDays / 70) * 0.35 + 0.2));
 }
 
-function estimateBodyCompAtWeight(weight, days = allDays, dateStr = null) {
-  const creatineWater = creatineScaleAdjustmentForDate(dateStr || latestWeightPointForScenario(days)?.date || YESTERDAY_ISO);
-  return bodyCompAtWeightForModel(weight, bodyCompModelShares(days), creatineWater);
+function estimateBodyCompAtWeight(weight, days = allDays, dateStr = null, anchor = null) {
+  const date = dateStr || latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
+  const creatineWater = creatineScaleAdjustmentForDate(date);
+  return bodyCompAtWeightForModel(weight, bodyCompModelShares(days), creatineWater, anchor || bodyCompAnchorForDate(date));
 }
 
-function bodyCompAtWeightForModel(weight, { cutFatFreeShare, gainFatFreeShare }, creatineWater) {
+function bodyCompAtWeightForModel(weight, { cutFatFreeShare, gainFatFreeShare }, creatineWater, anchor = DXA_MODEL_BASELINE) {
+  const anchorWater = creatineScaleAdjustmentForDate(anchor.date);
   const tissueWeight = Math.max(weight - creatineWater, 0);
-  const weightDelta = tissueWeight - DXA_SCAN.totalMass;
+  const weightDelta = tissueWeight - (anchor.totalMass - anchorWater);
   const fatFreeShare = weightDelta < 0 ? cutFatFreeShare : gainFatFreeShare;
-  const fatFreeMass = Math.max(DXA_FAT_FREE_MASS + (weightDelta * fatFreeShare), 0);
-  const lean = Math.max(fatFreeMass - DXA_BONE_MASS + creatineWater, 0);
+  const fatFreeMass = Math.max(anchor.totalMass - anchor.fatMass - anchorWater + (weightDelta * fatFreeShare), 0);
+  const lean = Math.max(fatFreeMass - anchor.boneMass + creatineWater, 0);
   const fat = Math.max(tissueWeight - fatFreeMass, 0);
   return {
     weight,
     tissueWeight,
     creatineWater,
+    anchorDate: anchor.date,
+    anchorCreatineWater: anchorWater,
+    bone: anchor.boneMass,
     lean,
     fat,
     fatFreeMass: fatFreeMass + creatineWater,
@@ -1250,13 +1296,14 @@ function bodyCompAtWeightForModel(weight, { cutFatFreeShare, gainFatFreeShare },
   };
 }
 
-function estimateBodyCompRangeAtWeight(weight, days = allDays, dateStr = null) {
-  const base = estimateBodyCompAtWeight(weight, days, dateStr);
+function estimateBodyCompRangeAtWeight(weight, days = allDays, dateStr = null, modelAnchor = null) {
+  const base = estimateBodyCompAtWeight(weight, days, dateStr, modelAnchor);
+  const anchor = bodyCompAnchorForDate(base.anchorDate);
   const confidenceScore = bodyCompConfidenceScore(days);
   const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelShares(days);
   const creatineWater = base.creatineWater || 0;
   const tissueWeight = base.tissueWeight ?? Math.max(weight - creatineWater, 0);
-  const weightDelta = tissueWeight - DXA_SCAN.totalMass;
+  const weightDelta = tissueWeight - (anchor.totalMass - base.anchorCreatineWater);
   const baseShare = weightDelta < 0 ? cutFatFreeShare : gainFatFreeShare;
   const sharePad = 0.018 + ((1 - confidenceScore) * 0.03);
   const shareOptions = [
@@ -1265,8 +1312,8 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays, dateStr = null) {
     Math.min(0.4, baseShare + sharePad)
   ];
   const variants = shareOptions.map(fatFreeShare => {
-    const fatFreeMass = Math.max(DXA_FAT_FREE_MASS + (weightDelta * fatFreeShare), 0);
-    const lean = Math.max(fatFreeMass - DXA_BONE_MASS + creatineWater, 0);
+    const fatFreeMass = Math.max(anchor.totalMass - anchor.fatMass - base.anchorCreatineWater + (weightDelta * fatFreeShare), 0);
+    const lean = Math.max(fatFreeMass - anchor.boneMass + creatineWater, 0);
     const fat = Math.max(tissueWeight - fatFreeMass, 0);
     const bodyFatPct = weight ? (fat / weight) * 100 : 0;
     return { fatFreeShare, fatFreeMass: fatFreeMass + creatineWater, lean, fat, bodyFatPct };
@@ -1279,8 +1326,8 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays, dateStr = null) {
   const bodyFatPctHigh = Math.min(100, Math.max(Math.max(...bfVals), base.bodyFatPct + minBfPad));
   const fatLowFromBf = weight * (bodyFatPctLow / 100);
   const fatHighFromBf = weight * (bodyFatPctHigh / 100);
-  const leanLowFromBf = Math.max(weight - fatHighFromBf - DXA_BONE_MASS, 0);
-  const leanHighFromBf = Math.max(weight - fatLowFromBf - DXA_BONE_MASS, 0);
+  const leanLowFromBf = Math.max(weight - fatHighFromBf - anchor.boneMass, 0);
+  const leanHighFromBf = Math.max(weight - fatLowFromBf - anchor.boneMass, 0);
   return {
     ...base,
     fatLow: Math.min(Math.min(...fatVals), fatLowFromBf),
@@ -1332,6 +1379,7 @@ function glycogenComparableDelta(dateStr) {
 }
 
 function applyBodyCompState(point, state = 'cut') {
+  if (point?.measured || point?.anchorDate >= DXA_SCAN_LATEST.date) return { ...point, displayState: 'scan', stateDelta: 0, comparableWeight: point.weight };
   if (!point || state !== 'fed') return { ...point, displayState: 'cut', stateDelta: 0, comparableWeight: point?.weight ?? null };
   const stateDelta = glycogenComparableDelta(point.date);
   if (!stateDelta) return { ...point, displayState: 'fed', stateDelta: 0, comparableWeight: point.weight };
@@ -1367,57 +1415,21 @@ function applyBodyCompStateDelta(point, stateDelta = 0, displayState = 'fed') {
   };
 }
 
-// Body composition estimate anchored to the Apr 8, 2026 DXA scan.
+// Historical estimates retain their earlier anchor; scan measurements never receive water corrections.
 function bodyCompEstimate(days = allDays, state = 'cut') {
   const weightDays = days.filter(d => d.weight);
-  // DXA scan points are ground-truth measurements — show them whenever their date
-  // falls within the selected range window, regardless of analytics cutoff or
-  // whether a macro entry exists for that day.
   const { start, end } = getRangeState();
   const rangeStart = allDates[start] || '2026-01-01';
-  const rangeEnd = allDates[end] || YESTERDAY_ISO;
-  const includeScan = DXA_SCAN.date >= rangeStart && DXA_SCAN.date <= rangeEnd;
-  const includePrevScan = DXA_SCAN_PREV.date >= rangeStart && DXA_SCAN_PREV.date <= rangeEnd;
-  if (!weightDays.length && !includeScan && !includePrevScan) return [];
+  const rangeEnd = end === allDates.length - 1 ? YESTERDAY_ISO : allDates[end] || YESTERDAY_ISO;
   const points = weightDays.map((d) => ({ date: d.date, ...estimateBodyCompRangeAtWeight(d.weight, days, d.date) }));
-  if (includeScan) {
-    points.push({
-      date: DXA_SCAN.date,
-      weight: DXA_SCAN.totalMass,
-      lean: DXA_SCAN.leanMass,
-      fat: DXA_FAT_MASS,
-      bodyFatPct: DXA_SCAN.bodyFatPct,
-      fatLow: DXA_FAT_MASS,
-      fatHigh: DXA_FAT_MASS,
-      leanLow: DXA_SCAN.leanMass,
-      leanHigh: DXA_SCAN.leanMass,
-      bodyFatPctLow: DXA_SCAN.bodyFatPct,
-      bodyFatPctHigh: DXA_SCAN.bodyFatPct,
-      confidence: projectionConfidence(1),
-      confidenceScore: 1,
-      measured: true,
-      scanLabel: 'Apr 8, 2026'
-    });
-  }
-  if (includePrevScan) {
-    points.push({
-      date: DXA_SCAN_PREV.date,
-      weight: DXA_SCAN_PREV.totalMass,
-      lean: DXA_SCAN_PREV.leanMass,
-      fat: DXA_PREV_FAT_MASS,
-      bodyFatPct: DXA_SCAN_PREV.bodyFatPct,
-      fatLow: DXA_PREV_FAT_MASS,
-      fatHigh: DXA_PREV_FAT_MASS,
-      leanLow: DXA_SCAN_PREV.leanMass,
-      leanHigh: DXA_SCAN_PREV.leanMass,
-      bodyFatPctLow: DXA_SCAN_PREV.bodyFatPct,
-      bodyFatPctHigh: DXA_SCAN_PREV.bodyFatPct,
-      confidence: projectionConfidence(1),
-      confidenceScore: 1,
-      measured: true,
-      scanLabel: 'Jan 6, 2026'
-    });
-  }
+  DXA_SCANS.filter(scan => scan.date >= rangeStart && scan.date <= rangeEnd).forEach(scan => points.push({
+    date: scan.date, weight: scan.totalMass, lean: scan.leanMass, fat: scan.fatMass,
+    bone: scan.boneMass, bodyFatPct: scan.bodyFatPct, fatFreeMass: scan.totalMass - scan.fatMass,
+    fatLow: scan.fatMass, fatHigh: scan.fatMass, leanLow: scan.leanMass, leanHigh: scan.leanMass,
+    bodyFatPctLow: scan.bodyFatPct, bodyFatPctHigh: scan.bodyFatPct,
+    confidence: { cls: 'measured', label: 'DXA measurement' }, measured: true,
+    scanLabel: formatShortDate(scan.date) + ', ' + scan.date.slice(0, 4)
+  }));
   return points.sort((a, b) => a.date.localeCompare(b.date)).map(point => applyBodyCompState(point, state));
 }
 
@@ -1522,6 +1534,8 @@ function scenarioRecentWindow(days = allDays, sleep = sleepData, count = 7) {
 }
 
 function latestWeightPointForScenario(days = allDays) {
+  const scan = newerBodyCompScan(days);
+  if (scan) return { date: scan.date, weight: scan.totalMass, measured: true };
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length) return weightDays[weightDays.length - 1];
   return [...allDays].reverse().find(d => d.weight) || null;
@@ -1542,8 +1556,10 @@ function currentFedStateDelta(days = allDays) {
 }
 
 function scenarioProjectedBodyComp(weight, days = allDays, dateStr = null) {
-  const cutState = estimateBodyCompRangeAtWeight(weight, days, dateStr);
-  const delta = Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
+  const asOf = latestWeightPointForScenario(days)?.date || dateStr || YESTERDAY_ISO;
+  const anchor = bodyCompAnchorForDate(dateStr && dateStr < asOf ? dateStr : asOf);
+  const cutState = estimateBodyCompRangeAtWeight(weight, days, dateStr, anchor);
+  const delta = bodyCompFedDelta(anchor);
   const fedState = applyBodyCompStateDelta(cutState, delta, 'fed');
   const { latestGlycogenDay, currentGlycogenState } = currentFedStateDelta(days);
   return {
@@ -1618,11 +1634,12 @@ function bodyFatGoalTimeline(currentWeight, currentDate, dailyTissueLoss, target
     || targetBfPct <= 0 || targetBfPct >= 100 || !Number.isFinite(weightOffset)
     || !Number.isFinite(Date.parse(`${currentDate}T12:00:00`))) return unavailable;
   const shares = bodyCompModelShares(days);
+  const anchor = bodyCompAnchorForDate(currentDate);
   const pointAt = day => {
     const date = addDaysToDate(currentDate, day);
     const weight = currentWeight + weightOffset - (day === 0 ? 0 : dailyTissueLoss * day)
       + creatineScaleDeltaFromAnchor(currentDate, date);
-    return { date, weight, comp: bodyCompAtWeightForModel(weight, shares, creatineScaleAdjustmentForDate(date)) };
+    return { date, weight, comp: bodyCompAtWeightForModel(weight, shares, creatineScaleAdjustmentForDate(date), anchor) };
   };
   const result = (point, day) => ({ achievable: true, alreadyThere: day === 0, daysToTarget: day,
     projectedDate: point.date, projectedWeight: point.weight, bodyComp: point.comp });
@@ -2616,6 +2633,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       tooltipHidden: true
     }, {
       label: 'Fed-state comparable',
+      hidden: activeSeries.envelope.fedDelta === 0,
       data: activeSeries.envelope.fedComparable.map(weight => weightValue(weight)),
       borderColor: 'rgba(45,212,191,0.95)',
       backgroundColor: 'transparent',
@@ -3306,9 +3324,15 @@ function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, da
   };
 }
 
+function bodyCompWeightAnchor(days) {
+  const scan = newerBodyCompScan(days);
+  return scan ? { date: scan.date, weight: scan.totalMass, sampleSize: 1, source: 'DXA measurement' }
+    : latestRollingWeightAnchor(days, 7);
+}
+
 function bodyFatTargetProjection(days, targetBfPct = 18) {
   const wp = observedWeightProjection(creatineAdjustedWeightDays(days), 1);
-  const rollingAnchor = latestRollingWeightAnchor(days, 7);
+  const rollingAnchor = bodyCompWeightAnchor(days);
   if (!rollingAnchor) return null;
   const currentWeight = rollingAnchor.weight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
@@ -3335,7 +3359,8 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     currentBfPct: current.bodyFatPct,
     targetBfPct,
     currentWeight,
-    currentWeightAnchor: rollingAnchor ? '7-day average' : 'filtered trend',
+    currentWeightAnchor: rollingAnchor.source || '7-day average',
+    anchorDate: current.anchorDate,
     currentWeightAnchorDate: rollingAnchor?.date || currentDate,
     currentWeightAnchorSampleSize: rollingAnchor?.sampleSize || null,
     currentGlycogenState,
@@ -3372,7 +3397,7 @@ function rollingAverageWeightPace(days = getAnalyticsDays(), lookbackDays = 28, 
 
 function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadline = '2026-11-15', finalDeadline = '2026-12-31') {
   const analyticsDays = baselineAnalyticsDays(getAnalyticsDays(days));
-  const rollingAnchor = latestRollingWeightAnchor(analyticsDays, 7);
+  const rollingAnchor = bodyCompWeightAnchor(analyticsDays);
   const latestWeightPoint = latestWeightPointForScenario(analyticsDays);
   if (!rollingAnchor || !latestWeightPoint) return null;
 
@@ -3417,6 +3442,7 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
     currentBfPct: current.bodyFatPct,
     currentWeight: rollingAnchor.weight,
     currentWeightDate: rollingAnchor.date,
+    anchorDate: current.anchorDate,
     targetWeight: +targetWeight.toFixed(1),
     targetFedWeight: Number.isFinite(targetWeights.fedStateTarget) ? +targetWeights.fedStateTarget.toFixed(1) : null,
     daysRemaining,
