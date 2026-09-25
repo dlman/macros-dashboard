@@ -33,16 +33,19 @@ test('April scan anchor and existing main-model estimate are preserved', () => {
   for (const p of cases) near(p.actual, p.expected);
 });
 
-test('September report uses reported fat, lean and bone and includes creatine exactly once', () => {
-  const result = run(`({scan:DXA_SCAN_LATEST, model:estimateBodyCompRangeAtWeight(156.3, allDays, '2026-09-23')})`);
-  near(result.scan.fatMass,29);
-  near(result.model.fat,29);
-  near(result.model.lean,121.2);
+test('September anchor uses the same-day scale weight and retains clothed scanner mass as provenance', () => {
+  const result = run(`({scan:DXA_SCAN_LATEST,
+    model:estimateBodyCompRangeAtWeight(DXA_SCAN_LATEST.totalMass, allDays, DXA_SCAN_LATEST.date)})`);
+  near(result.scan.totalMass,155.5);
+  near(result.scan.reportedTotalMass,156.3);
+  near(result.scan.fatMass,155.5*0.186);
+  near(result.model.fat,result.scan.fatMass);
+  near(result.model.lean,result.scan.leanMass);
   near(result.model.bone,6.1);
-  near(result.model.lean+result.model.fat+result.model.bone,156.3);
+  near(result.model.lean+result.model.fat+result.model.bone,155.5);
   near(result.model.creatineWater,result.model.anchorCreatineWater);
   assert.equal(result.model.bodyFatPct.toFixed(1),'18.6');
-  assert.ok(result.model.leanLow<=121.2 && result.model.leanHigh>=121.2);
+  assert.ok(result.model.leanLow<=result.scan.leanMass && result.model.leanHigh>=result.scan.leanMass);
 });
 
 test('all three measured scans stay unmodified in both body-comp views', () => {
@@ -63,16 +66,43 @@ test('new DXA can anchor current goals without fabricating a macro log or 7-day 
   if(p.last< '2026-09-23') {
     assert.equal(p.anchor.source,'DXA measurement');
     assert.equal(p.anchor.date,'2026-09-23');
-    near(p.anchor.weight,156.3);
-    near(p.scenario.weight,156.3);
+    near(p.anchor.weight,155.5);
+    near(p.scenario.weight,155.5);
     assert.equal(p.projection.currentWeightAnchor,'DXA measurement');
   }
 });
 
+test('same-day DXA supersedes a trailing average and preserves the measured body-fat result', () => {
+  const p=run(`(()=>{
+    const days=allDays.filter(d=>d.date<='2026-09-23');
+    const anchor=bodyCompWeightAnchor(days);
+    const projection=bodyFatTargetProjection(days,18);
+    return {anchor,projection};
+  })()`);
+  assert.equal(p.anchor.source,'DXA measurement');
+  near(p.anchor.weight,155.5);
+  near(p.projection.currentWeight,155.5);
+  near(p.projection.currentBfPct,18.6);
+});
+
+test('post-scan rolling weight carries only the change from the scan-date home-scale trend', () => {
+  const p=run(`(()=>{
+    const days=allDays.filter(d=>d.date<='2026-09-24');
+    const weights=days.filter(d=>d.weight);
+    const scanIndex=weights.findIndex(d=>d.date===DXA_SCAN_LATEST.date);
+    const baseline=avg(weights.slice(Math.max(0,scanIndex-6),scanIndex+1),'weight');
+    const current=avg(weights.slice(-7),'weight');
+    return {anchor:bodyCompWeightAnchor(days),expected:DXA_SCAN_LATEST.totalMass+current-baseline,current};
+  })()`);
+  assert.equal(p.anchor.source,'DXA-calibrated 7-day average');
+  near(p.anchor.weight,p.expected);
+  assert.notEqual(p.anchor.weight,p.current);
+});
+
 test('post-scan targets use the confirmed fed anchor and expose a cut-state equivalent', () => {
   const cases=run(`[15,16,17,18].map(target=>{
-    const days=[{date:'2026-09-24',weight:156.3,protein:170,lifting:'Y'}];
-    const current=estimateBodyCompAtWeight(156.3,days,'2026-09-24');
+    const days=[{date:'2026-09-24',weight:155.5,protein:170,lifting:'Y'}];
+    const current=estimateBodyCompAtWeight(155.5,days,'2026-09-24');
     const weights=bodyFatTargetWeightsFromCurrent(current,target,days);
     return {target,weights,scenario:scenarioProjectedBodyComp(weights.fedStateTarget,days,'2026-10-01'),
       model:estimateBodyCompRangeAtWeight(weights.fedStateTarget,days,'2026-10-01')};
@@ -80,8 +110,8 @@ test('post-scan targets use the confirmed fed anchor and expose a cut-state equi
   for(const p of cases) {
     near(p.scenario.fedState.bodyFatPct,p.target);
     near(p.model.bodyFatPct,p.target);
-    near(p.weights.fedStateTarget-p.weights.cutStateTarget,2.1);
-    near(p.scenario.fedDelta,2.1);
+    near(p.weights.fedStateTarget-p.weights.cutStateTarget,1.3);
+    near(p.scenario.fedDelta,1.3);
     near(p.scenario.fedState.fat,p.scenario.cutState.fat);
     near(p.model.lean+p.model.fat+p.model.bone,p.model.weight);
   }
@@ -91,10 +121,10 @@ test('November 15 runway uses the fed 15.5% goal and latest DXA lean-retention c
   const result = run(`yearEndBodyFatRunway(getAnalyticsDays(allDays))`);
   assert.equal(result.targetBfPct, 15.5);
   assert.equal(result.anchorDate, '2026-09-23');
-  assert.equal(result.targetWeight, 150.3);
-  assert.equal(result.targetFedWeight, 150.3);
-  assert.equal(result.targetCutWeight, 148.2);
-  near(result.targetFedWeight - result.targetCutWeight, 2.1);
+  assert.equal(result.targetWeight, 149.4);
+  assert.equal(result.targetFedWeight, 149.4);
+  assert.equal(result.targetCutWeight, 148.1);
+  near(result.targetFedWeight - result.targetCutWeight, 1.3);
   assert.ok(result.daysRemaining > 0);
   near(result.requiredWeeklyLoss, (result.tissueWeightRemaining / result.daysRemaining) * 7);
   near(result.requiredDailyDeficit, (result.tissueWeightRemaining * 3500) / result.daysRemaining);

@@ -1175,12 +1175,19 @@ const DXA_PREV_FAT_MASS = DXA_SCAN_PREV.totalMass * (DXA_SCAN_PREV.bodyFatPct / 
 const DXA_PREV_BONE_MASS = Math.max(DXA_SCAN_PREV.totalMass - DXA_SCAN_PREV.leanMass - DXA_PREV_FAT_MASS, 0);
 const DXA_PREV_FAT_FREE_MASS = DXA_SCAN_PREV.leanMass + DXA_PREV_BONE_MASS;
 
+const DXA_SCAN_LATEST_SCALE_WEIGHT = 155.5;
+const DXA_SCAN_LATEST_BODY_FAT_PCT = 18.6;
+const DXA_SCAN_LATEST_BONE_MASS = 6.1;
+const DXA_SCAN_LATEST_FAT_MASS = DXA_SCAN_LATEST_SCALE_WEIGHT * (DXA_SCAN_LATEST_BODY_FAT_PCT / 100);
 const DXA_SCAN_LATEST = {
-  date: '2026-09-23', totalMass: 156.3, bodyFatPct: 18.6,
-  fatMass: 29.0, leanMass: 121.2, boneMass: 6.1,
+  date: '2026-09-23', totalMass: DXA_SCAN_LATEST_SCALE_WEIGHT, bodyFatPct: DXA_SCAN_LATEST_BODY_FAT_PCT,
+  fatMass: DXA_SCAN_LATEST_FAT_MASS,
+  leanMass: DXA_SCAN_LATEST_SCALE_WEIGHT - DXA_SCAN_LATEST_FAT_MASS - DXA_SCAN_LATEST_BONE_MASS,
+  boneMass: DXA_SCAN_LATEST_BONE_MASS,
+  reportedTotalMass: 156.3, reportedFatMass: 29.0, reportedLeanMass: 121.2, reportedBoneMass: 6.1,
   visceralFat: 0.67, almi: 8.8, ffmi: 19.3, androidGynoidRatio: 1.11,
-  tScore: 0.3, zScore: 0.6, state: 'fed', fedStateDelta: 2.1,
-  prepBasis: 'Maintenance/surplus intake before the scan; scan weight was 2.1 lbs above the preceding 7-day average.',
+  tScore: 0.3, zScore: 0.6, state: 'fed', fedStateDelta: 1.3,
+  prepBasis: 'Maintenance/surplus intake before the scan; the logged scale weight was 1.3 lbs above the preceding 7-day average. The 156.3-lb scanner mass is retained only as report provenance because clothing was included.',
   source: 'DexaFit report, September 23, 2026'
 };
 // The latest scan showed preserved measured fat-free mass across the prior cut.
@@ -1197,11 +1204,14 @@ function bodyCompAnchorForDate(date) {
   return date >= DXA_SCAN_LATEST.date ? DXA_SCAN_LATEST : DXA_MODEL_BASELINE;
 }
 
-function newerBodyCompScan(days) {
-  const last = days[days.length - 1];
-  // A scan is a separate measurement, not a fabricated food/weight-log day.
-  return last && last.date === allDays[allDays.length - 1]?.date
-    && DXA_SCAN_LATEST.date > last.date && DXA_SCAN_LATEST.date <= YESTERDAY_ISO
+function currentBodyCompScan(days) {
+  const last = [...days].reverse().find(day => day.weight);
+  const latestCompleted = [...allDays].reverse().find(day => day.weight && day.date <= YESTERDAY_ISO);
+  // A same-day scan supersedes the rolling estimate without fabricating a log day.
+  const scanMatchesRangeEnd = last?.date === DXA_SCAN_LATEST.date;
+  const scanFollowsCurrentData = last && latestCompleted && last.date === latestCompleted.date
+    && DXA_SCAN_LATEST.date > last.date;
+  return (scanMatchesRangeEnd || scanFollowsCurrentData) && DXA_SCAN_LATEST.date <= YESTERDAY_ISO
     ? DXA_SCAN_LATEST : null;
 }
 
@@ -1564,7 +1574,7 @@ function scenarioRecentWindow(days = allDays, sleep = sleepData, count = 7) {
 }
 
 function latestWeightPointForScenario(days = allDays) {
-  const scan = newerBodyCompScan(days);
+  const scan = currentBodyCompScan(days);
   if (scan) return { date: scan.date, weight: scan.totalMass, measured: true };
   const weightDays = days.filter(d => d.weight);
   if (weightDays.length) return weightDays[weightDays.length - 1];
@@ -3377,9 +3387,29 @@ function bodyFatProjectionRange(targetWeight, fedTargetWeight, currentWeight, da
 }
 
 function bodyCompWeightAnchor(days) {
-  const scan = newerBodyCompScan(days);
-  return scan ? { date: scan.date, weight: scan.totalMass, sampleSize: 1, source: 'DXA measurement' }
-    : latestRollingWeightAnchor(days, 7);
+  const scan = currentBodyCompScan(days);
+  if (scan) return { date: scan.date, weight: scan.totalMass, sampleSize: 1, source: 'DXA measurement' };
+
+  const weightDays = days.filter(day => day.weight).sort((a, b) => a.date.localeCompare(b.date));
+  const scanDayIndex = weightDays.findIndex(day => day.date === DXA_SCAN_LATEST.date);
+  const latest = weightDays[weightDays.length - 1];
+  if (scanDayIndex >= 0 && latest?.date > DXA_SCAN_LATEST.date) {
+    const baselineWindow = weightDays.slice(Math.max(0, scanDayIndex - 6), scanDayIndex + 1);
+    const currentWindow = weightDays.slice(-7);
+    const baselineAverage = avg(baselineWindow, 'weight');
+    const currentAverage = avg(currentWindow, 'weight');
+    if (Number.isFinite(baselineAverage) && Number.isFinite(currentAverage)) {
+      return {
+        date: latest.date,
+        weight: DXA_SCAN_LATEST.totalMass + (currentAverage - baselineAverage),
+        sampleSize: currentWindow.length,
+        window: currentWindow.length,
+        source: 'DXA-calibrated 7-day average'
+      };
+    }
+  }
+
+  return latestRollingWeightAnchor(days, 7);
 }
 
 function bodyFatTargetProjection(days, targetBfPct = 18) {

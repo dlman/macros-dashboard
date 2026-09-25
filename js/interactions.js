@@ -1146,7 +1146,7 @@ function updateBodyCompChart(days) {
   if (summary) summary.innerHTML = `
     <div class="dxa-scan-heading"><strong>Latest DXA: ${formatShortDate(DXA_SCAN_LATEST.date)}, 2026 · ${DXA_SCAN_LATEST.bodyFatPct}% BF</strong><span>Measured · ${weightLabel(DXA_SCAN_LATEST.totalMass)}</span></div>
     <table class="dxa-history"><thead><tr><th>Scan</th><th>BF</th><th>Fat</th><th>Lean</th><th>Bone</th><th>VAT</th></tr></thead><tbody>${DXA_SCANS.map(scan => `<tr><th>${formatShortDate(scan.date)}</th><td>${scan.bodyFatPct.toFixed(1)}%</td><td>${weightValue(scan.fatMass, 1)}</td><td>${weightValue(scan.leanMass, 1)}</td><td>${weightValue(scan.boneMass, 1)}</td><td>${weightValue(scan.visceralFat, 2)}</td></tr>`).join('')}</tbody></table>
-    <div class="dxa-scan-note">Mass in ${weightUnit()} · lean excludes bone · VAT = visceral fat. September vs April (report): fat −${weightLabel(5, 1)}, lean +${weightLabel(0.6, 1)}. September is calibrated as fed-state: ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)} above the preceding 7-day average, with creatine already included.</div>`;
+    <div class="dxa-scan-note">Mass in ${weightUnit()} · lean excludes bone · VAT = visceral fat. September uses the same-day ${weightLabel(DXA_SCAN_LATEST.totalMass)} scale weight with the reported 18.6% BF; the clothed ${weightLabel(DXA_SCAN_LATEST.reportedTotalMass)} scanner mass is excluded. It was ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)} above the preceding 7-day average, with creatine already included.</div>`;
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days, bodyCompState);
