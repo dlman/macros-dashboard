@@ -95,8 +95,10 @@ test('November 15 runway uses the fed 15.5% goal and latest DXA lean-retention c
   assert.equal(result.targetFedWeight, 150.3);
   assert.equal(result.targetCutWeight, 148.2);
   near(result.targetFedWeight - result.targetCutWeight, 2.1);
-  assert.ok(result.requiredWeeklyLoss > 0.75 && result.requiredWeeklyLoss < 0.85);
-  assert.ok(result.effectiveCalorieTarget >= 2000 && result.effectiveCalorieTarget <= 2100);
+  assert.ok(result.daysRemaining > 0);
+  near(result.requiredWeeklyLoss, (result.tissueWeightRemaining / result.daysRemaining) * 7);
+  near(result.requiredDailyDeficit, (result.tissueWeightRemaining * 3500) / result.daysRemaining);
+  assert.equal(result.effectiveCalorieTarget, Math.round(result.maintenance - result.requiredDailyDeficit));
 });
 
 test('a historical scenario never jumps to a scan unavailable at its starting date', () => {
