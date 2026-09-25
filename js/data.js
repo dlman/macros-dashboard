@@ -532,7 +532,8 @@ const sleepData = [
   {date:"2026-09-21",perf:73,hours:6.43,bedtime:"1:00 AM",bedtime_hour:1,deep:1.54,rem:1.12,light:3.77,efficiency:98,resp:14.8},
   {date:"2026-09-22",perf:80,hours:7.84,bedtime:"1:03 AM",bedtime_hour:1.05,deep:1.86,rem:1.05,light:4.93,efficiency:96,resp:14.5},
   {date:"2026-09-23",perf:31,hours:3.98,bedtime:"2:52 AM",bedtime_hour:2.87,deep:0.81,rem:0.51,light:2.66,efficiency:67,resp:14.5},
-  {date:"2026-09-24",perf:14,hours:1.36,bedtime:"1:44 AM",bedtime_hour:1.73,deep:0.59,rem:0.23,light:0.54,efficiency:95,resp:16}
+  {date:"2026-09-24",perf:14,hours:1.36,bedtime:"1:44 AM",bedtime_hour:1.73,deep:0.59,rem:0.23,light:0.54,efficiency:95,resp:16},
+  {date:"2026-09-25",perf:77,hours:7.26,bedtime:"12:23 AM",bedtime_hour:0.38,deep:1.54,rem:1.25,light:4.47,efficiency:98,resp:13.6}
 ];
 
 const stepsData = [
@@ -1040,7 +1041,8 @@ const recoveryData = [
   {date:"2026-09-21",recovery:58,hrv:60,rhr:51,spo2:96.8},
   {date:"2026-09-22",recovery:68,hrv:63.6,rhr:55,spo2:97.4},
   {date:"2026-09-23",recovery:33,hrv:52.9,rhr:52,spo2:92.2},
-  {date:"2026-09-24",recovery:3,hrv:25.2,rhr:72,spo2:95.7}
+  {date:"2026-09-24",recovery:3,hrv:25.2,rhr:72,spo2:95.7},
+  {date:"2026-09-25",recovery:87,hrv:72,rhr:50,spo2:95.4}
 ];
 
 const vacationDates = ["2026-04-30", "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-09", "2026-05-10", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-16", "2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06"];
