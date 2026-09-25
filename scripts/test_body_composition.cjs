@@ -69,21 +69,34 @@ test('new DXA can anchor current goals without fabricating a macro log or 7-day 
   }
 });
 
-test('post-scan targets and scenarios round-trip without an unconfirmed fed offset', () => {
+test('post-scan targets use the confirmed fed anchor and expose a cut-state equivalent', () => {
   const cases=run(`[15,16,17,18].map(target=>{
     const days=[{date:'2026-09-24',weight:156.3,protein:170,lifting:'Y'}];
     const current=estimateBodyCompAtWeight(156.3,days,'2026-09-24');
     const weights=bodyFatTargetWeightsFromCurrent(current,target,days);
-    return {target,weights,scenario:scenarioProjectedBodyComp(weights.cutStateTarget,days,'2026-10-01'),
-      model:estimateBodyCompRangeAtWeight(weights.cutStateTarget,days,'2026-10-01')};
+    return {target,weights,scenario:scenarioProjectedBodyComp(weights.fedStateTarget,days,'2026-10-01'),
+      model:estimateBodyCompRangeAtWeight(weights.fedStateTarget,days,'2026-10-01')};
   })`);
   for(const p of cases) {
-    near(p.scenario.cutState.bodyFatPct,p.target);
+    near(p.scenario.fedState.bodyFatPct,p.target);
     near(p.model.bodyFatPct,p.target);
-    near(p.weights.cutStateTarget,p.weights.fedStateTarget);
-    near(p.scenario.fedDelta,0);
+    near(p.weights.fedStateTarget-p.weights.cutStateTarget,2.1);
+    near(p.scenario.fedDelta,2.1);
+    near(p.scenario.fedState.fat,p.scenario.cutState.fat);
     near(p.model.lean+p.model.fat+p.model.bone,p.model.weight);
   }
+});
+
+test('November 15 runway uses the fed 15.5% goal and latest DXA lean-retention calibration', () => {
+  const result = run(`yearEndBodyFatRunway(getAnalyticsDays(allDays))`);
+  assert.equal(result.targetBfPct, 15.5);
+  assert.equal(result.anchorDate, '2026-09-23');
+  assert.equal(result.targetWeight, 150.3);
+  assert.equal(result.targetFedWeight, 150.3);
+  assert.equal(result.targetCutWeight, 148.2);
+  near(result.targetFedWeight - result.targetCutWeight, 2.1);
+  assert.ok(result.requiredWeeklyLoss > 0.75 && result.requiredWeeklyLoss < 0.85);
+  assert.ok(result.effectiveCalorieTarget >= 2000 && result.effectiveCalorieTarget <= 2100);
 });
 
 test('a historical scenario never jumps to a scan unavailable at its starting date', () => {
@@ -235,8 +248,10 @@ test('milestones, scenario goals and year-end runway use the same target model f
   })`);
   for (const { projection, scenario, runway, expected } of cases) {
     assert.ok(projection && scenario && runway);
-    near(projection.targetWeight, scenario.cutTargetWeight);
-    near(runway.targetWeight, Number(expected.cutStateTarget.toFixed(1)));
+    const fedAnchor = projection.anchorDate >= '2026-09-23';
+    near(projection.targetWeight, fedAnchor ? scenario.fedTargetWeight : scenario.cutTargetWeight);
+    near(runway.targetWeight, Number((fedAnchor ? expected.fedStateTarget : expected.cutStateTarget).toFixed(1)));
+    near(runway.targetCutWeight, Number(expected.cutStateTarget.toFixed(1)));
     near(runway.targetFedWeight, Number(expected.fedStateTarget.toFixed(1)));
   }
 });
@@ -335,7 +350,7 @@ test('stable creatine reproduces the ordinary weight-gap ETA including year roll
     const weight = 155;
     const date = '2026-12-28';
     const current = estimateBodyCompAtWeight(weight, allDays, date);
-    const target = bodyFatTargetWeightsFromCurrent(current, 15, allDays, date).cutStateTarget;
+    const target = bodyFatTargetWeightsFromCurrent(current, 15, allDays, date).fedStateTarget;
     return {expected: Math.ceil((weight - target) / 0.1),
       timeline: bodyFatGoalTimeline(weight, date, 0.1, 15, allDays)};
   })()`);

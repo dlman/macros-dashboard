@@ -1140,13 +1140,13 @@ function updateGlycogenChart(days) {
 }
 
 function updateBodyCompChart(days) {
-  document.querySelector('[data-body-comp-state="cut"]').textContent = 'Scan / Baseline';
-  document.querySelector('[data-body-comp-state="fed"]').textContent = 'Historical Fed';
+  document.querySelector('[data-body-comp-state="cut"]').textContent = 'Cut Equivalent';
+  document.querySelector('[data-body-comp-state="fed"]').textContent = 'Fed / Scan';
   const summary = document.getElementById('dxaScanSummary');
   if (summary) summary.innerHTML = `
     <div class="dxa-scan-heading"><strong>Latest DXA: ${formatShortDate(DXA_SCAN_LATEST.date)}, 2026 · ${DXA_SCAN_LATEST.bodyFatPct}% BF</strong><span>Measured · ${weightLabel(DXA_SCAN_LATEST.totalMass)}</span></div>
     <table class="dxa-history"><thead><tr><th>Scan</th><th>BF</th><th>Fat</th><th>Lean</th><th>Bone</th><th>VAT</th></tr></thead><tbody>${DXA_SCANS.map(scan => `<tr><th>${formatShortDate(scan.date)}</th><td>${scan.bodyFatPct.toFixed(1)}%</td><td>${weightValue(scan.fatMass, 1)}</td><td>${weightValue(scan.leanMass, 1)}</td><td>${weightValue(scan.boneMass, 1)}</td><td>${weightValue(scan.visceralFat, 2)}</td></tr>`).join('')}</tbody></table>
-    <div class="dxa-scan-note">Mass in ${weightUnit()} · lean excludes bone · VAT = visceral fat. September vs April (report): fat −${weightLabel(5, 1)}, lean +${weightLabel(0.6, 1)}. Scan preparation unconfirmed.</div>`;
+    <div class="dxa-scan-note">Mass in ${weightUnit()} · lean excludes bone · VAT = visceral fat. September vs April (report): fat −${weightLabel(5, 1)}, lean +${weightLabel(0.6, 1)}. September is calibrated as fed-state: ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)} above the preceding 7-day average, with creatine already included.</div>`;
   const compact = isCompactMobileViewport();
   const chart = allCharts.bodyCompChart;
   const bodyComp = bodyCompEstimate(days, bodyCompState);
@@ -1201,7 +1201,7 @@ function updateBodyCompChart(days) {
       return [` DXA measured point on ${d.scanLabel || d.date}`, stateNote, glycoNote, deltaNote].filter(Boolean);
     }
     return [
-      ` Estimated from dynamic DXA model (${bodyCompState === 'fed' ? 'fed-state comparable' : 'cut-state'})`,
+      ` Estimated from dynamic DXA model (${d.displayState === 'fed' ? 'fed-state' : 'cut-state equivalent'})`,
       bodyCompCreatineNote(d),
       ` Likely BF range: ${d.bodyFatPctLow.toFixed(1)}%–${d.bodyFatPctHigh.toFixed(1)}%`,
       ` Total: ${weightLabel(d.weight)}`,
@@ -1231,7 +1231,7 @@ function updateBodyCompChart(days) {
       ? latestEstimated.measured
         ? `Latest DXA: ${formatShortDate(latestEstimated.date)} · ${latestEstimated.bodyFatPct.toFixed(1)}% BF · ${weightLabel(latestEstimated.fat)} fat · ${weightLabel(latestEstimated.lean)} lean. Measured values remain unchanged in both views.`
         : latestEstimated.anchorDate >= DXA_SCAN_LATEST.date
-          ? `Latest scan-state estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF (${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%), anchored to Sep 23. Creatine already included; no extra fed-state offset.`
+          ? `Latest ${latestEstimated.displayState === 'fed' ? 'fed-state' : 'cut-state equivalent'} estimate: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF (${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%), anchored to the fed Sep 23 DXA. Creatine is already included; the modeled fed/cut scale gap is ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)}.`
       : compact
         ? `Latest ${bodyCompState}-state est.: ~${latestEstimated.bodyFatPct.toFixed(1)}% BF · range ${latestEstimated.bodyFatPctLow.toFixed(1)}%–${latestEstimated.bodyFatPctHigh.toFixed(1)}%.`
         : bodyCompState === 'fed'

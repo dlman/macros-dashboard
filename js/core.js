@@ -1179,9 +1179,13 @@ const DXA_SCAN_LATEST = {
   date: '2026-09-23', totalMass: 156.3, bodyFatPct: 18.6,
   fatMass: 29.0, leanMass: 121.2, boneMass: 6.1,
   visceralFat: 0.67, almi: 8.8, ffmi: 19.3, androidGynoidRatio: 1.11,
-  tScore: 0.3, zScore: 0.6, state: 'unspecified',
+  tScore: 0.3, zScore: 0.6, state: 'fed', fedStateDelta: 2.1,
+  prepBasis: 'Maintenance/surplus intake before the scan; scan weight was 2.1 lbs above the preceding 7-day average.',
   source: 'DexaFit report, September 23, 2026'
 };
+// The latest scan showed preserved measured fat-free mass across the prior cut.
+// Keep a small allowance for future lean loss instead of the older generic 16-24% split.
+const LATEST_DXA_CUT_FAT_FREE_SHARE = 0.05;
 const DXA_MODEL_BASELINE = { ...DXA_SCAN, fatMass: DXA_FAT_MASS, boneMass: DXA_BONE_MASS };
 const DXA_SCANS = [
   { ...DXA_SCAN_PREV, fatMass: 43.6, boneMass: 6.1, visceralFat: 2.39 },
@@ -1202,12 +1206,18 @@ function newerBodyCompScan(days) {
 }
 
 function bodyCompFedDelta(anchor) {
-  // Unknown scan preparation cannot justify adding the old Jan/Apr water bracket again.
-  return anchor.date >= DXA_SCAN_LATEST.date ? 0 : Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
+  return anchor.date >= DXA_SCAN_LATEST.date
+    ? Math.max(0, anchor.fedStateDelta || 0)
+    : Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
 }
 
-function bodyCompStateLabel(date, state = 'cut') {
-  return date >= DXA_SCAN_LATEST.date ? 'scan-state' : `${state}-state`;
+function bodyCompAnchorIsFed(anchor) {
+  return !!anchor && anchor.date >= DXA_SCAN_LATEST.date && anchor.state === 'fed';
+}
+
+function bodyCompStateLabel(date, state = null) {
+  if (date >= DXA_SCAN_LATEST.date) return `${state || 'fed'}-state`;
+  return `${state || 'cut'}-state`;
 }
 
 function bodyCompCreatineNote(point) {
@@ -1235,13 +1245,21 @@ function bodyFatTargetWeightsFromCurrent(currentState, targetBfPct, days = allDa
   if (!currentState || !Number.isFinite(currentState.weight) || !Number.isFinite(currentState.fat)) {
     return { cutStateTarget: null, fedStateTarget: null, scanStateGap: null };
   }
-  const shares = bodyCompModelShares(days);
   const targetCreatineWater = targetDate ? creatineScaleAdjustmentForDate(targetDate)
     : Math.max(CREATINE_FULL_WATER_LBS, currentState.creatineWater || 0);
   const anchor = bodyCompAnchorForDate(currentState.anchorDate || latestWeightPointForScenario(days)?.date || YESTERDAY_ISO);
+  const shares = bodyCompModelSharesForAnchor(days, anchor);
   const fedDelta = bodyCompFedDelta(anchor);
-  const cutStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, 0, anchor);
-  const fedStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, fedDelta, anchor);
+  const anchorStateTarget = bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, 0, anchor);
+  if (!Number.isFinite(anchorStateTarget)) {
+    return { cutStateTarget: null, fedStateTarget: null, scanStateGap: null };
+  }
+  const cutStateTarget = bodyCompAnchorIsFed(anchor)
+    ? anchorStateTarget - fedDelta
+    : anchorStateTarget;
+  const fedStateTarget = bodyCompAnchorIsFed(anchor)
+    ? anchorStateTarget
+    : bodyCompTargetWeight(targetBfPct, shares, targetCreatineWater, fedDelta, anchor);
   return {
     cutStateTarget,
     fedStateTarget,
@@ -1260,6 +1278,13 @@ function bodyCompModelShares(days = allDays) {
   };
 }
 
+function bodyCompModelSharesForAnchor(days = allDays, anchor = DXA_MODEL_BASELINE) {
+  const shares = bodyCompModelShares(days);
+  return bodyCompAnchorIsFed(anchor)
+    ? { ...shares, cutFatFreeShare: LATEST_DXA_CUT_FAT_FREE_SHARE }
+    : shares;
+}
+
 function bodyCompConfidenceScore(days = allDays) {
   const weightDays = days.filter(d => d.weight);
   if (!weightDays.length) return 0.2;
@@ -1270,7 +1295,8 @@ function bodyCompConfidenceScore(days = allDays) {
 function estimateBodyCompAtWeight(weight, days = allDays, dateStr = null, anchor = null) {
   const date = dateStr || latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const creatineWater = creatineScaleAdjustmentForDate(date);
-  return bodyCompAtWeightForModel(weight, bodyCompModelShares(days), creatineWater, anchor || bodyCompAnchorForDate(date));
+  const modelAnchor = anchor || bodyCompAnchorForDate(date);
+  return bodyCompAtWeightForModel(weight, bodyCompModelSharesForAnchor(days, modelAnchor), creatineWater, modelAnchor);
 }
 
 function bodyCompAtWeightForModel(weight, { cutFatFreeShare, gainFatFreeShare }, creatineWater, anchor = DXA_MODEL_BASELINE) {
@@ -1300,7 +1326,7 @@ function estimateBodyCompRangeAtWeight(weight, days = allDays, dateStr = null, m
   const base = estimateBodyCompAtWeight(weight, days, dateStr, modelAnchor);
   const anchor = bodyCompAnchorForDate(base.anchorDate);
   const confidenceScore = bodyCompConfidenceScore(days);
-  const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelShares(days);
+  const { cutFatFreeShare, gainFatFreeShare } = bodyCompModelSharesForAnchor(days, anchor);
   const creatineWater = base.creatineWater || 0;
   const tissueWeight = base.tissueWeight ?? Math.max(weight - creatineWater, 0);
   const weightDelta = tissueWeight - (anchor.totalMass - base.anchorCreatineWater);
@@ -1379,7 +1405,11 @@ function glycogenComparableDelta(dateStr) {
 }
 
 function applyBodyCompState(point, state = 'cut') {
-  if (point?.measured || point?.anchorDate >= DXA_SCAN_LATEST.date) return { ...point, displayState: 'scan', stateDelta: 0, comparableWeight: point.weight };
+  if (point?.measured) return { ...point, displayState: 'scan', stateDelta: 0, comparableWeight: point.weight };
+  if (point?.anchorDate >= DXA_SCAN_LATEST.date) {
+    if (state === 'fed') return { ...point, displayState: 'fed', stateDelta: 0, comparableWeight: point.weight };
+    return applyBodyCompStateDelta(point, -bodyCompFedDelta(DXA_SCAN_LATEST), 'cut');
+  }
   if (!point || state !== 'fed') return { ...point, displayState: 'cut', stateDelta: 0, comparableWeight: point?.weight ?? null };
   const stateDelta = glycogenComparableDelta(point.date);
   if (!stateDelta) return { ...point, displayState: 'fed', stateDelta: 0, comparableWeight: point.weight };
@@ -1558,14 +1588,21 @@ function currentFedStateDelta(days = allDays) {
 function scenarioProjectedBodyComp(weight, days = allDays, dateStr = null) {
   const asOf = latestWeightPointForScenario(days)?.date || dateStr || YESTERDAY_ISO;
   const anchor = bodyCompAnchorForDate(dateStr && dateStr < asOf ? dateStr : asOf);
-  const cutState = estimateBodyCompRangeAtWeight(weight, days, dateStr, anchor);
+  const anchorState = estimateBodyCompRangeAtWeight(weight, days, dateStr, anchor);
   const delta = bodyCompFedDelta(anchor);
-  const fedState = applyBodyCompStateDelta(cutState, delta, 'fed');
+  const fedAnchor = bodyCompAnchorIsFed(anchor);
+  const cutState = fedAnchor
+    ? applyBodyCompStateDelta(anchorState, -delta, 'cut')
+    : { ...anchorState, displayState: 'cut', stateDelta: 0, comparableWeight: anchorState.weight };
+  const fedState = fedAnchor
+    ? { ...anchorState, displayState: 'fed', stateDelta: 0, comparableWeight: anchorState.weight }
+    : applyBodyCompStateDelta(anchorState, delta, 'fed');
   const { latestGlycogenDay, currentGlycogenState } = currentFedStateDelta(days);
   return {
-    cutState: { ...cutState, displayState: 'cut', stateDelta: 0, comparableWeight: cutState.weight },
-    fedState: { ...fedState, displayState: 'fed', stateDelta: delta, comparableWeight: fedState.weight },
+    cutState,
+    fedState,
     fedDelta: delta,
+    primaryState: fedAnchor ? 'fed' : 'cut',
     latestGlycogenDay,
     currentGlycogenState
   };
@@ -1633,8 +1670,8 @@ function bodyFatGoalTimeline(currentWeight, currentDate, dailyTissueLoss, target
   if (!Number.isFinite(currentWeight) || currentWeight <= 0 || !Number.isFinite(targetBfPct)
     || targetBfPct <= 0 || targetBfPct >= 100 || !Number.isFinite(weightOffset)
     || !Number.isFinite(Date.parse(`${currentDate}T12:00:00`))) return unavailable;
-  const shares = bodyCompModelShares(days);
   const anchor = bodyCompAnchorForDate(currentDate);
+  const shares = bodyCompModelSharesForAnchor(days, anchor);
   const pointAt = day => {
     const date = addDaysToDate(currentDate, day);
     const weight = currentWeight + weightOffset - (day === 0 ? 0 : dailyTissueLoss * day)
@@ -1664,9 +1701,10 @@ function scenarioTimeToBodyFatGoal(values, targetBfPct = 18, days = allDays, sle
   const currentWeight = scenario.currentWeight;
   const currentDate = latestWeightPointForScenario(days)?.date || YESTERDAY_ISO;
   const currentStates = scenarioProjectedBodyComp(currentWeight, days, currentDate);
+  const currentState = currentStates.primaryState === 'fed' ? currentStates.fedState : currentStates.cutState;
   const dailyPace = scenario.effectiveDeficit / 3500;
   const timeline = bodyFatGoalTimeline(currentWeight, currentDate, dailyPace, targetBfPct, days);
-  const targetWeights = bodyFatTargetWeightsFromCurrent(currentStates.cutState, targetBfPct, days, timeline.projectedDate);
+  const targetWeights = bodyFatTargetWeightsFromCurrent(currentState, targetBfPct, days, timeline.projectedDate);
   const cutTargetWeight = targetWeights.cutStateTarget;
   const fedTargetWeight = targetWeights.fedStateTarget;
   const targetStates = timeline.achievable
@@ -1676,7 +1714,7 @@ function scenarioTimeToBodyFatGoal(values, targetBfPct = 18, days = allDays, sle
     ...timeline,
     targetBfPct,
     currentWeight,
-    currentBfPct: currentStates.cutState.bodyFatPct,
+    currentBfPct: currentState.bodyFatPct,
     currentFedBfPct: currentStates.fedState.bodyFatPct,
     cutTargetWeight,
     fedTargetWeight,
@@ -1712,6 +1750,8 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
   const latestWeightPoint = latestWeightPointForScenario(days);
   const currentWeight = latestWeightPoint?.weight ?? 162;
   const anchorDate = latestWeightPoint?.date || allDays[allDays.length - 1]?.date || YESTERDAY_ISO;
+  const anchor = bodyCompAnchorForDate(anchorDate);
+  const primaryState = bodyCompAnchorIsFed(anchor) ? 'fed' : 'cut';
   const tdeeProfile = workingTDEEProfile(days);
   const energy = scenarioEnergyBalance(values.calories, values.drinks, days);
   const effectiveDeficitMid = energy.effectiveDeficit;
@@ -1720,14 +1760,16 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
   const effectiveDeficitLow = lowTdee - energy.totalDailyIntake;
   const effectiveDeficitHigh = highTdee - energy.totalDailyIntake;
   const sampleFedDelta = scenarioProjectedBodyComp(currentWeight, days, anchorDate).fedDelta;
-  const reboundFactor = sampleFedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
+  const reboundFactor = primaryState === 'fed' ? 1 : sampleFedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
   const reboundSeries = Array.from({ length: weeks + 1 }, (_, week) => {
     const day = week * 7;
     const date = addDaysToDate(anchorDate, day);
     const creatineDelta = creatineScaleDeltaFromAnchor(anchorDate, date);
     const cutWeight = +(currentWeight - ((effectiveDeficitMid * 7 * week) / 3500) + creatineDelta).toFixed(2);
     const fullFedGap = scenarioProjectedBodyComp(cutWeight, days, date).fedDelta;
-    return +(fullFedGap * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
+    return +(primaryState === 'fed'
+      ? fullFedGap
+      : fullFedGap * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
   });
   const cutMid = Array.from({ length: weeks + 1 }, (_, week) => {
     const date = addDaysToDate(anchorDate, week * 7);
@@ -1741,12 +1783,15 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
     const date = addDaysToDate(anchorDate, week * 7);
     return +(currentWeight - ((effectiveDeficitLow * 7 * week) / 3500) + creatineScaleDeltaFromAnchor(anchorDate, date)).toFixed(2);
   });
-  const fedComparable = cutMid.map((weight, idx) => +(weight + reboundSeries[idx]).toFixed(2));
+  const stateComparable = cutMid.map((weight, idx) => +(weight + (primaryState === 'fed' ? -reboundSeries[idx] : reboundSeries[idx])).toFixed(2));
   return {
     cutMid,
     cutLow,
     cutHigh,
-    fedComparable,
+    fedComparable: primaryState === 'fed' ? cutMid : stateComparable,
+    stateComparable,
+    primaryState,
+    comparableLabel: primaryState === 'fed' ? 'Cut-state equivalent' : 'Fed-state comparable',
     reboundSeries,
     tdeeProfile,
     effectiveDeficitMid,
@@ -1766,7 +1811,10 @@ function scenarioForecastSeries(label, values, days, sleep) {
     const projected = projection.currentWeight - ((projection.effectiveDeficit * 7 * week) / 3500) + creatineScaleDeltaFromAnchor(anchorDate, dates[week]);
     return projected;
   });
-  const bodyComp = weights.map((weight, index) => scenarioProjectedBodyComp(weight, days, dates[index]).cutState);
+  const bodyComp = weights.map((weight, index) => {
+    const states = scenarioProjectedBodyComp(weight, days, dates[index]);
+    return states.primaryState === 'fed' ? states.fedState : states.cutState;
+  });
   return {
     label,
     values,
@@ -2632,9 +2680,9 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
       legendHidden: false,
       tooltipHidden: true
     }, {
-      label: 'Fed-state comparable',
+      label: activeSeries.envelope.comparableLabel,
       hidden: activeSeries.envelope.fedDelta === 0,
-      data: activeSeries.envelope.fedComparable.map(weight => weightValue(weight)),
+      data: activeSeries.envelope.stateComparable.map(weight => weightValue(weight)),
       borderColor: 'rgba(45,212,191,0.95)',
       backgroundColor: 'transparent',
       borderDash: [7, 5],
@@ -2681,7 +2729,7 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
   chart.options.plugins.tooltip.filter = ctx => {
     if (ctx.dataset.tooltipHidden) return false;
     if (!compactTooltip) return true;
-    return [currentSeries.label, activeSeries.label, 'Fed-state comparable'].includes(ctx.dataset.label);
+    return [currentSeries.label, activeSeries.label, activeSeries.envelope.comparableLabel].includes(ctx.dataset.label);
   };
   chart.options.plugins.scenarioGoalMarker = scenarioPlannerMode === 'goal' && goalProjection?.achievable
     ? {
@@ -2704,7 +2752,11 @@ function updateScenarioForecastChart(activeValues, days, sleep) {
     const point = items[0];
     if (!point) return '';
     if (point.dataIndex === 0) return 'Latest weigh-in in selected range';
-    if (point.dataset.label === 'Fed-state comparable') return 'Includes a glycogen/water rebound toward the Jan 6 reference.';
+    if (point.dataset.label === activeSeries.envelope.comparableLabel) {
+      return activeSeries.envelope.primaryState === 'fed'
+        ? `Equivalent scale weight with the modeled ${weightLabel(activeSeries.envelope.fedDelta, 1)} fed-state load removed.`
+        : 'Includes a glycogen/water rebound toward the Jan 6 reference.';
+    }
     if (scenarioPlannerMode === 'goal' && goalProjection?.achievable) {
       const goalWeek = (goalProjection.daysToTarget || 0) / 7;
       const pointWeek = point.dataIndex;
@@ -3346,14 +3398,16 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
   const cutStateTarget = targetWeights.cutStateTarget;
   const fedStateTarget = targetWeights.fedStateTarget;
   if (!Number.isFinite(cutStateTarget) || !Number.isFinite(fedStateTarget)) return null;
-  const targetWeight = cutStateTarget;
+  const targetWeight = bodyCompAnchorIsFed(bodyCompAnchorForDate(current.anchorDate))
+    ? fedStateTarget
+    : cutStateTarget;
   const fedStateTargetWeight = fedStateTarget;
   const confidence = wp?.confidence ?? projectionConfidence(0.2);
-  const range = bodyFatProjectionRange(targetWeight, fedStateTargetWeight, currentWeight, dailySlope, confidence, wp?.residualStdDev, currentDate, targetBfPct, days);
+  const range = bodyFatProjectionRange(cutStateTarget, fedStateTargetWeight, currentWeight, dailySlope, confidence, wp?.residualStdDev, currentDate, targetBfPct, days);
   return {
     ...timeline,
     targetWeight,
-    cutStateTargetWeight: +targetWeight.toFixed(1),
+    cutStateTargetWeight: +cutStateTarget.toFixed(1),
     fedStateTargetWeight: +fedStateTargetWeight.toFixed(1),
     targetRange: range,
     currentBfPct: current.bodyFatPct,
@@ -3364,7 +3418,9 @@ function bodyFatTargetProjection(days, targetBfPct = 18) {
     currentWeightAnchorDate: rollingAnchor?.date || currentDate,
     currentWeightAnchorSampleSize: rollingAnchor?.sampleSize || null,
     currentGlycogenState,
-    fedStateDelta,
+    fedStateDelta: bodyCompAnchorIsFed(bodyCompAnchorForDate(current.anchorDate))
+      ? bodyCompFedDelta(bodyCompAnchorForDate(current.anchorDate))
+      : fedStateDelta,
     creatineWater: current.creatineWater || 0,
     fullCreatineWater: CREATINE_FULL_WATER_LBS,
     scanStateGap: targetWeights.scanStateGap,
@@ -3395,7 +3451,7 @@ function rollingAverageWeightPace(days = getAnalyticsDays(), lookbackDays = 28, 
   };
 }
 
-function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadline = '2026-11-15', finalDeadline = '2026-12-31') {
+function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15.5, deadline = '2026-11-15', finalDeadline = '2026-12-31') {
   const analyticsDays = baselineAnalyticsDays(getAnalyticsDays(days));
   const rollingAnchor = bodyCompWeightAnchor(analyticsDays);
   const latestWeightPoint = latestWeightPointForScenario(analyticsDays);
@@ -3404,7 +3460,9 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
   const currentDate = latestWeightPoint.date;
   const current = estimateBodyCompAtWeight(rollingAnchor.weight, analyticsDays, currentDate);
   const targetWeights = bodyFatTargetWeightsFromCurrent(current, targetBfPct, analyticsDays, deadline);
-  const targetWeight = targetWeights.cutStateTarget;
+  const targetWeight = bodyCompAnchorIsFed(bodyCompAnchorForDate(current.anchorDate))
+    ? targetWeights.fedStateTarget
+    : targetWeights.cutStateTarget;
   if (!Number.isFinite(targetWeight)) return null;
 
   const daysRemaining = Math.max(0, daysBetweenDates(currentDate, deadline));
@@ -3444,6 +3502,7 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15, deadl
     currentWeightDate: rollingAnchor.date,
     anchorDate: current.anchorDate,
     targetWeight: +targetWeight.toFixed(1),
+    targetCutWeight: Number.isFinite(targetWeights.cutStateTarget) ? +targetWeights.cutStateTarget.toFixed(1) : null,
     targetFedWeight: Number.isFinite(targetWeights.fedStateTarget) ? +targetWeights.fedStateTarget.toFixed(1) : null,
     daysRemaining,
     weightRemaining,

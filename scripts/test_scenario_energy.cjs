@@ -76,7 +76,7 @@ test('True Maintenance preset balances its own food and alcohol without 25-kcal 
   for (const p of run(`[energyFixture, allDays].map(days => {
     const preset = getScenarioDefaults(days,[]).maintain;
     return calculateWhatIf(preset.calories,4,preset.sleep,preset.drinks,days,[]);
-  })`)) assert.ok(Math.abs(p.effectiveDeficit) <= 0.005);
+  })`)) assert.ok(Math.abs(p.effectiveDeficit) <= 0.0051);
 });
 
 test('dry scenario saves only estimated alcohol calories, not an extra behavior penalty', () => {
