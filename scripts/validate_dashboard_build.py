@@ -23,6 +23,7 @@ PY_FILES = [
     ROOT / "scripts" / "sync_steps.py",
     ROOT / "scripts" / "sync_whoop.py",
     ROOT / "scripts" / "dev_sync.py",
+    ROOT / "scripts" / "update_data_asset_version.py",
     ROOT / "scripts" / "validate_dashboard_build.py",
 ]
 
@@ -89,6 +90,7 @@ def main() -> None:
     run_check(["node", "--test", str(ROOT / "scripts" / "test_sleep_alignment.cjs")], "Sleep wake-date alignment tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_drink_parser.cjs")], "Alcohol parser fixtures")
     run_check([sys.executable, str(ROOT / "scripts" / "test_drink_parser.py")], "Python/JS alcohol parser parity")
+    run_check([sys.executable, str(ROOT / "scripts" / "update_data_asset_version.py"), "--check"], "Data asset cache key")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 
