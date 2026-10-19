@@ -90,9 +90,13 @@ def parse_drinks(drinks):
     for part in filter(None, re.split(r'\s*(?:[,;+&]|\band\b)\s*', text)):
         if re.fullmatch(no_alcohol, part):
             continue
+        bare_count = re.fullmatch(r'(\d+(?:\.\d+)?|\.\d+)', part)
         match = re.fullmatch(r'(\d+/\d+|\d+(?:\.\d+)?|\.\d+|half|one|two|three|four|five|six|seven|eight|nine|ten|an?)(?:\s+(?:a|an))?\s+(.+)', part)
         count, name = 1, part
-        if match:
+        if bare_count:
+            count = float(bare_count.group(1))
+            name = 'drinks'
+        elif match:
             token, name = match.groups()
             if token in counts:
                 count = counts[token]
@@ -108,7 +112,7 @@ def parse_drinks(drinks):
             continue
         result['calories'] += count * rule[1]
         if count > 0:
-            if not match:
+            if not match and not bare_count:
                 result['assumptions'].append('quantity_one')
             if rule[2]:
                 result['assumptions'].append(rule[2])

@@ -1517,9 +1517,13 @@ function parseDrinks(drinks) {
   if (!text || noAlcohol.test(text)) return result;
   for (const part of text.split(/\s*(?:[,;+&]|\band\b)\s*/).filter(Boolean)) {
     if (noAlcohol.test(part)) continue;
+    const bareCount = part.match(/^(\d+(?:\.\d+)?|\.\d+)$/);
     const match = part.match(/^(\d+\/\d+|\d+(?:\.\d+)?|\.\d+|half|one|two|three|four|five|six|seven|eight|nine|ten|an?)(?:\s+(?:a|an))?\s+(.+)$/);
     let count = 1, name = part;
-    if (match) {
+    if (bareCount) {
+      count = Number(bareCount[1]);
+      name = 'drinks';
+    } else if (match) {
       name = match[2];
       const token = match[1];
       count = token in counts ? counts[token] : token.includes('/')
@@ -1534,7 +1538,7 @@ function parseDrinks(drinks) {
     }
     result.calories += count * rule[1];
     if (count > 0) {
-      if (!match) result.assumptions.push('quantity_one');
+      if (!match && !bareCount) result.assumptions.push('quantity_one');
       if (rule[2]) result.assumptions.push(rule[2]);
     }
   }
