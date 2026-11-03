@@ -46,3 +46,25 @@ test('source freshness uses each feed independently and flags data older than tw
   assert.equal(result[2].latestDate, null);
   assert.equal(result[2].stale, true);
 });
+
+test('range presets use calendar boundaries and keep YTD available', () => {
+  const dates = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-31', '2026-02-01', '2026-02-02'];
+  const result = JSON.parse(run(`JSON.stringify([
+    rangeIndicesForPreset('3', ${JSON.stringify(dates)}, 7),
+    rangeIndicesForPreset('month', ${JSON.stringify(dates)}, 7),
+    rangeIndicesForPreset('ytd', ${JSON.stringify(dates)}, 7)
+  ])`));
+  assert.deepEqual(result[0], { start: 5, end: 7 });
+  assert.deepEqual(result[1], { start: 6, end: 7 });
+  assert.deepEqual(result[2], { start: 0, end: 7 });
+});
+
+test('missing prior data never becomes a zero-valued comparison', () => {
+  const missing = JSON.parse(run(`JSON.stringify(compareDelta(88, null, 'down', value => String(value)))`));
+  const real = JSON.parse(run(`JSON.stringify(compareDelta(8, 5, 'down', value => String(value)))`));
+  assert.equal(missing.text, '—');
+  assert.equal(missing.available, false);
+  assert.equal(missing.detail, 'No prior period available');
+  assert.equal(real.text, '+3');
+  assert.equal(real.available, true);
+});

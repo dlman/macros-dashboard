@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css?v=b05989fc3862">
+<link rel="stylesheet" href="./styles.css?v=38373b8b09b4">
 </head>
 <body>
 
@@ -45,6 +45,14 @@
     <input type="date" id="rangeStartDate" class="range-date-input" value="2026-01-01">
     <span style="color:var(--text-faint);font-size:12px;">to</span>
     <input type="date" id="rangeEndDate" class="range-date-input">
+    <div class="range-presets" role="group" aria-label="Date range presets">
+      <button type="button" class="range-preset-btn" data-range-preset="7">7D</button>
+      <button type="button" class="range-preset-btn" data-range-preset="14">14D</button>
+      <button type="button" class="range-preset-btn" data-range-preset="28">28D</button>
+      <button type="button" class="range-preset-btn" data-range-preset="90">90D</button>
+      <button type="button" class="range-preset-btn" data-range-preset="month">This month</button>
+      <button type="button" class="range-preset-btn" data-range-preset="ytd">YTD</button>
+    </div>
     <span class="range-label" id="rangeStartLabel" style="display:none;">Jan 1</span>
     <input type="range" id="rangeStart" min="0" max="82" value="0" style="display:none;">
     <input type="range" id="rangeEnd" min="0" max="82" value="82" style="display:none;">
@@ -789,9 +797,9 @@
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
 <script src="./js/data.js?v=cf43d1e5c664"></script>
-<script src="./js/core.js?v=54c528508c5a"></script>
+<script src="./js/core.js?v=9b207302b9a5"></script>
 <script src="./js/weekly-planning.js?v=2026.09.04.3"></script>
 <script src="./js/weekly-planning-ui.js?v=2026.09.04.3"></script>
-<script src="./js/charts.js?v=e8702706b9b1"></script>
-<script src="./js/interactions.js?v=b63d46337897"></script>
+<script src="./js/charts.js?v=884a4f225183"></script>
+<script src="./js/interactions.js?v=f48133ed6187"></script>
 </body></html>

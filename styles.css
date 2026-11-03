@@ -348,6 +348,11 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .range-date-input { background: var(--bg-input); border: 1px solid var(--border-card); border-radius: 8px; padding: 7px 12px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
 .range-date-input::-webkit-calendar-picker-indicator { filter: invert(0.7); }
 [data-theme="light"] .range-date-input::-webkit-calendar-picker-indicator { filter: none; }
+.range-presets { display: flex; align-items: center; gap: 5px; margin-left: auto; flex-wrap: wrap; }
+.range-preset-btn { min-height: 32px; padding: 6px 10px; border: 1px solid var(--border-card); border-radius: 7px; background: var(--bg-input); color: var(--text-muted); font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.range-preset-btn:hover { color: var(--text-primary); border-color: var(--col-jan); }
+.range-preset-btn.active { color: var(--text-primary); border-color: var(--col-jan); background: rgba(245,158,11,0.12); }
+.compare-empty { grid-column: 1 / -1; padding: 18px; border: 1px dashed var(--border-card); border-radius: 10px; color: var(--text-muted); font-size: 12px; line-height: 1.5; text-align: center; }
 .mobile-control-shell { margin: -8px 0 20px; }
 .mobile-control-shell > summary { display: none; }
 .mobile-control-shell .control-strip { margin: 0; }
@@ -894,6 +899,8 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .range-bar label { flex-basis: 100%; }
   .range-bar .range-label { min-width: 0; font-size: 12px; }
   .range-bar input[type=range] { flex-basis: 100%; width: 100%; min-width: 0; }
+  .range-presets { flex-basis: 100%; margin-left: 0; }
+  .range-preset-btn { flex: 1 1 auto; }
   #rangeStartLabel { order: 2; }
   #rangeStart { order: 3; }
   #rangeEndLabel { order: 4; margin-left: auto; }
@@ -1084,6 +1091,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
   .hdr-btn { font-size: 11px; padding: 10px 10px; min-height: 42px; }
   #exportAllBtn { display: none; }
   .range-bar { padding: 10px 12px; gap: 8px; margin-bottom: 14px; }
+  .range-date-input { min-width: 0; flex: 1 1 130px; }
+  .range-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .range-preset-btn { width: 100%; }
   .mobile-control-shell { margin-bottom: 12px; }
   .mobile-control-shell > summary,
   .mobile-detail-shell > summary { padding: 13px 14px; min-height: 46px; }

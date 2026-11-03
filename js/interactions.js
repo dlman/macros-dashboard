@@ -501,6 +501,12 @@ function updateRangeLabels() {
     rsde.value = allDates[Math.min(s, allDates.length - 1)] || '';
     rede.value = allDates[Math.min(e, allDates.length - 1)] || '';
   }
+  document.querySelectorAll('.range-preset-btn').forEach(button => {
+    const presetRange = rangeIndicesForPreset(button.dataset.rangePreset);
+    const active = presetRange.start === s && presetRange.end === e;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 let _rangeDebounce = null;
 function debouncedRangeRefresh() {
@@ -510,6 +516,18 @@ function debouncedRangeRefresh() {
 }
 rangeStartEl.addEventListener('input', debouncedRangeRefresh);
 rangeEndEl.addEventListener('input', debouncedRangeRefresh);
+document.querySelectorAll('.range-preset-btn').forEach(button => {
+  button.addEventListener('click', () => {
+    const range = rangeIndicesForPreset(button.dataset.rangePreset);
+    rangeStartEl.value = range.start;
+    rangeEndEl.value = range.end;
+    rangeStartIdx = range.start;
+    rangeEndIdx = range.end;
+    updateRangeLabels();
+    refreshDashboard();
+    persistUiState();
+  });
+});
 const compareModeHints = {
   equal_span: 'Matches the prior period length to your selected range',
   prior_7: 'Always uses the 7 days before your range starts',
@@ -569,6 +587,7 @@ if (rangeStartDateEl && rangeEndDateEl) {
     rangeEndEl.value = endIdx;
     rangeStartIdx = startIdx;
     rangeEndIdx = endIdx;
+    updateRangeLabels();
     refreshDashboard();
     persistUiState();
   }
@@ -1817,14 +1836,17 @@ function refreshDashboard() {
     usingFallback = true;
   }
   const previousDays = getPreviousPeriodDays();
+  const comparisonCopy = previousDays.length
+    ? `compared with ${previousDays.length} prior days from ${compareModeLabel()}`
+    : 'no prior period available for this range';
   const months = monthBuckets(filteredDays);
   const metricLabels = { protein: 'Daily Protein (g)', carbs: 'Daily Carbs (g)', fat: 'Daily Fat (g)' };
   document.getElementById('macroChartTitle').textContent = metricLabels[currentMetric];
-  document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${daysLeftInYearLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; compared with ${previousDays.length || 0} prior days from ${compareModeLabel()} &nbsp;|&nbsp; Click any data point for details`;
+  document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${daysLeftInYearLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; ${comparisonCopy} &nbsp;|&nbsp; Click any data point for details`;
   renderDataFreshness();
   document.getElementById('controlSummary').textContent = usingFallback
-    ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`
-    : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
+    ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. ${previousDays.length ? `Comparison still uses ${compareModeLabel()}.` : 'No prior period is available.'}${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`
+    : `Showing ${filterLabel()} in the selected range. ${previousDays.length ? `Comparing against ${compareModeLabel()}.` : 'No prior period is available; choose a shorter preset to enable comparisons.'}${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
   function safe(fn, label) { try { fn(); } catch (e) { console.error(`[Dashboard] ${label} failed:`, e); } }
   safe(() => renderExecutiveSummary(), 'Executive Summary');
   safe(() => renderPersonalPlanning(), 'Weekly Plan and Progress Changes');

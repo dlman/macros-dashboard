@@ -1297,6 +1297,8 @@ function renderExecutiveSummary() {
   const previousBaseDays = getPreviousPeriodBaseDays();
   const previousDays = getPreviousPeriodDays();
   const previousSleep = getSleepForDays(previousBaseDays);
+  const hasPriorPeriod = previousDays.length > 0;
+  const hasPriorSleep = previousSleep.length > 0;
   const currentTrendLoss = weightTrendReality(filteredDays).actualLoss;
   const previousTrendLoss = weightTrendReality(previousDays).actualLoss;
   const current = summarizeRange(filteredDays, filteredSleep);
@@ -1313,9 +1315,10 @@ function renderExecutiveSummary() {
   const weightDelta = compareDelta(currentTrendLoss, previousTrendLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`);
   const calDelta = compareDelta(current.avgCalories, previous.avgCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
   const adjustedCalDelta = compareDelta(current.avgAdjustedCalories, previous.avgAdjustedCalories, 'down', v => Math.round(energyValue(v) ?? 0).toLocaleString(), ` ${energyUnit()}`);
-  const proteinDelta = compareDelta(current.proteinHitRate, previous.proteinHitRate, 'up', v => `${Math.round(v)}%`);
-  const sleepDelta = compareDelta(current.avgSleepPerf, previous.avgSleepPerf, 'up', v => `${Math.round(v)}%`);
-  const drinkDelta = compareDelta(current.drinkNights, previous.drinkNights, 'down', v => `${Math.round(v)}`);
+  const proteinDelta = compareDelta(current.proteinHitRate, hasPriorPeriod ? previous.proteinHitRate : null, 'up', v => `${Math.round(v)}%`);
+  const sleepDelta = compareDelta(current.avgSleepPerf, hasPriorSleep ? previous.avgSleepPerf : null, 'up', v => `${Math.round(v)}%`);
+  const drinkDelta = compareDelta(current.drinkNights, hasPriorPeriod ? previous.drinkNights : null, 'down', v => `${Math.round(v)}`);
+  const liftDelta = compareDelta(current.liftCount, hasPriorPeriod ? previous.liftCount : null, 'up', v => `${Math.round(v)}`);
   const trendReality = weightTrendReality(filteredDays);
   const energyBalance = energyBalanceSummary(filteredDays);
   const adjustedNetText = adjustedNetLabel(energyBalance);
@@ -1366,11 +1369,11 @@ function renderExecutiveSummary() {
     <div class="summary-hero">
       <div class="eyebrow">Summary Window</div>
       <div class="hero-value">${labelForDays(getComparisonCurrentBaseDays())}</div>
-      <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}, compared with ${previousDays.length || 0} prior days from ${compareModeLabel()}. ${plateau.title}</div>
+      <div class="hero-sub">${filteredDays.length} tracked days, ${filteredSleep.length} sleep entries, filtered to ${filterLabel()}. ${hasPriorPeriod ? `Compared with ${previousDays.length} prior days from ${compareModeLabel()}.` : 'No prior period is available; choose a shorter preset to compare.'} ${plateau.title}</div>
     </div>
-    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${weightDelta.detail}${latestCreatineWater > 0 ? `<br>Includes ~${creatineWaterRangeLabel(latestCreatineWater)} creatine water` : ''}</div></div>
+    <div class="summary-chip"><div class="eyebrow">Weight</div><div class="value">${current.lastWeight != null ? weightLabel(current.lastWeight) : '—'}</div><div class="sub">${hasPriorPeriod ? weightDelta.detail : 'Latest selected-range weigh-in'}${latestCreatineWater > 0 ? `<br>Includes ~${creatineWaterRangeLabel(latestCreatineWater)} creatine water` : ''}</div></div>
     <div class="summary-chip"><div class="eyebrow">Adjusted Net</div><div class="value">${adjustedNetText}</div><div class="sub">${adjustedNetSub}</div></div>
-    <div class="summary-chip"><div class="eyebrow">Protein Hit Rate</div><div class="value">${Math.round(current.proteinHitRate)}%</div><div class="sub">vs prior: ${proteinDelta.text}</div></div>
+    <div class="summary-chip"><div class="eyebrow">Protein Hit Rate</div><div class="value">${Math.round(current.proteinHitRate)}%</div><div class="sub">${hasPriorPeriod ? `vs prior: ${proteinDelta.text}` : 'Selected-range adherence'}</div></div>
     <div class="summary-chip"><div class="eyebrow">Sleep</div><div class="value">${current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—'}</div><div class="sub">${current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h avg` : 'No sleep data'}</div></div>
   `;
 
@@ -1384,23 +1387,23 @@ function renderExecutiveSummary() {
     { label: 'Protein Adherence', value: `${Math.round(current.proteinHitRate)}%`, sub: current.avgProtein != null ? `${Math.round(current.avgProtein)}g average protein` : 'No data', delta: proteinDelta },
     { label: 'Sleep Performance', value: current.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}%` : '—', sub: current.avgSleepHours != null ? `${current.avgSleepHours.toFixed(1)}h average sleep` : 'No sleep data', delta: sleepDelta },
     { label: 'Drink Nights', value: `${current.drinkNights}`, sub: `${Math.round(current.cleanRate)}% clean-day rate`, delta: drinkDelta, mobileOptional: true },
-    { label: 'Lift Frequency', value: `${current.liftCount}x`, sub: `${(current.liftCount / Math.max(current.daysCount, 1) * 7).toFixed(1)} lifts/week pace`, delta: compareDelta(current.liftCount, previous.liftCount, 'up', v => `${Math.round(v)}`), mobileOptional: true }
+    { label: 'Lift Frequency', value: `${current.liftCount}x`, sub: `${(current.liftCount / Math.max(current.daysCount, 1) * 7).toFixed(1)} lifts/week pace`, delta: liftDelta, mobileOptional: true }
   ].map(kpi => `
     <div class="kpi-card${kpi.mobileOptional ? ' mobile-optional' : ''}">
       <div class="eyebrow">${kpi.label}</div>
       <div class="value">${kpi.value}</div>
-      <div class="delta-row"><span class="delta-pill ${kpi.delta.cls}">${kpi.delta.text}</span></div>
+      ${kpi.delta.available ? `<div class="delta-row"><span class="delta-pill ${kpi.delta.cls}">${kpi.delta.text}</span></div>` : ''}
       <div class="sub">${kpi.sub}</div>
     </div>
   `).join('');
 
-  document.getElementById('compareGrid').innerHTML = [
+  document.getElementById('compareGrid').innerHTML = hasPriorPeriod ? [
     { label: 'Weight Trend', delta: weightDelta, note: `Selected range vs ${compareModeLabel()}` },
     { label: 'Calories', delta: calDelta, note: calDelta.detail },
     { label: 'Protein Hit Rate', delta: proteinDelta, note: proteinDelta.detail },
     { label: 'Sleep Performance', delta: sleepDelta, note: sleepDelta.detail },
     { label: 'Drink Nights', delta: drinkDelta, note: drinkDelta.detail },
-    { label: 'Lift Count', delta: compareDelta(current.liftCount, previous.liftCount, 'up', v => `${Math.round(v)}`), note: `${current.liftCount} vs ${previous.liftCount}` },
+    { label: 'Lift Count', delta: liftDelta, note: `${current.liftCount} vs ${previous.liftCount}` },
     { label: 'Expected vs Trend Loss', delta: compareDelta(trendReality.actualLoss, trendReality.expectedLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`), note: trendReality.actualLoss != null && trendReality.expectedLoss != null ? `${weightValue(trendReality.actualLoss)} ${weightUnit()} observed trend vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} deficit-implied` : 'Need at least two weigh-ins in view' }
   ].map(item => `
     <div class="compare-card">
@@ -1408,7 +1411,7 @@ function renderExecutiveSummary() {
       <div class="delta">${item.delta.text}</div>
       <div class="tiny">${item.note}</div>
     </div>
-  `).join('');
+  `).join('') : '<div class="compare-empty">No prior period is available for this range. Choose 7D, 14D, 28D, 90D, or This month to enable period comparisons.</div>';
 
   document.getElementById('tdeeDetailPanel').innerHTML = `
     <div class="tdee-detail-lead">

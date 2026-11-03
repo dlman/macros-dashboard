@@ -341,6 +341,25 @@ const MAX_ANALYTICS_IDX = maxAnalyticsIndex();
 function defaultRangeEndIndex() {
   return maxAnalyticsIndex();
 }
+
+function rangeIndicesForPreset(preset, dates = allDates, endIndex = maxAnalyticsIndex()) {
+  if (!dates.length) return { start: 0, end: 0 };
+  const end = Math.max(0, Math.min(endIndex, dates.length - 1));
+  const endDate = new Date(`${dates[end]}T12:00:00`);
+  const startDate = new Date(endDate);
+  if (/^\d+$/.test(String(preset))) {
+    startDate.setDate(startDate.getDate() - (Math.max(1, Number(preset)) - 1));
+  } else if (preset === 'month') {
+    startDate.setDate(1);
+  } else if (preset === 'ytd') {
+    startDate.setMonth(0, 1);
+  } else {
+    return { start: 0, end };
+  }
+  const startIso = localDateISO(startDate);
+  const foundStart = dates.findIndex(date => date >= startIso);
+  return { start: foundStart < 0 ? 0 : Math.min(foundStart, end), end };
+}
 function dayLabel(d) { return d.date.slice(5); }
 function avg(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0; }
 function avgOrNull(arr, key) { const vals = arr.filter(d => d[key] != null).map(d => d[key]); return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null; }
@@ -2293,14 +2312,15 @@ function overallOnTrack(day) {
 }
 
 function compareDelta(current, previous, betterDirection = 'up', formatter = v => v.toString(), suffix = '') {
-  if (current == null) return { text: '—', cls: 'neutral', detail: 'No current data' };
-  if (previous == null || Number.isNaN(previous)) return { text: formatter(current), cls: 'neutral', detail: 'No prior period available' };
+  if (current == null) return { text: '—', cls: 'neutral', detail: 'No current data', available: false };
+  if (previous == null || Number.isNaN(previous)) return { text: '—', cls: 'neutral', detail: 'No prior period available', available: false };
   const delta = current - previous;
   const better = delta === 0 ? null : ((betterDirection === 'up' && delta > 0) || (betterDirection === 'down' && delta < 0));
   return {
     text: `${delta > 0 ? '+' : ''}${formatter(delta)}${suffix}`,
     cls: delta === 0 ? 'neutral' : (better ? 'good' : 'bad'),
-    detail: `${formatter(current)} vs ${formatter(previous)}`
+    detail: `${formatter(current)} vs ${formatter(previous)}`,
+    available: true
   };
 }
 
