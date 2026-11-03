@@ -16,7 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="./styles.css?v=2026.09.24.2">
+<link rel="stylesheet" href="./styles.css?v=b05989fc3862">
 </head>
 <body>
 
@@ -25,6 +25,7 @@
   <div class="header-left">
     <h1>Macros/Sleep Dashboard</h1>
     <p id="headerSubtitle">Jan · Feb · March (through Mar 24) &nbsp;|&nbsp; Click any data point for details &nbsp;|&nbsp; ← → to navigate days</p>
+    <div class="data-freshness" id="dataFreshness" aria-live="polite"></div>
     <div class="build-stamp" id="buildStamp">Build —</div>
   </div>
   <div class="header-controls">
@@ -34,6 +35,7 @@
     <button class="hdr-btn" id="settingsBtn" title="Goals & Annotations">⚙️ Settings</button>
   </div>
 </header>
+<div class="data-freshness-warning" id="dataFreshnessWarning" role="status" hidden></div>
 
 <div class="main" id="mainContent">
 
@@ -786,10 +788,10 @@
 <!-- HEATMAP TOOLTIP -->
 <div class="custom-tooltip" id="hmTooltip" style="display:none;"></div>
 
-<script src="./js/data.js?v=bb454f8bbedf"></script>
-<script src="./js/core.js?v=2026.10.18.1"></script>
+<script src="./js/data.js?v=cf43d1e5c664"></script>
+<script src="./js/core.js?v=54c528508c5a"></script>
 <script src="./js/weekly-planning.js?v=2026.09.04.3"></script>
 <script src="./js/weekly-planning-ui.js?v=2026.09.04.3"></script>
-<script src="./js/charts.js?v=2026.09.24.2"></script>
-<script src="./js/interactions.js?v=2026.09.24.2"></script>
+<script src="./js/charts.js?v=e8702706b9b1"></script>
+<script src="./js/interactions.js?v=b63d46337897"></script>
 </body></html>

@@ -561,6 +561,7 @@ def gp_weight_trend(days, forecast_days=42):
         n_restarts_optimizer=10,
         normalize_y=True,
         alpha=1e-6,
+        random_state=42,
     )
     gp.fit(X, y)
     print(f"  GP kernel (fitted): {gp.kernel_}")
@@ -599,6 +600,12 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
         src,
         flags=re.DOTALL,
     )
+    src = re.sub(
+        r'(window\.dashboardData\s*=\s*\{[^;\n]*\};)\s*(?=\}\)\(\);\s*$)',
+        r'\1\n',
+        src,
+        count=1,
+    )
 
     # Serialize — strip 'observations' from the JSON written to data.js to keep it slim
     tdee_out = {k: v for k, v in bayes_tdee_result.items() if k != 'observations'}
@@ -633,6 +640,8 @@ def update_data_js(path, src, bayes_tdee_result, gp_trend, tdee_timeline):
         )
         if close_replacements == 0:
             raise RuntimeError("Could not find dashboardData export or closing IIFE in js/data.js")
+
+    src = src.rstrip() + '\n'
 
     with open(path, 'w', encoding='utf-8') as f:
         f.write(src)

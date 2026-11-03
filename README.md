@@ -79,7 +79,7 @@ Sleep and steps tabs are also alias-based, but should at least include `date` pl
 
 If your workbook is split into monthly macro tabs like `Jan Macros`, `Feb Macros`, and `March Macros`, set `GOOGLE_SHEET_MACROS_TABS` instead of `GOOGLE_SHEET_MACROS_TAB`.
 
-To add a new month, publish its Google Sheet tab and add its URL to `PUBLISHED_CSV_URLS` in `scripts/sync_google_sheets.py`. The dashboard derives everything from `ACTIVE_MONTHS` (the months present in `data`), so no other code changes are needed — stat cards, donut charts, toggle buttons, and all chart datasets update automatically.
+To add a new month, publish its Google Sheet tab and add its URL to `PUBLISHED_CSV_URLS` in `scripts/sync_google_sheets.py` under a `YYYY-MM` key. The dashboard derives everything from the year-month buckets present in `data`, so January in a new year remains separate and the charts update automatically.
 
 ## Apple Health Steps Sync
 

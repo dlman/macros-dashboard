@@ -2,15 +2,43 @@
 
 import unittest
 import sys
+import tempfile
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
+from io import StringIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from update_bayes import bayesian_tdee_profile, tdee_logging_sensitivity, estimate_drink_calories
+from update_bayes import (
+    bayesian_tdee_profile,
+    estimate_drink_calories,
+    tdee_logging_sensitivity,
+    update_data_js,
+)
 from copy import deepcopy
 
 
 class BayesianTdeeSegmentationTests(unittest.TestCase):
+    def test_data_js_update_is_idempotent(self):
+        source = "(() => {\nwindow.dashboardData = { data: {}, sleepData: [], stepsData: [] };\n})();\n"
+        posterior = {
+            "mean": 2500,
+            "sigma": 150,
+            "ci95Low": 2200,
+            "ci95High": 2800,
+            "nObs": 30,
+            "observations": [],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.js"
+            path.write_text(source, encoding="utf-8")
+            with redirect_stdout(StringIO()):
+                update_data_js(path, path.read_text(), posterior, [], [])
+                first = path.read_text()
+                update_data_js(path, first, posterior, [], [])
+                second = path.read_text()
+        self.assertEqual(first, second)
+
     def test_vacation_weight_shift_does_not_change_tdee_slope(self):
         intake = 2000
         expected_tdee = 2500

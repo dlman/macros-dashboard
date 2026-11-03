@@ -676,7 +676,7 @@ function renderSleepStatCards() {
   const filteredSleep = getFilteredSleep();
   const sleepMonths = {};
   ACTIVE_MONTHS.forEach(m => {
-    sleepMonths[m.key] = filteredSleep.filter(d => d.date.startsWith(`2026-${m.num}`));
+    sleepMonths[m.key] = filteredSleep.filter(d => d.date.startsWith(`${m.key}-`));
   });
   const metrics = [
     { label: 'Avg Sleep Performance', key: 'perf', fmt: v => Math.round(v)+'%', goodDir: 'up' },
@@ -3429,14 +3429,14 @@ function renderHeatmap() {
   grid.innerHTML = '';
   legend.innerHTML = '';
 
-  const months = ACTIVE_MONTHS.map(m => ({ label: m.label, key: m.key, num: m.num, days: data[m.key] }));
+  const months = ACTIVE_MONTHS.map(m => ({ label: m.label, key: m.key, year: m.year, num: m.num, days: data[m.key] }));
   const heatmapRangeDays = getRangeDays();
   const heatmapMaintenance = workingTDEEProfile(heatmapRangeDays).maintenance;
   const { start, end } = getRangeState();
-  const rangeStart = allDates[start] || '2026-01-01';
+  const rangeStart = allDates[start] || allDates[0] || YESTERDAY_ISO;
   const rangeEnd = allDates[end] || YESTERDAY_ISO;
   const isCalendarDateInRange = dateStr => dateStr >= rangeStart && dateStr <= rangeEnd;
-  const daysInMonth = monthNum => new Date(2026, parseInt(monthNum, 10), 0).getDate();
+  const daysInMonth = (year, monthNum) => new Date(Number(year), parseInt(monthNum, 10), 0).getDate();
 
   // Ranges for color scaling
   const ranges = {
@@ -3483,8 +3483,8 @@ function renderHeatmap() {
     row.className = 'heatmap-row';
     row.innerHTML = `<span class="row-label">${mo.label}</span>`;
 
-    for (let dayNum = 1; dayNum <= daysInMonth(mo.num); dayNum++) {
-      const date = `2026-${mo.num}-${String(dayNum).padStart(2, '0')}`;
+    for (let dayNum = 1; dayNum <= daysInMonth(mo.year, mo.num); dayNum++) {
+      const date = `${mo.key}-${String(dayNum).padStart(2, '0')}`;
       const d = macroByDate[date] || null;
       const sleep = sleepByDate[date] || null;
       const inferredVacation = !d && isVacationDate(date);

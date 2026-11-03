@@ -16,10 +16,10 @@ function openPanel(dateStr) {
   const result = findDay(dateStr);
   if (!result) return;
   currentPanelDate = dateStr;
-  const { day, month } = result;
+  const { day } = result;
   const dateObj = new Date(day.date + 'T12:00:00');
   document.getElementById('panelDate').textContent = dateObj.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-  document.getElementById('panelMonth').textContent = month + ' 2026';
+  document.getElementById('panelMonth').textContent = monthEntry(day.date)?.longLabel || monthKey(day.date);
 
   // Macro stats
   const macroStats = document.getElementById('panelMacroStats');
@@ -869,7 +869,7 @@ function updateWeightChart(days) {
   const compact = isCompactMobileViewport();
   const chart = allCharts.weightChart;
   const points = days.filter(d => d.weight).map(d => ({
-    label: `${d.date.slice(5)} (${monthKey(d.date).slice(0, 3)})`,
+    label: `${d.date.slice(5)} (${monthLabel(d.date)})`,
     date: d.date,
     value: d.weight
   }));
@@ -881,7 +881,7 @@ function updateWeightChart(days) {
   const vals = dateKeys.map(date => pointByDate[date] ? weightValue(pointByDate[date].value) : null);
   const rolling = dateKeys.map(date => rollingByDate[date] ?? null);
   const expectedBand = expectedWeightBandSeries(days, dateKeys);
-  chart.data.labels = dateKeys.map(date => `${date.slice(5)} (${monthKey(date).slice(0, 3)})`);
+  chart.data.labels = dateKeys.map(date => `${date.slice(5)} (${monthLabel(date)})`);
   chart.data.datasets[0].data = vals;
   chart.data.datasets[1].data = rolling;
   chart.options.plugins.rangeHighlights = vacationHighlightConfig(dateKeys);
@@ -1821,6 +1821,7 @@ function refreshDashboard() {
   const metricLabels = { protein: 'Daily Protein (g)', carbs: 'Daily Carbs (g)', fat: 'Daily Fat (g)' };
   document.getElementById('macroChartTitle').textContent = metricLabels[currentMetric];
   document.getElementById('headerSubtitle').innerHTML = `${currentRangeLabel()} &nbsp;|&nbsp; ${daysLeftInYearLabel()} &nbsp;|&nbsp; ${filteredDays.length} tracked days &nbsp;|&nbsp; ${filterLabel()} &nbsp;|&nbsp; compared with ${previousDays.length || 0} prior days from ${compareModeLabel()} &nbsp;|&nbsp; Click any data point for details`;
+  renderDataFreshness();
   document.getElementById('controlSummary').textContent = usingFallback
     ? `No entries matched ${filterLabel()} inside this date range, so the dashboard is temporarily showing the full selected range. Comparison still uses ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`
     : `Showing ${filterLabel()} in the selected range and comparing against ${compareModeLabel()}.${rangeVacation ? ` Vacation tag present: ${rangeVacation.spanText} (${rangeVacation.days} day${rangeVacation.days === 1 ? '' : 's'}), kept separate from baseline-cut maintenance cross-checks.` : ''}`;
@@ -1894,6 +1895,31 @@ function refreshDashboard() {
   runScenarioPlanner();
   syncControlsFromState();
   suppressEventFilter = false;
+}
+
+function renderDataFreshness() {
+  const statuses = dashboardFreshnessStatuses();
+  const freshness = document.getElementById('dataFreshness');
+  const warning = document.getElementById('dataFreshnessWarning');
+  if (!freshness || !warning) return;
+
+  freshness.replaceChildren(...statuses.map(status => {
+    const item = document.createElement('span');
+    item.className = `data-freshness-item${status.stale ? ' stale' : ''}`;
+    const age = status.ageDays == null ? '' : ` (${status.ageDays}d old)`;
+    item.textContent = status.latestDate
+      ? `${status.label} through ${formatShortDate(status.latestDate)}${status.stale ? age : ''}`
+      : `${status.label} unavailable`;
+    return item;
+  }));
+
+  const stale = statuses.filter(status => status.stale);
+  warning.hidden = stale.length === 0;
+  warning.textContent = stale.length
+    ? `Data warning: ${stale.map(status => status.latestDate
+      ? `${status.label.toLowerCase()} last updated ${formatShortDate(status.latestDate)} (${status.ageDays} days ago)`
+      : `${status.label.toLowerCase()} has no records`).join('; ')}.`
+    : '';
 }
 
 // =====================================================================

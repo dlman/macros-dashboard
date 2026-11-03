@@ -16,8 +16,8 @@ Required credentials (GitHub Actions secrets or .env.local):
   WHOOP_REFRESH_TOKEN  - current refresh token (auto-rotated each run)
 
 Required only in CI (for GitHub Secrets rotation):
-  GH_PAT               - GitHub PAT with repo + secrets:write scopes
-  GH_REPO              - "owner/repo"  e.g. "dlman/macros-dashboard"
+  GH_PAT               - fine-grained PAT with repository Secrets: write permission
+  GITHUB_REPOSITORY     - supplied automatically by GitHub Actions
 
 Usage:
   python scripts/sync_whoop.py            # works locally with .env.local
@@ -32,6 +32,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -135,6 +136,26 @@ def _encrypt_secret(public_key_b64: str, secret_value: str) -> str:
     return base64.b64encode(encrypted).decode()
 
 
+def github_request(method: str, url: str, attempts: int = 4, **kwargs: Any) -> requests.Response:
+    """Call GitHub with bounded retries for transient API failures."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            last_error = exc
+            status = getattr(exc.response, "status_code", None)
+            if attempt == attempts or status not in {408, 429, 500, 502, 503, 504}:
+                raise
+            retry_after = getattr(exc.response, "headers", {}).get("Retry-After") if exc.response is not None else None
+            delay = min(float(retry_after), 30.0) if retry_after and retry_after.isdigit() else 2 ** (attempt - 1)
+            print(f"  GitHub API attempt {attempt} failed ({status or exc.__class__.__name__}); retrying in {delay:g}s …")
+            time.sleep(delay)
+    raise RuntimeError("GitHub API retry loop exited unexpectedly") from last_error
+
+
 def update_github_secret(repo: str, secret_name: str, value: str, pat: str) -> None:
     """Upsert a GitHub Actions secret via the REST API."""
     headers = {
@@ -144,22 +165,22 @@ def update_github_secret(repo: str, secret_name: str, value: str, pat: str) -> N
     }
 
     # Fetch the repo's public key (needed to encrypt the secret)
-    key_resp = requests.get(
+    key_resp = github_request(
+        "GET",
         f"{GITHUB_API}/repos/{repo}/actions/secrets/public-key",
         headers=headers, timeout=10,
     )
-    key_resp.raise_for_status()
     key_data = key_resp.json()
 
     encrypted = _encrypt_secret(key_data["key"], value)
 
-    put_resp = requests.put(
+    github_request(
+        "PUT",
         f"{GITHUB_API}/repos/{repo}/actions/secrets/{secret_name}",
         headers=headers,
         json={"encrypted_value": encrypted, "key_id": key_data["key_id"]},
         timeout=10,
     )
-    put_resp.raise_for_status()
     print(f"  ✓ GitHub secret {secret_name} updated")
 
 
@@ -560,15 +581,15 @@ def main() -> None:
     client_secret = require_env("WHOOP_CLIENT_SECRET")
     refresh_token = require_env("WHOOP_REFRESH_TOKEN")
     gh_pat        = optional_env("GH_PAT")
-    gh_repo       = optional_env("GH_REPO")
+    gh_repo       = optional_env("GITHUB_REPOSITORY") or optional_env("GH_REPO")
     in_ci         = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
 
     # Detect local vs CI mode. Partial GitHub config is always a misconfiguration:
     # we never want CI to silently behave like a local run and drop the rotated token.
-    if bool(gh_pat) ^ bool(gh_repo):
-        sys.exit("Both GH_PAT and GH_REPO must be set together, or neither.")
+    if gh_pat and not gh_repo:
+        sys.exit("GH_PAT requires GITHUB_REPOSITORY (or legacy GH_REPO).")
     if in_ci and not (gh_pat and gh_repo):
-        sys.exit("CI mode requires GH_PAT and GH_REPO so rotated WHOOP tokens can be persisted.")
+        sys.exit("CI mode requires GH_PAT; GitHub supplies GITHUB_REPOSITORY automatically.")
 
     is_local = not (gh_pat and gh_repo)
     if is_local:
@@ -598,7 +619,13 @@ def main() -> None:
             persist_token_locally(new_refresh_token)
         else:
             print("Refresh token rotated — updating GitHub secret …")
-            update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
+            try:
+                update_github_secret(gh_repo, "WHOOP_REFRESH_TOKEN", new_refresh_token, gh_pat)
+            except requests.RequestException as exc:
+                sys.exit(
+                    "Rotated WHOOP token could not be persisted after retries; "
+                    f"stopping before any WHOOP data fetch ({exc})."
+                )
 
     # ── Fetch sleep data ──────────────────────────────────────────────────────
     print(f"Fetching WHOOP sleep data since {FETCH_FROM} …")

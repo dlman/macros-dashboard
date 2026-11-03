@@ -5,7 +5,7 @@ Sync published Google Sheets CSV tabs into js/data.js.
 No credentials or secrets required — just publish each macro tab via
 File → Share → Publish to web → CSV, then paste the URL below.
 
-Add a new entry to PUBLISHED_CSV_URLS whenever you start a new month.
+Add a new YYYY-MM entry to PUBLISHED_CSV_URLS whenever you start a new month.
 Sleep and steps data are preserved from the existing js/data.js (update
 those manually via WHOOP/Health exports as usual).
 
@@ -38,31 +38,18 @@ DATA_JS_PATH = ROOT / "js" / "data.js"
 # Add a new entry here whenever you publish a new month's macro tab.
 # File → Share → Publish to web → select the sheet tab → CSV → Copy link
 PUBLISHED_CSV_URLS: dict[str, str] = {
-    "Apr": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
-    "May": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
-    "Jun": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=303838993&single=true&output=csv",
-    "Jul": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1367450588&single=true&output=csv",
-    "Aug": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=688095732&single=true&output=csv",
-    "Sep": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1883715796&single=true&output=csv",
-    "Oct": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1541310997&single=true&output=csv",
-    "Nov": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2063757912&single=true&output=csv",
+    "2026-04": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=321773998&single=true&output=csv",
+    "2026-05": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2042134160&single=true&output=csv",
+    "2026-06": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=303838993&single=true&output=csv",
+    "2026-07": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1367450588&single=true&output=csv",
+    "2026-08": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=688095732&single=true&output=csv",
+    "2026-09": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1883715796&single=true&output=csv",
+    "2026-10": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=1541310997&single=true&output=csv",
+    "2026-11": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJUvbmg1S1K_Db8iKiNs8CxNDsyn0W8kSAqC1mMJezQHi9JTFP2gvWP-943ybVdWIFSgRmHPsC2IE4/pub?gid=2063757912&single=true&output=csv",
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
-MONTH_BUCKETS = OrderedDict([
-    ("Jan",   "2026-01"),
-    ("Feb",   "2026-02"),
-    ("March", "2026-03"),
-    ("Apr",   "2026-04"),
-    ("May",   "2026-05"),
-    ("Jun",   "2026-06"),
-    ("Jul",   "2026-07"),
-    ("Aug",   "2026-08"),
-    ("Sep",   "2026-09"),
-    ("Oct",   "2026-10"),
-    ("Nov",   "2026-11"),
-    ("Dec",   "2026-12"),
-])
+MONTH_KEY_RE = re.compile(r"^\d{4}-(?:0[1-9]|1[0-2])$")
 
 MACRO_ALIASES = {
     "date":     {"date", "day", "datestr", "daydate"},
@@ -117,6 +104,8 @@ def fetch_csv(url: str, label: str) -> list[list[str]]:
         raise RuntimeError(f"Failed to fetch {label}") from last_error
     reader = csv.reader(io.StringIO(response.text))
     rows = [row for row in reader if any(cell.strip() for cell in row)]
+    if not rows:
+        raise SystemExit(f"{label} returned an empty CSV response; refusing to replace existing data")
     print(f"  {label}: {len(rows) - 1} data rows")
     return rows
 
@@ -216,15 +205,11 @@ def parse_existing_macro_data(path: Path) -> OrderedDict[str, list[OrderedDict[s
         r',weight:([0-9.]+|null),lifting:("Y"|null),drinks:(".*?"|null)'
         r'(?:,notes:(?:".*?"|null))?\}'
     )
-    buckets: OrderedDict[str, list[OrderedDict[str, Any]]] = OrderedDict(
-        (name, []) for name in MONTH_BUCKETS
-    )
+    buckets: dict[str, list[OrderedDict[str, Any]]] = {}
     for m in day_re.finditer(src):
         date = m.group(1)
-        prefix = date[:7]
-        month = next((name for name, p in MONTH_BUCKETS.items() if p == prefix), None)
-        if month is None:
-            continue
+        month = date[:7]
+        buckets.setdefault(month, [])
 
         def maybe_int(s: str) -> int | None:
             return None if s == "null" else int(s)
@@ -250,7 +235,7 @@ def parse_existing_macro_data(path: Path) -> OrderedDict[str, list[OrderedDict[s
             ("drinks",   maybe_str(m.group(8))),
             ("notes",    notes),
         ]))
-    return buckets
+    return OrderedDict((month, buckets[month]) for month in sorted(buckets))
 
 
 def parse_existing_sleep_data(path: Path) -> list[dict[str, Any]]:
@@ -317,13 +302,16 @@ def extract_bayes_block(path: Path) -> str:
 def apply_csv_to_bucket(
     buckets: OrderedDict[str, list[OrderedDict[str, Any]]],
     rows: list[list[str]],
-    month_name: str,
+    month_key: str,
+    allow_shrink: bool = False,
 ) -> list[str]:
     """Overwrite a single month bucket with rows from a CSV fetch."""
+    if not MONTH_KEY_RE.fullmatch(month_key):
+        raise SystemExit(f"Invalid month key {month_key!r}; expected YYYY-MM")
     headers = map_headers(rows[0], MACRO_ALIASES)
     missing = [f for f in ("date", "protein", "carbs", "fat", "calories") if f not in headers]
     if missing:
-        raise SystemExit(f"{month_name} CSV is missing required columns: {', '.join(missing)}")
+        raise SystemExit(f"{month_key} CSV is missing required columns: {', '.join(missing)}")
 
     new_rows: list[OrderedDict[str, Any]] = []
     vacation_dates: list[str] = []
@@ -331,6 +319,8 @@ def apply_csv_to_bucket(
         date = parse_date(cell(row, headers.get("date")))
         if not date:
             continue
+        if not date.startswith(month_key + "-"):
+            raise SystemExit(f"{month_key} CSV contains out-of-month date {date}; refusing to sync")
         notes = cell(row, headers.get("notes"))
         if is_vacation_note(notes):
             vacation_dates.append(date)
@@ -350,8 +340,30 @@ def apply_csv_to_bucket(
         ]))
 
     new_rows.sort(key=lambda r: r["date"])
-    buckets[month_name] = new_rows
-    print(f"  {month_name}: {len(new_rows)} rows loaded from CSV")
+    if not new_rows:
+        raise SystemExit(f"{month_key} CSV has no completed macro rows; refusing to replace existing data")
+
+    new_dates = [row["date"] for row in new_rows]
+    duplicate_dates = sorted({date for date in new_dates if new_dates.count(date) > 1})
+    if duplicate_dates:
+        raise SystemExit(f"{month_key} CSV contains duplicate dates: {', '.join(duplicate_dates)}")
+
+    existing_rows = buckets.get(month_key, [])
+    existing_dates = {row["date"] for row in existing_rows}
+    missing_dates = sorted(existing_dates - set(new_dates))
+    if missing_dates and not allow_shrink:
+        preview = ", ".join(missing_dates[:5])
+        suffix = " …" if len(missing_dates) > 5 else ""
+        raise SystemExit(
+            f"{month_key} CSV would remove {len(missing_dates)} existing date(s) ({preview}{suffix}). "
+            "Refusing to shrink data; rerun with --allow-shrink only for an intentional deletion."
+        )
+
+    buckets[month_key] = new_rows
+    reordered = OrderedDict((month, buckets[month]) for month in sorted(buckets))
+    buckets.clear()
+    buckets.update(reordered)
+    print(f"  {month_key}: {len(new_rows)} rows loaded from CSV")
     return vacation_dates
 
 
@@ -386,7 +398,7 @@ def render_data_js(
     for month, entries in macro_buckets.items():
         serialized = ",\n    ".join(serialize_object(e) for e in entries)
         macro_lines.append(
-            f"  {month}: [\n    {serialized}\n  ]" if serialized else f"  {month}: []"
+            f"  {json.dumps(month)}: [\n    {serialized}\n  ]" if serialized else f"  {json.dumps(month)}: []"
         )
     sleep_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in sleep_rows)
     steps_ser    = ",\n  ".join(serialize_object(OrderedDict(e)) for e in steps_rows)
@@ -410,6 +422,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sync published Google Sheets CSVs into js/data.js.")
     parser.add_argument("--output", default=str(DATA_JS_PATH))
     parser.add_argument("--dry-run", action="store_true", help="Print what would change without writing")
+    parser.add_argument(
+        "--allow-shrink",
+        action="store_true",
+        help="Allow a published month to remove dates already present in data.js",
+    )
     args = parser.parse_args()
 
     output_path = Path(args.output).resolve()
@@ -423,12 +440,11 @@ def main() -> None:
 
     print(f"\nFetching {len(PUBLISHED_CSV_URLS)} published CSV tab(s) …")
     vacation_dates: list[str] = []
-    for month_name, url in PUBLISHED_CSV_URLS.items():
-        if month_name not in MONTH_BUCKETS:
-            print(f"  WARNING: '{month_name}' not in MONTH_BUCKETS — skipping")
-            continue
-        rows = fetch_csv(url, f"{month_name} Macros")
-        vacation_dates.extend(apply_csv_to_bucket(macro_buckets, rows, month_name))
+    for month_key, url in PUBLISHED_CSV_URLS.items():
+        if not MONTH_KEY_RE.fullmatch(month_key):
+            raise SystemExit(f"Invalid PUBLISHED_CSV_URLS key {month_key!r}; expected YYYY-MM")
+        rows = fetch_csv(url, f"{month_key} Macros")
+        vacation_dates.extend(apply_csv_to_bucket(macro_buckets, rows, month_key, args.allow_shrink))
 
     output = render_data_js(macro_buckets, existing_sleep, existing_steps, existing_recovery, vacation_dates, bayes_block)
 

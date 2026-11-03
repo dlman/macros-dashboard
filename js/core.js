@@ -2,22 +2,20 @@
 // DATA LAYER
 // =====================================================================
 const COLORS = { jan: '#f59e0b', feb: '#38bdf8', mar: '#34d399', apr: '#c084fc', may: '#f97316', jun: '#ec4899', jul: '#06b6d4', aug: '#a3e635', sep: '#fb923c', oct: '#e879f9', nov: '#2dd4bf', dec: '#fbbf24' };
-// Full month registry — to add a new month just add a URL to sync_google_sheets.py;
-// everything below derives from ACTIVE_MONTHS (which is filtered to months present in data).
-const MONTH_REGISTRY = [
-  { key: 'Jan',   num: '01', label: 'Jan',  longLabel: 'January',   color: COLORS.jan, bg: 'rgba(245,158,11,0.1)' },
-  { key: 'Feb',   num: '02', label: 'Feb',  longLabel: 'February',  color: COLORS.feb, bg: 'rgba(56,189,248,0.1)' },
-  { key: 'March', num: '03', label: 'Mar',  longLabel: 'March',     color: COLORS.mar, bg: 'rgba(52,211,153,0.1)' },
-  { key: 'Apr',   num: '04', label: 'Apr',  longLabel: 'April',     color: COLORS.apr, bg: 'rgba(192,132,252,0.1)' },
-  { key: 'May',   num: '05', label: 'May',  longLabel: 'May',       color: COLORS.may, bg: 'rgba(249,115,22,0.1)' },
-  { key: 'Jun',   num: '06', label: 'Jun',  longLabel: 'June',      color: COLORS.jun, bg: 'rgba(236,72,153,0.1)' },
-  { key: 'Jul',   num: '07', label: 'Jul',  longLabel: 'July',      color: COLORS.jul, bg: 'rgba(6,182,212,0.1)' },
-  { key: 'Aug',   num: '08', label: 'Aug',  longLabel: 'August',    color: COLORS.aug, bg: 'rgba(163,230,53,0.1)' },
-  { key: 'Sep',   num: '09', label: 'Sep',  longLabel: 'September', color: COLORS.sep, bg: 'rgba(251,146,60,0.1)' },
-  { key: 'Oct',   num: '10', label: 'Oct',  longLabel: 'October',   color: COLORS.oct, bg: 'rgba(232,121,249,0.1)' },
-  { key: 'Nov',   num: '11', label: 'Nov',  longLabel: 'November',  color: COLORS.nov, bg: 'rgba(45,212,191,0.1)' },
-  { key: 'Dec',   num: '12', label: 'Dec',  longLabel: 'December',  color: COLORS.dec, bg: 'rgba(251,191,36,0.1)' },
-];
+const MONTH_STYLES = {
+  '01': { label: 'Jan', longLabel: 'January', color: COLORS.jan, bg: 'rgba(245,158,11,0.1)' },
+  '02': { label: 'Feb', longLabel: 'February', color: COLORS.feb, bg: 'rgba(56,189,248,0.1)' },
+  '03': { label: 'Mar', longLabel: 'March', color: COLORS.mar, bg: 'rgba(52,211,153,0.1)' },
+  '04': { label: 'Apr', longLabel: 'April', color: COLORS.apr, bg: 'rgba(192,132,252,0.1)' },
+  '05': { label: 'May', longLabel: 'May', color: COLORS.may, bg: 'rgba(249,115,22,0.1)' },
+  '06': { label: 'Jun', longLabel: 'June', color: COLORS.jun, bg: 'rgba(236,72,153,0.1)' },
+  '07': { label: 'Jul', longLabel: 'July', color: COLORS.jul, bg: 'rgba(6,182,212,0.1)' },
+  '08': { label: 'Aug', longLabel: 'August', color: COLORS.aug, bg: 'rgba(163,230,53,0.1)' },
+  '09': { label: 'Sep', longLabel: 'September', color: COLORS.sep, bg: 'rgba(251,146,60,0.1)' },
+  '10': { label: 'Oct', longLabel: 'October', color: COLORS.oct, bg: 'rgba(232,121,249,0.1)' },
+  '11': { label: 'Nov', longLabel: 'November', color: COLORS.nov, bg: 'rgba(45,212,191,0.1)' },
+  '12': { label: 'Dec', longLabel: 'December', color: COLORS.dec, bg: 'rgba(251,191,36,0.1)' },
+};
 const EVENT_COLORS = { normal: '#f59e0b', drink: '#ef4444', lift: '#06b6d4', supplement: '#a3e635' };
 const supplementEvents = [
   { date: '2026-07-02', label: 'Creatine start', type: 'creatine' }
@@ -137,10 +135,32 @@ function applyTheme(preference = themePreference) {
   document.documentElement.setAttribute('data-theme', resolvedTheme(preference));
 }
 
-// Shared dataset loaded from js/data.js
-
 const { data, sleepData, stepsData, recoveryData = [], vacationDates = [] } = window.dashboardData;
-// Months that actually have data — drives all charts, stat cards, donuts, and toggles
+const DATA_MONTH_KEYS = Object.keys(data)
+  .filter(key => /^\d{4}-(?:0[1-9]|1[0-2])$/.test(key))
+  .sort();
+const DATA_YEARS = [...new Set(DATA_MONTH_KEYS.map(key => key.slice(0, 4)))];
+
+function monthMetaForKey(key) {
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(key)) return null;
+  const year = key.slice(0, 4);
+  const num = key.slice(5, 7);
+  const style = MONTH_STYLES[num];
+  if (!style) return null;
+  const includeYear = DATA_YEARS.length > 1;
+  return {
+    key,
+    year,
+    num,
+    shortLabel: style.label,
+    label: includeYear ? `${style.label} '${year.slice(2)}` : style.label,
+    longLabel: includeYear ? `${style.longLabel} ${year}` : style.longLabel,
+    color: style.color,
+    bg: style.bg,
+  };
+}
+
+const MONTH_REGISTRY = DATA_MONTH_KEYS.map(monthMetaForKey).filter(Boolean);
 const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].length > 0);
 
 
@@ -149,7 +169,7 @@ const ACTIVE_MONTHS = MONTH_REGISTRY.filter(m => data[m.key] && data[m.key].leng
 // COMPUTED DATA & HELPERS
 // =====================================================================
 // Flatten all days
-const allDays = ACTIVE_MONTHS.flatMap(m => data[m.key]);
+const allDays = ACTIVE_MONTHS.flatMap(m => data[m.key]).sort((a, b) => a.date.localeCompare(b.date));
 const allDates = allDays.map(d => d.date);
 const allTrackedDates = [
   ...new Set([
@@ -163,6 +183,46 @@ const BUILD_VERSION = (() => {
   const latest = allTrackedDates.at(-1);
   return latest ? latest.replace(/-/g, '.') : 'unknown';
 })();
+
+function localDateISO(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function calendarDayDistance(earlierDate, laterDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(earlierDate || '') || !/^\d{4}-\d{2}-\d{2}$/.test(laterDate || '')) return null;
+  const toUtc = value => {
+    const [year, month, day] = value.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.max(0, Math.round((toUtc(laterDate) - toUtc(earlierDate)) / 86400000));
+}
+
+function dataSourceFreshness(key, label, rows, referenceDate = localDateISO(), staleAfterDays = 2) {
+  const latestDate = (rows || [])
+    .map(row => row?.date)
+    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date || ''))
+    .sort()
+    .at(-1) || null;
+  const ageDays = latestDate ? calendarDayDistance(latestDate, referenceDate) : null;
+  return {
+    key,
+    label,
+    latestDate,
+    ageDays,
+    stale: latestDate == null || ageDays > staleAfterDays,
+  };
+}
+
+function dashboardFreshnessStatuses(referenceDate = localDateISO()) {
+  return [
+    dataSourceFreshness('macros', 'Macros', allDays, referenceDate),
+    dataSourceFreshness('sleep', 'Sleep', sleepData, referenceDate),
+    dataSourceFreshness('steps', 'Steps', stepsData, referenceDate),
+  ];
+}
 const LEGACY_DEFAULT_RANGE_END = '2026-03-18';
 const macroByDate = {};
 allDays.forEach(d => { macroByDate[d.date] = d; });
@@ -291,15 +351,22 @@ function perfColor(p, alpha=1) {
 }
 
 function monthKey(dateStr) {
-  const num = dateStr.slice(5, 7);
-  const entry = MONTH_REGISTRY.find(m => m.num === num);
-  return entry ? entry.key : ACTIVE_MONTHS[0]?.key || 'Jan';
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') ? dateStr.slice(0, 7) : ACTIVE_MONTHS[0]?.key || '';
 }
 
-function monthBuckets(days) {
+function monthEntry(dateStr) {
+  const key = monthKey(dateStr);
+  return MONTH_REGISTRY.find(month => month.key === key) || monthMetaForKey(key);
+}
+
+function monthLabel(dateStr) {
+  return monthEntry(dateStr)?.label || '';
+}
+
+function monthBuckets(days, months = ACTIVE_MONTHS) {
   const result = {};
-  ACTIVE_MONTHS.forEach(m => {
-    result[m.key] = days.filter(d => d.date.startsWith(`2026-${m.num}`));
+  months.forEach(m => {
+    result[m.key] = days.filter(d => d.date.startsWith(`${m.key}-`));
   });
   return result;
 }
