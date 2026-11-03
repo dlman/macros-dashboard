@@ -1286,6 +1286,17 @@ const DXA_SCANS = [
   DXA_SCAN_LATEST
 ];
 
+function empiricalScaleState() {
+  return window.dashboardData?.bayesian?.scaleState || null;
+}
+
+function activeScaleStateGap() {
+  const state = empiricalScaleState();
+  return state?.usableForBodyComp && Number.isFinite(state.bodyCompGap)
+    ? Math.max(0, state.bodyCompGap)
+    : DXA_SCAN_LATEST.fedStateDelta;
+}
+
 function bodyCompAnchorForDate(date) {
   return date >= DXA_SCAN_LATEST.date ? DXA_SCAN_LATEST : DXA_MODEL_BASELINE;
 }
@@ -1303,7 +1314,7 @@ function currentBodyCompScan(days) {
 
 function bodyCompFedDelta(anchor) {
   return anchor.date >= DXA_SCAN_LATEST.date
-    ? Math.max(0, anchor.fedStateDelta || 0)
+    ? activeScaleStateGap()
     : Math.max(0, DXA_PREV_FAT_FREE_MASS - DXA_FAT_FREE_MASS);
 }
 
@@ -1688,9 +1699,18 @@ function currentFedStateDelta(days = allDays) {
 function scenarioProjectedBodyComp(weight, days = allDays, dateStr = null) {
   const asOf = latestWeightPointForScenario(days)?.date || dateStr || YESTERDAY_ISO;
   const anchor = bodyCompAnchorForDate(dateStr && dateStr < asOf ? dateStr : asOf);
-  const anchorState = estimateBodyCompRangeAtWeight(weight, days, dateStr, anchor);
   const delta = bodyCompFedDelta(anchor);
   const fedAnchor = bodyCompAnchorIsFed(anchor);
+  const scaleState = empiricalScaleState();
+  const currentOffset = scaleState?.usableForBodyComp
+    && dateStr === scaleState.current?.date
+    && Number.isFinite(scaleState.current?.offsetAboveCut)
+      ? scaleState.current.offsetAboveCut
+      : null;
+  const scanComparableWeight = fedAnchor && currentOffset != null
+    ? weight + delta - currentOffset
+    : weight;
+  const anchorState = estimateBodyCompRangeAtWeight(scanComparableWeight, days, dateStr, anchor);
   const cutState = fedAnchor
     ? applyBodyCompStateDelta(anchorState, -delta, 'cut')
     : { ...anchorState, displayState: 'cut', stateDelta: 0, comparableWeight: anchorState.weight };
@@ -1860,16 +1880,19 @@ function scenarioForecastEnvelope(values, days = allDays, sleep = sleepData) {
   const effectiveDeficitLow = lowTdee - energy.totalDailyIntake;
   const effectiveDeficitHigh = highTdee - energy.totalDailyIntake;
   const sampleFedDelta = scenarioProjectedBodyComp(currentWeight, days, anchorDate).fedDelta;
-  const reboundFactor = primaryState === 'fed' ? 1 : sampleFedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
+  const scaleState = empiricalScaleState();
+  const latestScaleOffset = scaleState?.usableForBodyComp
+    && scaleState.current?.date === anchorDate
+    && Number.isFinite(scaleState.current?.offsetAboveCut)
+      ? scaleState.current.offsetAboveCut
+      : (primaryState === 'fed' ? sampleFedDelta : 0);
+  const reboundFactor = sampleFedDelta > 0 ? clamp01((520 - effectiveDeficitMid) / 520) : 0;
   const reboundSeries = Array.from({ length: weeks + 1 }, (_, week) => {
     const day = week * 7;
     const date = addDaysToDate(anchorDate, day);
-    const creatineDelta = creatineScaleDeltaFromAnchor(anchorDate, date);
-    const cutWeight = +(currentWeight - ((effectiveDeficitMid * 7 * week) / 3500) + creatineDelta).toFixed(2);
-    const fullFedGap = scenarioProjectedBodyComp(cutWeight, days, date).fedDelta;
-    return +(primaryState === 'fed'
-      ? fullFedGap
-      : fullFedGap * reboundFactor * (1 - Math.exp(-(day / 5.5)))).toFixed(2);
+    const fullFedGap = bodyCompFedDelta(bodyCompAnchorForDate(date));
+    const targetOffset = fullFedGap * reboundFactor;
+    return +(targetOffset + ((latestScaleOffset - targetOffset) * Math.exp(-(day / 5.5)))).toFixed(2);
   });
   const cutMid = Array.from({ length: weeks + 1 }, (_, week) => {
     const date = addDaysToDate(anchorDate, week * 7);
@@ -3245,13 +3268,7 @@ function tdeeEnsembleProfile(days = allDays, recentWindow = 28) {
 
 function latestHistoricalBayesDate() {
   const timeline = window.dashboardData?.bayesian?.tdeeTimeline;
-  if (Array.isArray(timeline) && timeline.length) {
-    return timeline[timeline.length - 1].date;
-  }
-  const gp = window.dashboardData?.bayesian?.gpWeightTrend;
-  if (!Array.isArray(gp) || !gp.length) return null;
-  const historical = gp.filter(point => !point.forecast);
-  return historical.length ? historical[historical.length - 1].date : null;
+  return Array.isArray(timeline) && timeline.length ? timeline[timeline.length - 1].date : null;
 }
 
 function bayesianTimelinePointForDate(dateStr) {
@@ -3314,9 +3331,11 @@ function tdeeShiftSummary(days = getAnalyticsDays()) {
 
 function tdeeActivityTerms(days = getAnalyticsDays()) {
   const fullPosterior = freshBayesianPosterior(getAnalyticsDays());
-  if (fullPosterior?.activityTerms) return fullPosterior.activityTerms;
+  if (fullPosterior?.activityTerms && fullPosterior.activityTerms.confidence !== 'low') return fullPosterior.activityTerms;
   const timelinePoint = freshBayesianTimelinePoint(days);
-  return timelinePoint?.activityTerms || null;
+  return timelinePoint?.activityTerms && timelinePoint.activityTerms.confidence !== 'low'
+    ? timelinePoint.activityTerms
+    : null;
 }
 
 function isWholeAnalyticsRange(days = allDays) {
@@ -3334,6 +3353,15 @@ function freshBayesianPosterior(days = allDays) {
   return posterior;
 }
 
+function freshCurrentTDEE(days = allDays) {
+  if (!isWholeAnalyticsRange(days)) return null;
+  const current = window.dashboardData?.bayesian?.currentTDEE;
+  const latestBayesDate = latestHistoricalBayesDate();
+  const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
+  if (!current || !latestBayesDate || !latestAnalyticsDate || latestBayesDate < latestAnalyticsDate) return null;
+  return current;
+}
+
 function freshBayesianTimelinePoint(days = allDays) {
   const latestBayesDate = latestHistoricalBayesDate();
   const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
@@ -3345,6 +3373,24 @@ function freshBayesianTimelinePoint(days = allDays) {
 }
 
 function workingTDEEProfile(days = allDays) {
+  const current = freshCurrentTDEE(days);
+  if (current) {
+    return {
+      maintenance: current.mean,
+      weightedIntake: null,
+      dailySlope: null,
+      weeklyLoss: null,
+      sampleSize: null,
+      spanDays: current.recentWindowDays,
+      confidence: projectionConfidence(0.7),
+      confidenceScore: 0.7,
+      rangeLow: current.ci68Low,
+      rangeHigh: current.ci68High,
+      method: current.method,
+      source: 'bayesian_current',
+      posterior: current
+    };
+  }
   const bayes = freshBayesianPosterior(days);
   if (bayes) {
     const segmentMethod = bayes.segmentCount > 1
@@ -3487,14 +3533,33 @@ function bodyCompWeightAnchor(days) {
   const scanDayIndex = weightDays.findIndex(day => day.date === DXA_SCAN_LATEST.date);
   const latest = weightDays[weightDays.length - 1];
   if (scanDayIndex >= 0 && latest?.date > DXA_SCAN_LATEST.date) {
-    const baselineWindow = weightDays.slice(Math.max(0, scanDayIndex - 6), scanDayIndex + 1);
     const currentWindow = weightDays.slice(-7);
-    const baselineAverage = avg(baselineWindow, 'weight');
     const currentAverage = avg(currentWindow, 'weight');
+    const scaleState = empiricalScaleState();
+    const dynamicStateAvailable = scaleState?.usableForBodyComp
+      && scaleState.current?.date === latest.date
+      && Number.isFinite(scaleState.current?.rollingOffsetAboveCut)
+      && Number.isFinite(scaleState.bodyCompGap);
+    if (dynamicStateAvailable && Number.isFinite(currentAverage)) {
+      const stateAdjustment = scaleState.bodyCompGap - scaleState.current.rollingOffsetAboveCut;
+      return {
+        date: latest.date,
+        weight: currentAverage + stateAdjustment,
+        rawWeight: currentAverage,
+        scaleStateAdjustment: stateAdjustment,
+        scaleStateOffset: scaleState.current.rollingOffsetAboveCut,
+        sampleSize: currentWindow.length,
+        window: currentWindow.length,
+        source: 'scale-state-adjusted 7-day average'
+      };
+    }
+    const baselineWindow = weightDays.slice(Math.max(0, scanDayIndex - 6), scanDayIndex + 1);
+    const baselineAverage = avg(baselineWindow, 'weight');
     if (Number.isFinite(baselineAverage) && Number.isFinite(currentAverage)) {
       return {
         date: latest.date,
         weight: DXA_SCAN_LATEST.totalMass + (currentAverage - baselineAverage),
+        rawWeight: currentAverage,
         sampleSize: currentWindow.length,
         window: currentWindow.length,
         source: 'DXA-calibrated 7-day average'
@@ -3601,7 +3666,10 @@ function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15.5, dea
   const timeline = bodyFatGoalTimeline(rollingAnchor.weight, currentDate, actualWeeklyLoss == null ? null : actualWeeklyLoss / 7, targetBfPct, analyticsDays);
   const projectedDate = timeline.projectedDate;
   const bufferDays = projectedDate ? daysBetweenDates(projectedDate, deadline) : null;
-  const tdeeProfile = workingTDEEProfile(analyticsDays);
+  const currentTdee = freshCurrentTDEE(getAnalyticsDays());
+  const tdeeProfile = currentTdee
+    ? { maintenance: currentTdee.mean, rangeLow: currentTdee.ci68Low, rangeHigh: currentTdee.ci68High }
+    : workingTDEEProfile(analyticsDays);
   const effectiveCalorieTarget = Number.isFinite(requiredDailyDeficit)
     ? Math.round(tdeeProfile.maintenance - requiredDailyDeficit)
     : null;

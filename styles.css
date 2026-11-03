@@ -265,6 +265,15 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .noise-driver em { color: var(--text-faint); font-size: 10px; font-style: normal; line-height: 1.25; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .noise-driver.quiet { grid-template-columns: 1fr; gap: 2px; }
 .noise-driver.quiet em { white-space: normal; }
+.scale-state-gauge { position: relative; height: 38px; margin: 12px 4px 2px; }
+.scale-state-track { position: absolute; left: 0; right: 0; top: 13px; height: 4px; border-radius: 2px; background: rgba(100,116,139,0.42); }
+.scale-state-tick,
+.scale-state-marker { position: absolute; top: 7px; width: 2px; height: 16px; transform: translateX(-50%); }
+.scale-state-tick { background: rgba(148,163,184,0.72); }
+.scale-state-tick span,
+.scale-state-marker span { position: absolute; top: 19px; left: 50%; transform: translateX(-50%); color: var(--text-faint); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.scale-state-marker { width: 10px; height: 10px; top: 10px; border-radius: 50%; background: var(--accent-mint); box-shadow: 0 0 0 3px rgba(52,211,153,0.18); }
+.scale-state-marker span { top: -17px; color: var(--accent-mint); }
 .coach-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: -4px 0 18px; }
 .coach-card { background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(56,189,248,0.06)); border: 1px solid var(--border-card); border-radius: 14px; padding: 14px 16px; }
 .coach-card .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--text-faint); margin-bottom: 6px; }

@@ -11,7 +11,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from update_bayes import (
     bayesian_tdee_profile,
+    clean_tdee_segments,
+    creatine_water_adjustment,
     estimate_drink_calories,
+    fit_scale_state_model,
+    partially_pooled_current_tdee,
+    tdee_backtest,
     tdee_logging_sensitivity,
     update_data_js,
 )
@@ -33,11 +38,15 @@ class BayesianTdeeSegmentationTests(unittest.TestCase):
             path = Path(tmp) / "data.js"
             path.write_text(source, encoding="utf-8")
             with redirect_stdout(StringIO()):
-                update_data_js(path, path.read_text(), posterior, [], [])
+                update_data_js(path, path.read_text(), posterior, [], {"mean": 2450}, {"mae": 0.8})
                 first = path.read_text()
-                update_data_js(path, first, posterior, [], [])
+                update_data_js(path, first, posterior, [], {"mean": 2450}, {"mae": 0.8})
                 second = path.read_text()
         self.assertEqual(first, second)
+        self.assertNotIn('gpWeightTrend', first)
+        self.assertIn('currentTDEE', first)
+        self.assertIn('backtest', first)
+        self.assertIn('scaleState', first)
 
     def test_vacation_weight_shift_does_not_change_tdee_slope(self):
         intake = 2000
@@ -72,6 +81,131 @@ class BayesianTdeeSegmentationTests(unittest.TestCase):
         self.assertEqual(result['excludedDays'], 3)
         self.assertAlmostEqual(result['mean'], expected_tdee, delta=35)
         self.assertTrue(all(obs['segment'] in (1, 2) for obs in result['observations']))
+
+    def test_unexplained_gap_longer_than_two_days_starts_new_segment(self):
+        days = [
+            {'date': f'2026-01-{day:02d}', 'calories': 2000, 'weight': 170, 'lifting': None, 'drinks': None}
+            for day in (1, 2, 3, 7, 8, 9)
+        ]
+        segments = clean_tdee_segments(days, set(), '2026-01-09')
+        self.assertEqual([[day['date'] for day in segment] for segment in segments], [
+            ['2026-01-01', '2026-01-02', '2026-01-03'],
+            ['2026-01-07', '2026-01-08', '2026-01-09'],
+        ])
+
+    def test_three_consecutive_null_calorie_rows_start_new_segment(self):
+        days = [
+            {
+                'date': f'2026-01-{day:02d}',
+                'calories': None if day in (4, 5, 6) else 2000,
+                'weight': 170,
+                'lifting': None,
+                'drinks': None,
+            }
+            for day in range(1, 10)
+        ]
+        segments = clean_tdee_segments(days, set(), '2026-01-09')
+        self.assertEqual([[day['date'] for day in segment] for segment in segments], [
+            ['2026-01-01', '2026-01-02', '2026-01-03'],
+            ['2026-01-07', '2026-01-08', '2026-01-09'],
+        ])
+
+    def test_creatine_ramp_is_removed_before_tdee_fit(self):
+        intake = 2100
+        expected_tdee = 2500
+        start = datetime(2026, 6, 20)
+        days = []
+        for offset in range(45):
+            date = (start + timedelta(days=offset)).strftime('%Y-%m-%d')
+            tissue_weight = 165 + ((intake - expected_tdee) / 3500 * offset)
+            days.append({
+                'date': date,
+                'calories': intake,
+                'weight': tissue_weight + creatine_water_adjustment(date),
+                'lifting': None,
+                'drinks': None,
+            })
+        result = bayesian_tdee_profile(
+            days, {}, end_date=days[-1]['date'], verbose=False, bootstrap_samples=100,
+        )
+        self.assertAlmostEqual(result['mean'], expected_tdee, delta=25)
+        self.assertTrue(result['creatineAdjusted'])
+        self.assertGreater(result['SE_TDEE'], 0)
+        self.assertEqual(result['loggingSigma'], 150.0)
+
+    def test_current_tdee_is_partially_pooled_and_weight_adjusted(self):
+        days = [
+            {'date': f'2026-01-{day:02d}', 'weight': 170 - day * 0.2}
+            for day in range(1, 15)
+        ]
+        full = {'mean': 2500, 'statisticalSigma': 100, 'loggingSigma': 150}
+        recent = {'date': '2026-01-14', 'mean': 2300, 'statisticalSigma': 90, 'windowDays': 35}
+        current = partially_pooled_current_tdee(full, recent, days)
+        self.assertGreater(current['mean'], recent['mean'])
+        self.assertLess(current['mean'], full['mean'])
+        self.assertLess(current['weightAdjustment'], 0)
+        self.assertEqual(current['historicalMean'], 2500)
+
+    def test_walk_forward_backtest_tracks_exact_synthetic_energy_balance(self):
+        days = []
+        start = datetime(2026, 1, 1)
+        intake = 2100
+        tdee = 2500
+        for offset in range(110):
+            date = (start + timedelta(days=offset)).strftime('%Y-%m-%d')
+            days.append({
+                'date': date,
+                'calories': intake,
+                'weight': 175 + ((intake - tdee) / 3500 * offset),
+                'lifting': None,
+                'drinks': None,
+            })
+        steps = {day['date']: 7000 for day in days}
+        result = tdee_backtest(days, steps, set())
+        self.assertIsNotNone(result)
+        self.assertGreater(result['count'], 0)
+        self.assertLess(result['mae'], 0.25)
+        self.assertTrue(result['creatineAdjusted'])
+
+    def test_scale_state_uses_prior_intake_and_beats_constant_baseline(self):
+        rng = __import__('numpy').random.default_rng(7)
+        start = datetime(2026, 1, 1)
+        days = []
+        tissue_weight = 170.0
+        prior_rows = []
+        for offset in range(310):
+            date = (start + timedelta(days=offset)).strftime('%Y-%m-%d')
+            carbs = 90 + int(rng.integers(0, 190))
+            calories = 1650 + int(rng.integers(0, 1500))
+            if date == '2026-09-22':
+                carbs, calories = 350, 4000
+            lifting = 'Y' if offset % 4 == 0 else None
+            drinks = '3 whiskey' if offset % 13 == 0 else None
+            tissue_weight -= 0.045
+            prior_rows.append((carbs, calories))
+            if len(prior_rows) >= 2:
+                prior_carbs, prior_calories = prior_rows[-2]
+                water = ((prior_carbs - 150) / 100 * 0.7) + ((prior_calories - 2200) / 500 * 0.45)
+            else:
+                water = 0
+            noise = float(rng.normal(0, 0.18))
+            days.append({
+                'date': date,
+                'protein': 170,
+                'carbs': carbs,
+                'fat': 70,
+                'calories': calories,
+                'weight': tissue_weight + water + noise + creatine_water_adjustment(date),
+                'lifting': lifting,
+                'drinks': drinks,
+            })
+        steps = {day['date']: 7000 for day in days}
+        result = fit_scale_state_model(days, steps, set(), 2600)
+        selected = result['metrics'][result['selectedModel']]
+        self.assertTrue(result['usableForBodyComp'])
+        self.assertLess(selected['mae'], result['metrics']['constant']['mae'])
+        self.assertGreater(selected['correlation'], 0.25)
+        self.assertEqual(result['current']['date'], days[-1]['date'])
 
 
 class TdeeLoggingSensitivityTests(unittest.TestCase):

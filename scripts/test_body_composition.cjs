@@ -110,8 +110,9 @@ test('post-scan targets use the confirmed fed anchor and expose a cut-state equi
   for(const p of cases) {
     near(p.scenario.fedState.bodyFatPct,p.target);
     near(p.model.bodyFatPct,p.target);
-    near(p.weights.fedStateTarget-p.weights.cutStateTarget,1.3);
-    near(p.scenario.fedDelta,1.3);
+    const expectedGap=run('activeScaleStateGap()');
+    near(p.weights.fedStateTarget-p.weights.cutStateTarget,expectedGap);
+    near(p.scenario.fedDelta,expectedGap);
     near(p.scenario.fedState.fat,p.scenario.cutState.fat);
     near(p.model.lean+p.model.fat+p.model.bone,p.model.weight);
   }
@@ -123,8 +124,8 @@ test('November 15 runway uses the fed 15.5% goal and latest DXA lean-retention c
   assert.equal(result.anchorDate, '2026-09-23');
   assert.equal(result.targetWeight, 149.4);
   assert.equal(result.targetFedWeight, 149.4);
-  assert.equal(result.targetCutWeight, 148.1);
-  near(result.targetFedWeight - result.targetCutWeight, 1.3);
+  assert.equal(result.targetCutWeight, 147.2);
+  assert.ok(Math.abs((result.targetFedWeight - result.targetCutWeight) - run('activeScaleStateGap()')) < 0.05);
   assert.ok(result.daysRemaining > 0);
   near(result.requiredWeeklyLoss, (result.tissueWeightRemaining / result.daysRemaining) * 7);
   near(result.requiredDailyDeficit, (result.tissueWeightRemaining * 3500) / result.daysRemaining);

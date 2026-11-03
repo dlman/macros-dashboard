@@ -956,7 +956,9 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const baselineProfile = workingTDEEProfile(baselineDays.length ? baselineDays : analyticsDays);
   const trendProfile = estimateTDEEProfile(analyticsDays);
   const bayesPosterior = freshBayesianPosterior(analyticsDays);
+  const bayesCurrent = freshCurrentTDEE(analyticsDays);
   const bayesTimelineLatest = freshBayesianTimelinePoint(analyticsDays);
+  const tdeeBacktest = window.dashboardData?.bayesian?.backtest || null;
   const tdeeStability = tdeeStabilityProfile();
   const activityTerms = tdeeActivityTerms(analyticsDays);
   const baselineExclusions = baselineExclusionSummary(analyticsDays);
@@ -967,9 +969,20 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const latestDay = filteredDays[filteredDays.length - 1] || null;
   const latestSleep = latestDay ? (sleepByDate[latestDay.date] || filteredSleep[filteredSleep.length - 1] || null) : (filteredSleep[filteredSleep.length - 1] || null);
   const latestWeightDay = [...filteredDays].reverse().find(d => d.weight) || null;
-  const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
-  const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
   const scaleNoise = scaleNoiseAssessment(filteredDays, filteredSleep);
+  const scaleState = empiricalScaleState();
+  const scaleStateCurrent = scaleState?.current || null;
+  const scaleStateGauge = (() => {
+    if (!scaleStateCurrent || !Number.isFinite(scaleStateCurrent.offsetAboveCut)) return null;
+    const low = Math.min(-1, scaleStateCurrent.offsetLow ?? scaleStateCurrent.offsetAboveCut - 1);
+    const high = Math.max((scaleState.bodyCompGap || 1.3) + 1, scaleStateCurrent.offsetHigh ?? scaleStateCurrent.offsetAboveCut + 1);
+    const position = value => clamp01((value - low) / Math.max(high - low, 0.1)) * 100;
+    return {
+      cut: position(0),
+      fed: position(scaleState.bodyCompGap || 1.3),
+      current: position(scaleStateCurrent.offsetAboveCut)
+    };
+  })();
   const weighInDelta = latestWeighInDelta(filteredDays);
   const calorieCurrent = currentStreak(filteredDays, d => d.calories <= goals.calories);
   const proteinCurrent = currentStreak(filteredDays, hitProteinFloor);
@@ -1031,7 +1044,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="bf-strip-copy">
           <div class="eyebrow">Body Fat Milestones</div>
           <div class="bf-strip-current">~${currentBf.toFixed(1)}% BF</div>
-          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, scanAnchored ? 'fedLow' : 'cutLow', scanAnchored ? 'fedHigh' : 'cutHigh', scanAnchored ? nextTarget.fedStateTargetWeight : nextTarget.cutStateTargetWeight)} ${bodyCompStateLabel(bfTargets[0].anchorDate)}.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${scanAnchored ? ` ${formatShortDate(DXA_SCAN_LATEST.date)} is calibrated as fed-state; creatine is already included and the cut-state equivalent is ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)} lower.` : creatineWater > 0 ? ` Scale includes ~${creatineRangeLabel} modeled creatine water; BF math uses the ${weightLabel(creatineWater, 1)} midpoint and excludes it from fat trend.` : ''}</div>
+          <div class="bf-strip-sub">${nextTarget ? `Next: ${nextTarget.targetBfPct}% around ${targetWeightRangeLabel(nextTarget, scanAnchored ? 'fedLow' : 'cutLow', scanAnchored ? 'fedHigh' : 'cutHigh', scanAnchored ? nextTarget.fedStateTargetWeight : nextTarget.cutStateTargetWeight)} ${bodyCompStateLabel(bfTargets[0].anchorDate)}.` : 'All displayed milestones are inside the current estimate.'} Based on ${bfTargets[0].currentWeightAnchor || 'current trend weight'}.${scanAnchored ? ` ${formatShortDate(DXA_SCAN_LATEST.date)} is calibrated as fed-state; creatine is already included and the empirically estimated cut-state equivalent is ${weightLabel(activeScaleStateGap(), 1)} lower.` : creatineWater > 0 ? ` Scale includes ~${creatineRangeLabel} modeled creatine water; BF math uses the ${weightLabel(creatineWater, 1)} midpoint and excludes it from fat trend.` : ''}</div>
         </div>
         <div class="bf-track-wrap">
           <div class="bf-track">
@@ -1139,16 +1152,17 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       `,
     `
       <div class="forecast-card mobile-primary">
-        <div class="eyebrow">Working TDEE Range</div>
+        <div class="eyebrow">Current Maintenance</div>
         ${(() => {
-          const bp = bayesPosterior;
+          const bp = bayesCurrent || bayesPosterior;
           if (bp) {
-            return `<div class="value">${energyLabel(bp.ci68Low)}–${energyLabel(bp.ci68High)}</div>
-        <div class="sub">Bayesian posterior from ${bp.nObs} weight-change intervals, step-NEAT adjusted. 68% credible interval conditional on the model and logged intake.</div>
+            return `<div class="value">~${energyLabel(bp.mean)}</div>
+        <div class="sub">${bayesCurrent ? `Current estimate partially pools the latest ${bp.recentWindowDays}-day evidence toward the weight-adjusted historical average.` : `Historical Bayesian posterior from ${bp.nObs} weight-change intervals.`}</div>
         <div class="trust-row trust-inline"><span class="trust-pill estimated">Bayesian inference</span></div>
-        <div class="confidence-pill ${trendProfile.confidence.cls}">${trendProfile.confidence.label}</div>
-        <div class="tiny">Posterior mean: ~${energyLabel(bp.mean)} · 95% CI: ${energyLabel(bp.ci95Low)}–${energyLabel(bp.ci95High)} · Latest rolling Bayesian: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · Avg steps: ${bp.avgSteps?.toLocaleString()}/day</div>
-        <div class="tiny">${activityTerms ? `Activity-associated deltas (${activityTerms.confidence} confidence): ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal/1k steps · ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} lift-day · ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} drink-day` : 'Activity deltas will appear once the Bayesian interval model has enough weight spans.'}</div>
+        <div class="confidence-pill ${workingProfile.confidence.cls}">${workingProfile.confidence.label}</div>
+        <div class="tiny">Historical average: ~${energyLabel(bayesPosterior?.mean ?? bp.mean)} · recent window: ~${energyLabel(bayesTimelineLatest?.mean ?? bp.mean)} · 68% range ${energyLabel(bp.ci68Low)}–${energyLabel(bp.ci68High)}</div>
+        <div class="tiny">Uncertainty: ±${energyLabel(bp.statisticalSigma || 0)} model/statistical · ±${energyLabel(bp.loggingSigma || 0)} logging · creatine-adjusted weights</div>
+        <div class="tiny">${activityTerms ? `Weekly activity associations (${activityTerms.confidence} confidence): ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal/1k steps · ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} lift-day · ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} drink-day` : 'Weekly activity effects are hidden until the model reaches at least moderate confidence.'}</div>
         <div class="tiny">${tdeeStability ? `Stability: ${tdeeStability.status} · 7-point rolling SD ${energyLabel(tdeeStability.recentSd)} · ${tdeeStability.fullGap >= 0 ? '+' : '−'}${energyLabel(Math.abs(tdeeStability.fullGap))} vs full-range posterior` : 'Stability score will appear once the rolling Bayesian timeline has enough points.'}${baselineExclusions ? ` · baseline-cut fallback excludes ${baselineExclusions.text}` : ''}</div>`;
           }
           return `<div class="value">${energyLabel(tdeeBand.low)}–${energyLabel(tdeeBand.high)}</div>
@@ -1160,26 +1174,44 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         ${renderTdeeLoggingSensitivity(bayesTimelineLatest || bayesPosterior)}
       </div>
     `,
-    latestGlycogen
+    tdeeBacktest
       ? `
         <div class="forecast-card mobile-primary">
-          <div class="eyebrow">Current Glycogen Load</div>
-          <div class="value">${latestGlycogen.loadPct}%</div>
-          <div class="sub">Modeled current glycogen level from the latest day in view, with about ${weightLabel(latestGlycogen.massLbs, 2)} tied up in glycogen + bound water.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill estimated">Modeled glycogen state</span><span class="trust-pill logged">Latest range day</span></div>
-          <div class="tiny">${formatShortDate(latestGlycogenDay.date)} · ~${latestGlycogen.glycogenG}g glycogen · ~${weightLabel(latestGlycogen.waterG / 453.592, 2)} bound water · ${latestGlycogen.drinkKcal > 0 ? `includes ~${energyLabel(latestGlycogen.drinkKcal)} drink impact` : 'no drink depletion modeled that day'}</div>
+          <div class="eyebrow">28-Day Model Backtest</div>
+          <div class="value">${weightLabel(tdeeBacktest.mae, 2)} MAE</div>
+          <div class="sub">Walk-forward projections missed the realized creatine-adjusted 7-day average by ${weightLabel(tdeeBacktest.mae, 2)} on average.</div>
+          <div class="trust-row trust-inline"><span class="trust-pill estimated">Historical validation</span><span class="trust-pill logged">No future leakage</span></div>
+          <div class="tiny">${tdeeBacktest.count} checkpoints · mean error ${tdeeBacktest.meanError >= 0 ? '+' : ''}${weightLabel(tdeeBacktest.meanError, 2)} · 68% interval covered ${tdeeBacktest.coverage68}% · 95% covered ${tdeeBacktest.coverage95}%</div>
         </div>
       `
       : `
         <div class="forecast-card mobile-primary">
-          <div class="eyebrow">Current Glycogen Load</div>
+          <div class="eyebrow">28-Day Model Backtest</div>
           <div class="value">—</div>
-          <div class="sub">Need at least one tracked day in the active view to estimate your current glycogen and water load.</div>
-          <div class="trust-row trust-inline"><span class="trust-pill estimated">Modeled glycogen state</span></div>
-          <div class="tiny">Range-based estimate</div>
+          <div class="sub">More complete historical 28-day windows are needed before forecast accuracy can be scored.</div>
         </div>
       `,
-    scaleNoise
+    scaleStateCurrent && scaleStateGauge
+      ? `
+        <div class="forecast-card mobile-primary scale-noise-card ${scaleState.usableForBodyComp ? 'medium' : 'low'}" id="scaleStateCard">
+          <div class="eyebrow">Scale State</div>
+          <div class="value">${scaleStateCurrent.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetAboveCut, 2)}</div>
+          <div class="sub">${scaleStateCurrent.status === 'below-cut' ? 'Below' : 'Above'} your empirically learned cut-state on the latest weigh-in.${scaleStateCurrent.cutStateEquivalentWeight == null ? '' : ` Cut-state equivalent: ~${weightLabel(scaleStateCurrent.cutStateEquivalentWeight, 1)}.`}</div>
+          <div class="scale-state-gauge" aria-label="Current scale state from cut to fed">
+            <div class="scale-state-track"></div>
+            <div class="scale-state-tick cut" style="left:${scaleStateGauge.cut}%"><span>Cut</span></div>
+            <div class="scale-state-tick fed" style="left:${scaleStateGauge.fed}%"><span>Fed</span></div>
+            <div class="scale-state-marker" style="left:${scaleStateGauge.current}%"><span>Current</span></div>
+          </div>
+          <div class="noise-driver-list">
+            ${(scaleStateCurrent.drivers || []).map(driver => `<div class="noise-driver"><span>${driver.label}</span><em>${driver.effectLbs >= 0 ? '+' : ''}${weightLabel(driver.effectLbs, 2)} · ${driver.detail}</em></div>`).join('')}
+          </div>
+          <div class="confidence-pill ${scaleState.usableForBodyComp ? 'medium' : 'low'}">${scaleState.usableForBodyComp ? 'Walk-forward validated' : 'Diagnostic only'}</div>
+          <div class="tiny">${formatShortDate(scaleStateCurrent.date)} · likely ${scaleStateCurrent.offsetLow >= 0 ? '+' : ''}${weightValue(scaleStateCurrent.offsetLow, 1)} to ${scaleStateCurrent.offsetHigh >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetHigh, 1)} · 7-weigh-in state avg ${scaleStateCurrent.rollingOffsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.rollingOffsetAboveCut, 2)}</div>
+          <div class="tiny">Walk-forward MAE ${weightLabel(scaleState.metrics?.[scaleState.selectedModel]?.mae || 0, 2)} across ${scaleState.validationRows} checks.${scaleNoise ? ` Scale-noise score ${scaleNoise.noiseScore}/100.` : ''}</div>
+        </div>
+      `
+      : scaleNoise
       ? `
         <div class="forecast-card mobile-primary scale-noise-card ${scaleNoise.cls}">
           <div class="eyebrow">Scale Noise Check</div>
@@ -1229,8 +1261,7 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const fullBayesTdee = freshBayesianPosterior(getAnalyticsDays());
   const tdeeStability = tdeeStabilityProfile();
   const agreement = modelAgreementSummary(filteredDays, filteredSleep);
-  const latestGlycogenDay = [...filteredDays].reverse().find(d => glycogenByDate[d.date]) || null;
-  const latestGlycogen = latestGlycogenDay ? glycogenByDate[latestGlycogenDay.date] : null;
+  const scaleState = empiricalScaleState();
   const baselineExclusions = baselineExclusionSummary(getAnalyticsDays());
   const gap = trendReality?.gap ?? null;
   const scaleContextValue = gap == null
@@ -1243,10 +1274,9 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const scaleContextSub = gap == null
     ? 'Need at least two weigh-ins in the active view to compare deficit-implied loss with the filtered scale trend.'
     : `Deficit math implies about ${weightLabel(Math.abs(trendReality.expectedLoss || 0))} of loss while the filtered trend shows ${weightLabel(Math.abs(trendReality.actualLoss || 0))}.`;
-  const latestDelta = latestGlycogen ? (latestGlycogen.massLbs - glycogenRefState.massLbs) : null;
-  const scaleContextTiny = latestGlycogen
-    ? `${formatShortDate(latestGlycogenDay.date)} glycogen delta vs Jan 6: ${latestDelta >= 0 ? '+' : ''}${weightLabel(latestDelta, 2)} · ${latestGlycogen.loadPct}% load`
-    : (energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range` : 'Scale-context needs glycogen state data.');
+  const scaleContextTiny = scaleState?.current
+    ? `${formatShortDate(scaleState.current.date)} empirical scale state: ${scaleState.current.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.offsetAboveCut, 2)} vs cut · 7-weigh-in avg ${scaleState.current.rollingOffsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.rollingOffsetAboveCut, 2)}`
+    : (energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range` : 'Scale-state context needs enough validated weigh-ins.');
   const maintenanceValue = tdeeStability
     ? tdeeStability.status[0].toUpperCase() + tdeeStability.status.slice(1)
     : activeTdeeProfile.confidence.label.replace(' confidence', '');
@@ -1346,13 +1376,16 @@ function renderExecutiveSummary() {
   const analyticsRangeDays = getAnalyticsDays();
   const activeTdeeProfile = workingTDEEProfile(filteredDays);
   const fullBayesTdee = freshBayesianPosterior(analyticsRangeDays);
+  const currentBayesTdee = freshCurrentTDEE(analyticsRangeDays);
   const rollingBayesTdee = freshBayesianTimelinePoint(analyticsRangeDays);
   const tdeeStability = tdeeStabilityProfile();
   const tdeeShift = tdeeShiftSummary(analyticsRangeDays);
   const activityTerms = tdeeActivityTerms(analyticsRangeDays);
   const baselineExclusions = baselineExclusionSummary(analyticsRangeDays);
   const coachTdee = endpointTDEEProfile(analyticsRangeDays);
-  const activeTdeeSource = activeTdeeProfile.source === 'bayesian'
+  const activeTdeeSource = activeTdeeProfile.source === 'bayesian_current'
+    ? 'partially pooled current-maintenance estimate'
+    : activeTdeeProfile.source === 'bayesian'
     ? 'full-range Bayesian posterior'
     : activeTdeeProfile.source === 'bayesian_timeline'
       ? `rolling Bayesian estimate ending ${formatShortDate(activeTdeeProfile.posterior?.date || filteredDays[filteredDays.length - 1]?.date)}`
@@ -1427,18 +1460,18 @@ function renderExecutiveSummary() {
         <div class="tiny">${activeTdeeProfile.sampleSize || filteredDays.length} observations across ${activeTdeeProfile.spanDays || filteredDays.length} days</div>
       </div>
       <div class="tdee-detail-card">
-        <div class="eyebrow">Full-Range Bayes</div>
-        <div class="value">${fullBayesTdee ? `~${energyLabel(fullBayesTdee.mean)}` : '—'}</div>
-        <div class="sub">${fullBayesTdee ? `${energyLabel(fullBayesTdee.ci68Low)}–${energyLabel(fullBayesTdee.ci68High)} 68% credible interval` : 'Bayesian posterior is only available when the cached model matches the current full analytics range.'}</div>
-        ${fullBayesTdee ? '<div class="confidence-pill high">High confidence</div>' : '<div class="confidence-pill low">Low confidence</div>'}
-        <div class="tiny">${fullBayesTdee ? `${fullBayesTdee.nObs} weight-change intervals across ${fullBayesTdee.segmentCount || 1} clean segment${fullBayesTdee.segmentCount === 1 ? '' : 's'} · ${fullBayesTdee.excludedDays || 0} vacation/diet-break days excluded · avg steps ${Math.round(fullBayesTdee.avgSteps || 0).toLocaleString()}/day` : 'Run update_bayes.py after adding new data to restore the Bayesian full-range posterior.'}</div>
+        <div class="eyebrow">Current Maintenance</div>
+        <div class="value">${currentBayesTdee ? `~${energyLabel(currentBayesTdee.mean)}` : '—'}</div>
+        <div class="sub">${currentBayesTdee ? `${energyLabel(currentBayesTdee.ci68Low)}–${energyLabel(currentBayesTdee.ci68High)} 68% range, partially pooled from recent and historical evidence` : 'Current partially pooled maintenance is unavailable.'}</div>
+        ${currentBayesTdee ? '<div class="confidence-pill high">Modeled current</div>' : '<div class="confidence-pill low">Low confidence</div>'}
+        <div class="tiny">${currentBayesTdee ? `Recent ${currentBayesTdee.recentWindowDays}-day estimate ${energyLabel(currentBayesTdee.recentMean)} · historical average ${energyLabel(currentBayesTdee.historicalMean)} · weight adjustment ${currentBayesTdee.weightAdjustment >= 0 ? '+' : ''}${energyLabel(currentBayesTdee.weightAdjustment)}` : 'Run update_bayes.py after adding new data.'}</div>
       </div>
       <div class="tdee-detail-card">
-        <div class="eyebrow">Recent-Window Bayes</div>
-        <div class="value">${rollingBayesTdee ? `~${energyLabel(rollingBayesTdee.mean)}` : '—'}</div>
-        <div class="sub">${rollingBayesTdee ? `${energyLabel(rollingBayesTdee.ci68Low)}–${energyLabel(rollingBayesTdee.ci68High)} from the latest ${rollingBayesTdee.windowDays || 35}-day window` : `Recent-window estimate unavailable for ${labelForDays(getComparisonCurrentBaseDays())}.`}</div>
-        <div class="confidence-pill ${rollingBayesTdee ? projectionConfidence(Math.min(0.82, 0.35 + ((rollingBayesTdee.nObs || 0) / 24))).cls : 'low'}">${rollingBayesTdee ? projectionConfidence(Math.min(0.82, 0.35 + ((rollingBayesTdee.nObs || 0) / 24))).label : 'Low confidence'}</div>
-        <div class="tiny">${rollingBayesTdee ? `Window ends ${formatShortDate(rollingBayesTdee.date)} · ${rollingBayesTdee.nObs || 0} usable intervals` : 'This cross-check appears when the rolling Bayesian timeline has a point matching the selected range end date.'}</div>
+        <div class="eyebrow">Historical Average</div>
+        <div class="value">${fullBayesTdee ? `~${energyLabel(fullBayesTdee.mean)}` : '—'}</div>
+        <div class="sub">${fullBayesTdee ? `${energyLabel(fullBayesTdee.ci68Low)}–${energyLabel(fullBayesTdee.ci68High)} across the full cut; use this as context, not forward maintenance` : 'Historical Bayesian posterior unavailable.'}</div>
+        ${fullBayesTdee ? '<div class="confidence-pill high">Historical anchor</div>' : '<div class="confidence-pill low">Low confidence</div>'}
+        <div class="tiny">${fullBayesTdee ? `${fullBayesTdee.nObs} creatine-adjusted observations · model σ ${energyLabel(fullBayesTdee.statisticalSigma)} · logging σ ${energyLabel(fullBayesTdee.loggingSigma)}` : 'Run update_bayes.py after adding new data.'}</div>
       </div>
       <div class="tdee-detail-card">
         <div class="eyebrow">Stability</div>
@@ -1458,11 +1491,11 @@ function renderExecutiveSummary() {
     </div>
     <div class="tdee-detail-note">
       <strong>How to read the different estimates</strong>
-      <p>The full-range Bayesian row is the broadest cut-wide anchor. The recent-window Bayesian row tracks the latest 35-day behavior more closely. The active-range value is what the current view is actually using right now, and it falls back to the simpler endpoint estimate when a Bayesian point is not available for that exact range end.${baselineExclusions ? ` Baseline-cut cross-checks exclude ${baselineExclusions.text} so those tagged spans do not redefine the normal cutting baseline.` : ''}</p>
+      <p>Historical average summarizes the entire cut. Current maintenance combines the latest rolling estimate with that history, including the expected maintenance shift at your present body weight. The active-range value is what the current view uses and falls back to an endpoint estimate when a matching Bayesian point is unavailable.${baselineExclusions ? ` Baseline-cut cross-checks exclude ${baselineExclusions.text} so those tagged spans do not redefine the normal cutting baseline.` : ''}</p>
     </div>
     <div class="tdee-detail-note">
       <strong>Activity-associated deltas</strong>
-      <p>${activityTerms ? `The current Bayesian fit sees about ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal per 1k steps, ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} kcal on lift days, and ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} kcal on drink days. Treat these as associated deltas, not hard causal truths, especially while confidence is ${activityTerms.confidence}.` : 'These deltas appear once the Bayesian interval model has enough usable weight-change intervals to estimate how steps, lifting, and drink days relate to maintenance.'}</p>
+      <p>${activityTerms ? `Complete weekly aggregates associate about ${activityTerms.stepPer1k >= 0 ? '+' : ''}${activityTerms.stepPer1k} kcal per 1k steps, ${activityTerms.liftDay >= 0 ? '+' : ''}${activityTerms.liftDay} kcal per lift day, and ${activityTerms.drinkDay >= 0 ? '+' : ''}${activityTerms.drinkDay} kcal per drink day. These are associations, not causal measurements.` : 'Weekly activity deltas stay hidden until complete-week aggregates reach at least moderate confidence.'}</p>
     </div>
   `;
 
@@ -3410,7 +3443,7 @@ function runScenarioPlanner() {
   document.getElementById('scenarioAssumptions').textContent = scenarioPlannerMode === 'goal'
     ? `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, time-to-goal uses the effective deficit from this setup, target BF is solved from the Apr 8 DXA cut-state anchor with the Jan 6 DXA as the fuller fed-state bracket, and the chart auto-extends far enough to show the goal path. ${creatineAssumption} Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days.${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`
     : `Assumptions: working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}, forecast starts from the latest weigh-in inside the selected range, Current Setup uses your last 7 ${recentWindow.source === 'non_vacation' ? 'non-vacation' : 'range'} days, cut-state body fat uses the Apr 8 DXA anchor, fed-state comparable output uses the fuller Jan 6 DXA bracket, and the dashed line shows a scenario-sensitive rebound path toward that fuller state. ${creatineAssumption}${scenarioBaselineExclusions ? ` Vacation / diet-break tags stay visible in the selected range, but baseline-cut cross-checks exclude ${scenarioBaselineExclusions.text}.` : ''}`;
-  if (scanState) document.getElementById('scenarioAssumptions').textContent = `Sep 23 fed-state DXA anchor: ${weightLabel(DXA_SCAN_LATEST.totalMass)} logged scale weight at 18.6% reported BF. The clothed ${weightLabel(DXA_SCAN_LATEST.reportedTotalMass)} scanner mass is not used in projections. Creatine is already included. The cut-state equivalent removes ${weightLabel(DXA_SCAN_LATEST.fedStateDelta, 1)} of modeled non-fat scale mass, based on the scale weight versus the preceding 7-day average. Future loss is modeled as 95% fat / 5% fat-free mass. Working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}.`;
+  if (scanState) document.getElementById('scenarioAssumptions').textContent = `Sep 23 fed-state DXA anchor: ${weightLabel(DXA_SCAN_LATEST.totalMass)} logged scale weight at 18.6% reported BF. The clothed ${weightLabel(DXA_SCAN_LATEST.reportedTotalMass)} scanner mass is not used in projections. Creatine is already included. The cut-state equivalent removes ${weightLabel(activeScaleStateGap(), 1)} of empirically estimated non-fat scale mass; the model uses only intake known before each morning weigh-in and is guarded by walk-forward validation. Future loss is modeled as 95% fat / 5% fat-free mass. Working maintenance ~${energyLabel(scenarioTdee.maintenance)} from ${scenarioSourceText}.`;
   document.getElementById('scenarioAssumptions').textContent += ` Food excludes alcohol; estimated alcohol is added once using the same drink parser as the dashboard. ${alcoholBasis}. Sleep is context only and adds no calorie penalty.`;
   const forecastCopy = document.getElementById('scenarioForecastCopy');
   if (forecastCopy) {

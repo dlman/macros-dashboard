@@ -77,6 +77,13 @@ def validate_data_footer() -> None:
     if bad_footer:
         raise SystemExit("Invalid data.js footer: stray closing brace before BAYES_START")
 
+    required_bayes = ["tdeePosterior:", "tdeeTimeline:", "currentTDEE:", "backtest:", "scaleState:"]
+    missing_bayes = [snippet for snippet in required_bayes if snippet not in src]
+    if missing_bayes:
+        raise SystemExit(f"Missing generated Bayesian fields: {missing_bayes}")
+    if "gpWeightTrend:" in src:
+        raise SystemExit("Obsolete Gaussian-process payload is still present")
+
     print("✓ data.js structural footer checks")
 
 
