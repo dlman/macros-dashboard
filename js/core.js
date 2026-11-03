@@ -2038,6 +2038,8 @@ function generateWeeklyMarkdown() {
 // Date range state
 let rangeStartIdx = 0;
 let rangeEndIdx = defaultRangeEndIndex();
+const RANGE_PRESET_VALUES = new Set(['7', '14', '28', '90', 'month', 'ytd']);
+let activeRangePreset = RANGE_PRESET_VALUES.has(persistedState.rangePreset) ? persistedState.rangePreset : null;
 let compareMode = persistedState.compareMode || 'equal_span';
 let eventFilter = persistedState.eventFilter || 'all';
 let activeTab = persistedState.activeTab || 'overview';

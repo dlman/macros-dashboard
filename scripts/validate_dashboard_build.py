@@ -21,6 +21,7 @@ PY_FILES = [
     ROOT / "scripts" / "test_drink_parser.py",
     ROOT / "scripts" / "test_sync_google_sheets.py",
     ROOT / "scripts" / "test_sync_whoop.py",
+    ROOT / "scripts" / "test_asset_versions.py",
     ROOT / "scripts" / "sync_google_sheets.py",
     ROOT / "scripts" / "sync_steps.py",
     ROOT / "scripts" / "sync_whoop.py",
@@ -88,6 +89,7 @@ def main() -> None:
     run_check([sys.executable, str(ROOT / "scripts" / "test_update_bayes.py")], "Bayesian TDEE segmentation tests")
     run_check([sys.executable, str(ROOT / "scripts" / "test_sync_google_sheets.py")], "Google Sheets rollover and data-loss tests")
     run_check([sys.executable, str(ROOT / "scripts" / "test_sync_whoop.py")], "WHOOP token persistence retry tests")
+    run_check([sys.executable, str(ROOT / "scripts" / "test_asset_versions.py")], "Local asset versioning tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_year_rollover.cjs")], "Year rollover browser tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_weekly_planning.cjs")], "Weekly planning and progress-change tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_body_composition.cjs")], "Body composition consistency tests")
@@ -95,7 +97,7 @@ def main() -> None:
     run_check(["node", "--test", str(ROOT / "scripts" / "test_sleep_alignment.cjs")], "Sleep wake-date alignment tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_drink_parser.cjs")], "Alcohol parser fixtures")
     run_check([sys.executable, str(ROOT / "scripts" / "test_drink_parser.py")], "Python/JS alcohol parser parity")
-    run_check([sys.executable, str(ROOT / "scripts" / "update_data_asset_version.py"), "--check"], "Data asset cache key")
+    run_check([sys.executable, str(ROOT / "scripts" / "update_data_asset_version.py"), "--check"], "Local asset cache keys")
     validate_data_footer()
     print("\nAll dashboard validation checks passed.")
 

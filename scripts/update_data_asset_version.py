@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the dashboard's data.js cache key aligned with its contents."""
+"""Keep every local JavaScript and stylesheet cache key aligned with its contents."""
 
 from __future__ import annotations
 
@@ -10,43 +10,63 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_PATH = ROOT / "js" / "data.js"
 INDEX_PATH = ROOT / "index.html"
-DATA_SCRIPT_RE = re.compile(r'(src="\./js/data\.js\?v=)[^"]+("[^>]*></script>)')
+LOCAL_ASSET_RE = re.compile(
+    r'(?P<prefix>(?:src|href)=")(?P<path>\./[^"?]+\.(?:js|css))\?v=(?P<version>[^"]+)(?P<suffix>")'
+)
 
 
-def expected_version(data_path: Path = DATA_PATH) -> str:
-    return hashlib.sha256(data_path.read_bytes()).hexdigest()[:12]
+def expected_version(asset_path: Path) -> str:
+    return hashlib.sha256(asset_path.read_bytes()).hexdigest()[:12]
 
 
-def versioned_index(source: str, version: str) -> str:
-    updated, count = DATA_SCRIPT_RE.subn(rf"\g<1>{version}\g<2>", source)
-    if count != 1:
-        raise SystemExit(f"Expected one versioned data.js script tag, found {count}")
-    return updated
+def versioned_index(source: str, root: Path = ROOT) -> tuple[str, dict[str, tuple[str, str]]]:
+    versions: dict[str, tuple[str, str]] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        relative = match.group("path").removeprefix("./")
+        asset_path = root / relative
+        if not asset_path.is_file():
+            raise SystemExit(f"Versioned local asset does not exist: {relative}")
+        version = expected_version(asset_path)
+        versions[relative] = (match.group("version"), version)
+        return f'{match.group("prefix")}{match.group("path")}?v={version}{match.group("suffix")}'
+
+    updated, count = LOCAL_ASSET_RE.subn(replace, source)
+    if count == 0:
+        raise SystemExit("No versioned local JavaScript or CSS assets found in index.html")
+    if count != len(versions):
+        raise SystemExit("Duplicate versioned local asset references found in index.html")
+    return updated, versions
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Fail when index.html has a stale data.js version")
+    parser.add_argument("--check", action="store_true", help="Fail when any local JS/CSS cache key is stale")
     args = parser.parse_args()
 
-    version = expected_version()
     current = INDEX_PATH.read_text(encoding="utf-8")
-    updated = versioned_index(current, version)
+    updated, versions = versioned_index(current)
+    stale = {
+        path: (old, expected)
+        for path, (old, expected) in versions.items()
+        if old != expected
+    }
 
     if args.check:
-        if updated != current:
-            raise SystemExit(f"index.html data.js cache key is stale; expected {version}")
-        print(f"data.js cache key is current ({version})")
+        if stale:
+            detail = ", ".join(f"{path}: {old} -> {expected}" for path, (old, expected) in stale.items())
+            raise SystemExit(f"index.html has stale local asset cache keys: {detail}")
+        print(f"All {len(versions)} local JS/CSS cache keys are current")
         return
 
-    if updated == current:
-        print(f"data.js cache key already current ({version})")
+    if not stale:
+        print(f"All {len(versions)} local JS/CSS cache keys already current")
         return
 
     INDEX_PATH.write_text(updated, encoding="utf-8")
-    print(f"Updated data.js cache key to {version}")
+    for path, (old, expected) in stale.items():
+        print(f"Updated {path} cache key: {old} -> {expected}")
 
 
 if __name__ == "__main__":

@@ -434,7 +434,7 @@ function renderAnnotations() {
     <div class="annotation-item">
       <span class="dot"></span>
       <span>${a.date.slice(5)} — ${a.label}</span>
-      <button onclick="annotations.splice(${i},1);renderAnnotations();persistState({ themePreference, rangeStart: rangeStartIdx, rangeEnd: rangeEndIdx, currentMetric, calVisibility, macroVisibility, compareMode, eventFilter });">✕</button>
+      <button onclick="annotations.splice(${i},1);renderAnnotations();persistUiState();">✕</button>
     </div>
   `).join('');
 }
@@ -510,6 +510,7 @@ function updateRangeLabels() {
 }
 let _rangeDebounce = null;
 function debouncedRangeRefresh() {
+  activeRangePreset = null;
   updateRangeLabels();
   clearTimeout(_rangeDebounce);
   _rangeDebounce = setTimeout(() => { refreshDashboard(); persistUiState(); }, 250);
@@ -518,6 +519,7 @@ rangeStartEl.addEventListener('input', debouncedRangeRefresh);
 rangeEndEl.addEventListener('input', debouncedRangeRefresh);
 document.querySelectorAll('.range-preset-btn').forEach(button => {
   button.addEventListener('click', () => {
+    activeRangePreset = button.dataset.rangePreset;
     const range = rangeIndicesForPreset(button.dataset.rangePreset);
     rangeStartEl.value = range.start;
     rangeEndEl.value = range.end;
@@ -572,6 +574,7 @@ if (rangeStartDateEl && rangeEndDateEl) {
   rangeEndDateEl.max = analyticsCutoffDate();
 
   function syncDateToRange() {
+    activeRangePreset = null;
     const startDate = rangeStartDateEl.value;
     const endDate = rangeEndDateEl.value;
     let startIdx = allDates.indexOf(startDate);
@@ -854,6 +857,7 @@ function persistUiState() {
     themePreference,
     rangeStart: rangeStartIdx,
     rangeEnd: rangeEndIdx,
+    rangePreset: activeRangePreset,
     currentMetric,
     calVisibility,
     macroVisibility,
@@ -1969,12 +1973,18 @@ syncSettingsForm();
 applyTheme(themePreference);
 rangeStartEl.max = Math.max(0, allDates.length - 1);
 rangeEndEl.max = Math.max(0, allDates.length - 1);
-if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
-if (typeof persistedState.rangeEnd === 'number') {
-  const persistedEndDate = allDates[persistedState.rangeEnd] || null;
-  rangeEndEl.value = persistedEndDate === LEGACY_DEFAULT_RANGE_END ? defaultEndIdx : persistedState.rangeEnd;
+if (activeRangePreset) {
+  const presetRange = rangeIndicesForPreset(activeRangePreset);
+  rangeStartEl.value = presetRange.start;
+  rangeEndEl.value = presetRange.end;
 } else {
-  rangeEndEl.value = defaultEndIdx;
+  if (typeof persistedState.rangeStart === 'number') rangeStartEl.value = persistedState.rangeStart;
+  if (typeof persistedState.rangeEnd === 'number') {
+    const persistedEndDate = allDates[persistedState.rangeEnd] || null;
+    rangeEndEl.value = persistedEndDate === LEGACY_DEFAULT_RANGE_END ? defaultEndIdx : persistedState.rangeEnd;
+  } else {
+    rangeEndEl.value = defaultEndIdx;
+  }
 }
 if (typeof persistedState.compareMode === 'string') compareMode = persistedState.compareMode;
 if (typeof persistedState.eventFilter === 'string') eventFilter = persistedState.eventFilter;
