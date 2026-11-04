@@ -847,6 +847,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   allCharts.heroWeightChart.update();
 
   const trendReality = weightTrendReality(filteredDays);
+  const scaleContext = recentScaleContext(getComparisonCurrentBaseDays(), 28);
   const energyBalance = energyBalanceSummary(filteredDays);
   const activeMaintenance = workingTDEEProfile(filteredDays).maintenance;
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
@@ -872,7 +873,9 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
       ? `Filtered weight trend is down ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`
       : `Filtered weight trend is up ${weightValue(Math.abs(observedLoss))} ${weightUnit()} across the range.`;
   const sleepTrend = current.avgSleepPerf != null && previous.avgSleepPerf != null ? `${Math.round(current.avgSleepPerf)}% sleep vs ${Math.round(previous.avgSleepPerf)}% in ${compareModeLabel()}.` : 'Sleep direction will appear here once both periods have sleep data.';
-  const realityTrend = trendReality.actualLoss != null && trendReality.expectedLoss != null ? `Observed trend loss is ${weightValue(trendReality.actualLoss)} ${weightUnit()} vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} implied by the logged deficit.` : '';
+  const realityTrend = scaleContext
+    ? `Across the latest aligned ${scaleContext.spanDays}-day window, trend loss is ${weightValue(scaleContext.actualLoss)} ${weightUnit()} vs ${weightValue(scaleContext.expectedLoss)} ${weightUnit()} implied by the logged deficit.`
+    : '';
   const plateauHeroText = plateau.status === 'plateau'
     ? `Posterior still leans plateau over water noise in this range.`
     : plateau.status === 'noise'
@@ -1255,7 +1258,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
 
 function renderCutInsightStrip(filteredDays, filteredSleep) {
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
-  const trendReality = weightTrendReality(filteredDays);
+  const scaleContext = recentScaleContext(getComparisonCurrentBaseDays(), 28);
   const energyBalance = energyBalanceSummary(filteredDays);
   const activeTdeeProfile = workingTDEEProfile(filteredDays);
   const fullBayesTdee = freshBayesianPosterior(getAnalyticsDays());
@@ -1263,19 +1266,19 @@ function renderCutInsightStrip(filteredDays, filteredSleep) {
   const agreement = modelAgreementSummary(filteredDays, filteredSleep);
   const scaleState = empiricalScaleState();
   const baselineExclusions = baselineExclusionSummary(getAnalyticsDays());
-  const gap = trendReality?.gap ?? null;
+  const gap = scaleContext?.gap ?? null;
   const scaleContextValue = gap == null
     ? 'Need more weigh-ins'
     : gap < -0.35
-      ? `Masking ~${weightLabel(Math.abs(gap))}`
+      ? `Scale ~${weightLabel(Math.abs(gap))} above path`
       : gap > 0.35
-        ? `Ahead by ~${weightLabel(Math.abs(gap))}`
+        ? `Scale ~${weightLabel(Math.abs(gap))} below path`
         : 'Mostly aligned';
   const scaleContextSub = gap == null
-    ? 'Need at least two weigh-ins in the active view to compare deficit-implied loss with the filtered scale trend.'
-    : `Deficit math implies about ${weightLabel(Math.abs(trendReality.expectedLoss || 0))} of loss while the filtered trend shows ${weightLabel(Math.abs(trendReality.actualLoss || 0))}.`;
+    ? 'Need a contiguous logged window with at least two weigh-ins to compare deficit-implied loss with the filtered scale trend.'
+    : `${scaleContext.spanDays}-day aligned window: deficit math implies ${weightLabel(Math.abs(scaleContext.expectedLoss || 0))} ${scaleContext.expectedLoss >= 0 ? 'of loss' : 'of gain'} while the filtered trend shows ${weightLabel(Math.abs(scaleContext.actualLoss || 0))} ${scaleContext.actualLoss >= 0 ? 'of loss' : 'of gain'}.`;
   const scaleContextTiny = scaleState?.current
-    ? `${formatShortDate(scaleState.current.date)} empirical scale state: ${scaleState.current.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.offsetAboveCut, 2)} vs cut · 7-weigh-in avg ${scaleState.current.rollingOffsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.rollingOffsetAboveCut, 2)}`
+    ? `${scaleContext ? `${formatShortDate(scaleContext.startDate)}–${formatShortDate(scaleContext.endDate)} · ${scaleContext.intakeDays} completed intake days · TDEE ~${energyLabel(scaleContext.maintenance)} · ` : ''}${formatShortDate(scaleState.current.date)} empirical scale state: ${scaleState.current.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.offsetAboveCut, 2)} vs cut · 7-weigh-in avg ${scaleState.current.rollingOffsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleState.current.rollingOffsetAboveCut, 2)}`
     : (energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range` : 'Scale-state context needs enough validated weigh-ins.');
   const maintenanceValue = tdeeStability
     ? tdeeStability.status[0].toUpperCase() + tdeeStability.status.slice(1)
@@ -1350,6 +1353,7 @@ function renderExecutiveSummary() {
   const drinkDelta = compareDelta(current.drinkNights, hasPriorPeriod ? previous.drinkNights : null, 'down', v => `${Math.round(v)}`);
   const liftDelta = compareDelta(current.liftCount, hasPriorPeriod ? previous.liftCount : null, 'up', v => `${Math.round(v)}`);
   const trendReality = weightTrendReality(filteredDays);
+  const scaleContext = recentScaleContext(getComparisonCurrentBaseDays(), 28);
   const energyBalance = energyBalanceSummary(filteredDays);
   const adjustedNetText = adjustedNetLabel(energyBalance);
   const adjustedNetState = adjustedNetDirection(energyBalance);
@@ -1437,7 +1441,7 @@ function renderExecutiveSummary() {
     { label: 'Sleep Performance', delta: sleepDelta, note: sleepDelta.detail },
     { label: 'Drink Nights', delta: drinkDelta, note: drinkDelta.detail },
     { label: 'Lift Count', delta: liftDelta, note: `${current.liftCount} vs ${previous.liftCount}` },
-    { label: 'Expected vs Trend Loss', delta: compareDelta(trendReality.actualLoss, trendReality.expectedLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`), note: trendReality.actualLoss != null && trendReality.expectedLoss != null ? `${weightValue(trendReality.actualLoss)} ${weightUnit()} observed trend vs ${weightValue(trendReality.expectedLoss)} ${weightUnit()} deficit-implied` : 'Need at least two weigh-ins in view' }
+    { label: 'Expected vs Trend Loss', delta: compareDelta(scaleContext?.actualLoss, scaleContext?.expectedLoss, 'up', v => weightValue(Math.abs(v)).toString(), ` ${weightUnit()}`), note: scaleContext ? `${weightValue(scaleContext.actualLoss)} ${weightUnit()} observed trend vs ${weightValue(scaleContext.expectedLoss)} ${weightUnit()} deficit-implied · ${scaleContext.spanDays}-day aligned window` : 'Need a contiguous logged window with at least two weigh-ins' }
   ].map(item => `
     <div class="compare-card">
       <div class="eyebrow">${item.label}</div>

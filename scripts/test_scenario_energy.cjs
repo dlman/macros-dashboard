@@ -122,3 +122,34 @@ test('forecast envelope and comparison series use the same energy ledger as the 
   near(series.envelope.effectiveDeficitHigh,
     series.envelope.tdeeProfile.rangeHigh - series.projection.totalDailyIntake);
 });
+
+test('scale context excludes intake logged after the latest morning weigh-in', () => {
+  const p = run(`(() => {
+    const base = Array.from({length:5}, (_,i) => ({
+      date:addDaysToDate('2026-10-10',i), weight:160-i*0.2, calories:2000, protein:160
+    }));
+    const ordinary = recentScaleContext(base,28,2500);
+    const oversizedFinalDay = recentScaleContext(base.map((day,index) =>
+      index === base.length-1 ? {...day,calories:10000} : day),28,2500);
+    return {ordinary,oversizedFinalDay};
+  })()`);
+  near(p.ordinary.expectedLoss, 4 * 500 / 3500);
+  near(p.oversizedFinalDay.expectedLoss, p.ordinary.expectedLoss);
+  assert.equal(p.ordinary.intakeDays, 4);
+  assert.equal(p.ordinary.startDate, '2026-10-10');
+  assert.equal(p.ordinary.endDate, '2026-10-14');
+});
+
+test('scale context does not bridge missing or excluded calendar days', () => {
+  const p = run(`recentScaleContext([
+    {date:'2026-10-10',weight:160,calories:2000,protein:160},
+    {date:'2026-10-11',weight:159.8,calories:2000,protein:160},
+    {date:'2026-10-13',weight:159.7,calories:2000,protein:160},
+    {date:'2026-10-14',weight:159.5,calories:2000,protein:160}
+  ],28,2500)`);
+  assert.equal(p.startDate, '2026-10-13');
+  assert.equal(p.endDate, '2026-10-14');
+  assert.equal(p.spanDays, 1);
+  assert.equal(p.intakeDays, 1);
+  near(p.expectedLoss, 500 / 3500);
+});

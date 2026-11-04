@@ -2540,6 +2540,61 @@ function weightTrendReality(days) {
   };
 }
 
+function recentScaleContext(days, maxCalendarDays = 28, maintenanceOverride = null) {
+  const eligible = baselineAnalyticsDays(getAnalyticsDays(days))
+    .filter(day => day?.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latestWeightDay = [...eligible].reverse().find(day => Number.isFinite(day.weight));
+  if (!latestWeightDay) return null;
+
+  const byDate = new Map(eligible.map(day => [day.date, day]));
+  const contextDays = [];
+  let cursor = latestWeightDay.date;
+  for (let offset = 0; offset < Math.max(2, maxCalendarDays); offset += 1) {
+    const day = byDate.get(cursor);
+    if (!day) break;
+    contextDays.unshift(day);
+    cursor = prevDay(cursor);
+  }
+
+  const weightDays = contextDays.filter(day => Number.isFinite(day.weight));
+  if (contextDays.length < 2 || weightDays.length < 2) return null;
+  const firstWeightDate = weightDays[0].date;
+  const lastWeightDate = weightDays[weightDays.length - 1].date;
+  const comparisonDays = contextDays.filter(day => day.date >= firstWeightDate && day.date <= lastWeightDate);
+  // A morning weigh-in can only reflect intake through the preceding day.
+  const intakeDays = comparisonDays.filter(day => day.date < lastWeightDate);
+  if (!intakeDays.length) return null;
+
+  const profile = Number.isFinite(maintenanceOverride)
+    ? { maintenance: maintenanceOverride, source: 'override' }
+    : workingTDEEProfile(comparisonDays);
+  if (!Number.isFinite(profile?.maintenance)) return null;
+  const projection = observedWeightProjection(comparisonDays, 0);
+  if (!projection) return null;
+
+  const expectedLoss = intakeDays.reduce(
+    (sum, day) => sum + (profile.maintenance - effectiveCalories(day)),
+    0
+  ) / 3500;
+  const actualLoss = projection.startTrendWeight - projection.latestTrendWeight;
+  const spanDays = Math.max(1, Math.round(
+    (new Date(`${lastWeightDate}T12:00:00`) - new Date(`${firstWeightDate}T12:00:00`)) / 86400000
+  ));
+  return {
+    expectedLoss,
+    actualLoss,
+    gap: actualLoss - expectedLoss,
+    startDate: firstWeightDate,
+    endDate: lastWeightDate,
+    spanDays,
+    intakeDays: intakeDays.length,
+    maintenance: profile.maintenance,
+    tdeeSource: profile.source,
+    observedTrend: projection
+  };
+}
+
 function formatSignedWeight(v, digits = 1) {
   if (v == null || Number.isNaN(v)) return '—';
   return `${v > 0 ? '+' : v < 0 ? '−' : ''}${weightLabel(Math.abs(v), digits)}`;
