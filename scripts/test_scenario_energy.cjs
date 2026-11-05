@@ -62,6 +62,65 @@ test('total intake at maintenance predicts no tissue change, with or without alc
   }
 });
 
+test('historical energy balance uses the full-range posterior instead of current maintenance', () => {
+  const p = run(`(() => {
+    const days = getAnalyticsDays();
+    const balance = energyBalanceSummary(days);
+    return {
+      balance,
+      posterior: window.dashboardData.bayesian.tdeePosterior,
+      dayCount: days.length,
+      intake: days.reduce((sum, day) => sum + effectiveCalories(day), 0)
+    };
+  })()`);
+  assert.equal(p.balance.maintenance, p.posterior.mean);
+  near(p.balance.totalMaintenance, p.posterior.mean * p.dayCount);
+  near(p.balance.totalDeficit, p.balance.totalMaintenance - p.intake);
+  assert.equal(p.balance.tdeeSource, 'bayesian_historical');
+});
+
+test('30-day deficit projection uses recent intake and current maintenance', () => {
+  const p = run(`(() => {
+    const days = getAnalyticsDays();
+    const projection = deficitProjection(days, 30);
+    const recent = recentContiguousBaselineDays(days, 28);
+    return {
+      projection,
+      recentAverage: avgEffectiveCalories(recent),
+      recentCount: recent.length,
+      current: window.dashboardData.bayesian.currentTDEE
+    };
+  })()`);
+  assert.equal(p.projection.intakeDays, p.recentCount);
+  assert.ok(p.projection.intakeDays > 0 && p.projection.intakeDays <= 28);
+  near(p.projection.avgIntake, p.recentAverage);
+  assert.equal(p.projection.maintenance, p.current.mean);
+  near(p.projection.avgDeficit, p.current.mean - p.recentAverage);
+});
+
+test('scale-state copy treats near-cut rolling offsets as at cut state', () => {
+  assert.equal(run(`scaleStatePositionLabel(-0.75)`), 'Below');
+  assert.equal(run(`scaleStatePositionLabel(-0.04)`), 'At');
+  assert.equal(run(`scaleStatePositionLabel(0.47)`), 'At');
+  assert.equal(run(`scaleStatePositionLabel(0.75)`), 'Above');
+});
+
+test('plateau assessment reports the same recent gap as Scale Context', () => {
+  const p = run(`(() => {
+    const days = getAnalyticsDays();
+    const sleep = getSleepForDays(days);
+    return {
+      context: recentScaleContext(days, 28),
+      plateau: plateauNoiseAssessment(days, sleep)
+    };
+  })()`);
+  near(p.plateau.alignedContext.gap, p.context.gap);
+  if (p.context.gap > 0.35) {
+    assert.equal(p.plateau.status, 'on_track');
+    assert.doesNotMatch(p.plateau.text, /lagging the logged deficit/i);
+  }
+});
+
 test('maintenance during creatine loading adds only modeled water', () => {
   const p = run(`(() => {
     const days = [{date:'2026-07-03',weight:160,calories:2000,protein:160}];

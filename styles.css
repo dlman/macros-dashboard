@@ -265,6 +265,9 @@ header { padding: 24px 40px 16px; border-bottom: 1px solid var(--border-section)
 .noise-driver em { color: var(--text-faint); font-size: 10px; font-style: normal; line-height: 1.25; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .noise-driver.quiet { grid-template-columns: 1fr; gap: 2px; }
 .noise-driver.quiet em { white-space: normal; }
+[data-theme="light"] .noise-driver { background: rgba(226,232,240,0.82); border-color: rgba(100,116,139,0.24); }
+[data-theme="light"] .noise-driver span { color: var(--text-secondary); }
+[data-theme="light"] .noise-driver em { color: var(--text-muted); }
 .scale-state-gauge { position: relative; height: 38px; margin: 12px 4px 2px; }
 .scale-state-track { position: absolute; left: 0; right: 0; top: 13px; height: 4px; border-radius: 2px; background: rgba(100,116,139,0.42); }
 .scale-state-tick,

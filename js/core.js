@@ -1290,6 +1290,13 @@ function empiricalScaleState() {
   return window.dashboardData?.bayesian?.scaleState || null;
 }
 
+function scaleStatePositionLabel(offsetAboveCut, tolerance = 0.5) {
+  if (!Number.isFinite(offsetAboveCut)) return 'Unknown';
+  if (offsetAboveCut < -tolerance) return 'Below';
+  if (offsetAboveCut > tolerance) return 'Above';
+  return 'At';
+}
+
 function activeScaleStateGap() {
   const state = empiricalScaleState();
   return state?.usableForBodyComp && Number.isFinite(state.bodyCompGap)
@@ -2417,8 +2424,9 @@ function projectionFreshness() {
   return { latestMacro, latestSleep, latestWeight };
 }
 
-function energyBalanceSummary(days, tdee = estimatedTDEE) {
-  const activeTdee = Number.isFinite(tdee) ? tdee : workingTDEEProfile(days).maintenance;
+function energyBalanceSummary(days, tdee = null) {
+  const profile = Number.isFinite(tdee) ? null : historicalTDEEProfile(days);
+  const activeTdee = Number.isFinite(tdee) ? tdee : profile?.maintenance;
   if (!days.length || !Number.isFinite(activeTdee)) return null;
   const totalIntake = days.reduce((sum, day) => sum + effectiveCalories(day), 0);
   const totalMaintenance = activeTdee * days.length;
@@ -2429,7 +2437,9 @@ function energyBalanceSummary(days, tdee = estimatedTDEE) {
     totalDeficit,
     avgDailyDeficit: totalDeficit / Math.max(days.length, 1),
     weeklyPace: (totalDeficit / Math.max(days.length, 1)) * 7,
-    fatEquivalent: totalDeficit / 3500
+    fatEquivalent: totalDeficit / 3500,
+    maintenance: activeTdee,
+    tdeeSource: Number.isFinite(tdee) ? 'override' : profile?.source
   };
 }
 
@@ -2449,7 +2459,7 @@ function adjustedNetDirection(balance) {
 
 function expectedWeightLoss(days) {
   if (!days.length) return null;
-  const rangeTdee = workingTDEEProfile(days).maintenance;
+  const rangeTdee = historicalTDEEProfile(days).maintenance;
   return days.reduce((sum, d) => sum + (rangeTdee - effectiveCalories(d)), 0) / 3500;
 }
 
@@ -2540,22 +2550,31 @@ function weightTrendReality(days) {
   };
 }
 
+function recentContiguousBaselineDays(days, maxCalendarDays = 28, endDate = null) {
+  const eligible = baselineAnalyticsDays(getAnalyticsDays(days))
+    .filter(day => day?.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!eligible.length) return [];
+
+  const byDate = new Map(eligible.map(day => [day.date, day]));
+  const contextDays = [];
+  let cursor = endDate || eligible[eligible.length - 1].date;
+  for (let offset = 0; offset < Math.max(1, maxCalendarDays); offset += 1) {
+    const day = byDate.get(cursor);
+    if (!day) break;
+    contextDays.unshift(day);
+    cursor = prevDay(cursor);
+  }
+  return contextDays;
+}
+
 function recentScaleContext(days, maxCalendarDays = 28, maintenanceOverride = null) {
   const eligible = baselineAnalyticsDays(getAnalyticsDays(days))
     .filter(day => day?.date)
     .sort((a, b) => a.date.localeCompare(b.date));
   const latestWeightDay = [...eligible].reverse().find(day => Number.isFinite(day.weight));
   if (!latestWeightDay) return null;
-
-  const byDate = new Map(eligible.map(day => [day.date, day]));
-  const contextDays = [];
-  let cursor = latestWeightDay.date;
-  for (let offset = 0; offset < Math.max(2, maxCalendarDays); offset += 1) {
-    const day = byDate.get(cursor);
-    if (!day) break;
-    contextDays.unshift(day);
-    cursor = prevDay(cursor);
-  }
+  const contextDays = recentContiguousBaselineDays(eligible, maxCalendarDays, latestWeightDay.date);
 
   const weightDays = contextDays.filter(day => Number.isFinite(day.weight));
   if (contextDays.length < 2 || weightDays.length < 2) return null;
@@ -2591,7 +2610,8 @@ function recentScaleContext(days, maxCalendarDays = 28, maintenanceOverride = nu
     intakeDays: intakeDays.length,
     maintenance: profile.maintenance,
     tdeeSource: profile.source,
-    observedTrend: projection
+    observedTrend: projection,
+    comparisonDays
   };
 }
 
@@ -2655,9 +2675,35 @@ function entropyConfidence(probabilities) {
 }
 
 function plateauWaterPosterior(days, sleep) {
-  const trend = weightTrendReality(days);
-  const decomp = trendDecomposition(days);
-  const lag = getLagMetrics(days, sleep);
+  const alignedContext = recentScaleContext(days, 28);
+  const analysisDays = alignedContext?.comparisonDays || days;
+  const analysisSleep = alignedContext
+    ? sleep.filter(day => day.date >= alignedContext.startDate && day.date <= alignedContext.endDate)
+    : sleep;
+  const baseTrend = weightTrendReality(analysisDays);
+  const trend = alignedContext && baseTrend
+    ? {
+        ...baseTrend,
+        expectedLoss: alignedContext.expectedLoss,
+        actualLoss: alignedContext.actualLoss,
+        gap: alignedContext.gap,
+        efficiency: alignedContext.expectedLoss
+          ? (alignedContext.actualLoss / alignedContext.expectedLoss) * 100
+          : null,
+        observedTrend: alignedContext.observedTrend
+      }
+    : baseTrend;
+  const baseDecomp = trendDecomposition(analysisDays);
+  const decomp = alignedContext && baseDecomp
+    ? {
+        ...baseDecomp,
+        scaleLoss: alignedContext.actualLoss,
+        expectedLoss: alignedContext.expectedLoss,
+        modelGap: alignedContext.gap,
+        observedTrend: alignedContext.observedTrend
+      }
+    : baseDecomp;
+  const lag = getLagMetrics(analysisDays, analysisSleep);
   if (!trend || trend.expectedLoss == null || trend.actualLoss == null || !decomp) return null;
 
   const expectedLoss = Math.max(0, trend.expectedLoss || 0);
@@ -2670,7 +2716,7 @@ function plateauWaterPosterior(days, sleep) {
   const scaleNoiseRatio = Math.min(2.5, Math.abs(trend.observedTrend?.residualStdDev ?? 0) / 1.35);
   const drinkSignal = Math.min(2.5, Math.max(0, lag.drinkSleepGap ?? 0) / 12);
   const liftSignal = Math.min(2.5, Math.max(0, Math.abs(lag.liftNextDayWeightGap ?? 0)) / 0.35);
-  const sleepSignal = Math.min(2.5, Math.max(0, (goals.sleepPerf - (avgOrNull(sleep, 'perf') ?? goals.sleepPerf))) / 18);
+  const sleepSignal = Math.min(2.5, Math.max(0, (goals.sleepPerf - (avgOrNull(analysisSleep, 'perf') ?? goals.sleepPerf))) / 18);
   const weighInCoverage = clamp01((decomp.weightSpan || 0) / 8);
   const durationCoverage = clamp01((decomp.daySpan || 0) / 21);
   const signalStrength = Math.min(2.5, expectedLoss / 1.2);
@@ -2729,6 +2775,7 @@ function plateauWaterPosterior(days, sleep) {
     topProb,
     margin: topProb - secondProb,
     confidence,
+    alignedContext,
     features: {
       scaleNoise: trend.observedTrend?.residualStdDev ?? null,
       residual: decomp.residual ?? null,
@@ -3490,6 +3537,29 @@ function workingTDEEProfile(days = allDays) {
   return { ...endpoint, source: 'endpoint' };
 }
 
+function historicalTDEEProfile(days = allDays) {
+  const posterior = freshBayesianPosterior(days);
+  if (!posterior) return workingTDEEProfile(days);
+  const segmentMethod = posterior.segmentCount > 1
+    ? ` across ${posterior.segmentCount} clean segments, excluding ${posterior.excludedDays || 0} vacation/diet-break days`
+    : '';
+  return {
+    maintenance: posterior.mean,
+    weightedIntake: null,
+    dailySlope: null,
+    weeklyLoss: null,
+    sampleSize: posterior.nObs,
+    spanDays: getAnalyticsDays(days).length,
+    confidence: projectionConfidence(0.82),
+    confidenceScore: 0.82,
+    rangeLow: posterior.ci68Low,
+    rangeHigh: posterior.ci68High,
+    method: `Historical Bayesian posterior from full-range weight-change intervals and step-adjusted intake${segmentMethod}.`,
+    source: 'bayesian_historical',
+    posterior
+  };
+}
+
 function observedWeightProjection(days, horizonDays = 30) {
   const weightDays = days.filter(d => d.weight);
   const trendPoints = stateSpaceWeightTrendPoints(days);
@@ -3932,13 +4002,27 @@ function modelAgreementSummary(days, sleep) {
 
 function deficitProjection(days, horizonDays = 30) {
   if (!days.length) return null;
-  const rangeTdee = workingTDEEProfile(days).maintenance;
-  const avgDeficit = avgOrNull(days.map(d => ({ v: rangeTdee - effectiveCalories(d) })), 'v');
+  const paceDays = recentContiguousBaselineDays(days, 28);
+  if (!paceDays.length) return null;
+  const latestAnalyticsDate = getAnalyticsDays().at(-1)?.date || null;
+  const paceEndDate = paceDays.at(-1)?.date || null;
+  const profile = paceEndDate && paceEndDate === latestAnalyticsDate
+    ? workingTDEEProfile(getAnalyticsDays())
+    : workingTDEEProfile(paceDays);
+  const rangeTdee = profile.maintenance;
+  const avgIntake = avgEffectiveCalories(paceDays);
+  const avgDeficit = avgIntake == null ? null : rangeTdee - avgIntake;
   if (avgDeficit == null) return null;
   return {
     avgDeficit,
-    confidence: projectionConfidence(Math.min(1, days.length / 28)),
-    projectedLoss: (avgDeficit * horizonDays) / 3500
+    avgIntake,
+    maintenance: rangeTdee,
+    intakeDays: paceDays.length,
+    startDate: paceDays[0].date,
+    endDate: paceDays.at(-1).date,
+    confidence: projectionConfidence(Math.min(1, paceDays.length / 28)),
+    projectedLoss: (avgDeficit * horizonDays) / 3500,
+    tdeeSource: profile.source
   };
 }
 
@@ -4056,16 +4140,35 @@ function plateauNoiseAssessment(days, sleep) {
       text: 'Need at least two weigh-ins in this range before the dashboard can separate true plateau risk from normal water noise.'
     };
   }
-  const { expectedLoss, actualLoss, shortfall, residualAbs, lag, probabilities, topState, confidence } = posterior;
+  const alignedContext = posterior.alignedContext || recentScaleContext(days, 28);
+  const expectedLoss = alignedContext?.expectedLoss ?? posterior.expectedLoss;
+  const actualLoss = alignedContext?.actualLoss ?? posterior.actualLoss;
+  const shortfall = Math.max(0, expectedLoss - actualLoss);
+  const { residualAbs, probabilities, topState, confidence } = posterior;
   const posteriorLine = `Posterior split: ${Math.round((probabilities.noise || 0) * 100)}% water/noise, ${Math.round((probabilities.plateau || 0) * 100)}% plateau, ${Math.round((probabilities.on_track || 0) * 100)}% on-track, ${Math.round((probabilities.small_signal || 0) * 100)}% weak-signal.`;
+  const alignedLine = alignedContext
+    ? `Across the same ${alignedContext.spanDays}-day aligned window used by Scale Context, deficit math implies ${weightLabel(Math.abs(expectedLoss))} ${expectedLoss >= 0 ? 'of loss' : 'of gain'} while the filtered trend shows ${weightLabel(Math.abs(actualLoss))} ${actualLoss >= 0 ? 'of loss' : 'of gain'}.`
+    : '';
+  if (alignedContext && alignedContext.gap > 0.35) {
+    return {
+      status: 'on_track',
+      cls: 'good',
+      title: 'The recent scale trend is ahead of the deficit path',
+      text: `${alignedLine} The extra ${weightLabel(alignedContext.gap)} may include favorable water/noise, so it is not counted as confirmed additional fat loss.`,
+      confidence,
+      posterior,
+      alignedContext
+    };
+  }
   if (topState === 'small_signal' || expectedLoss <= 0.5) {
     return {
       status: 'small_signal',
       cls: 'warn',
       title: 'The deficit signal is still small',
-      text: `The logged deficit only implies about ${weightLabel(Math.abs(expectedLoss))} of movement in this range, so flat scale action can still be normal noise. ${posteriorLine}`,
+      text: `${alignedLine || `The logged deficit only implies about ${weightLabel(Math.abs(expectedLoss))} of movement in this range.`} Flat scale action can still be normal noise. ${posteriorLine}`,
       confidence,
-      posterior
+      posterior,
+      alignedContext
     };
   }
   if (topState === 'on_track') {
@@ -4073,9 +4176,10 @@ function plateauNoiseAssessment(days, sleep) {
       status: 'on_track',
       cls: 'good',
       title: 'This does not look like a real plateau',
-      text: `The filtered scale trend is showing ${weightLabel(Math.abs(actualLoss))} of loss versus ${weightLabel(Math.abs(expectedLoss))} implied by the logged deficit, which is close enough to be on-track. ${posteriorLine}`,
+      text: `${alignedLine || `The filtered scale trend is showing ${weightLabel(Math.abs(actualLoss))} of loss versus ${weightLabel(Math.abs(expectedLoss))} implied by the logged deficit.`} The two are close enough to be on-track. ${posteriorLine}`,
       confidence,
-      posterior
+      posterior,
+      alignedContext
     };
   }
   if (topState === 'noise') {
@@ -4083,18 +4187,20 @@ function plateauNoiseAssessment(days, sleep) {
       status: 'noise',
       cls: 'warn',
       title: 'This looks more like noise than a true stall',
-      text: `The scale is lagging the logged deficit by ${weightLabel(Math.abs(shortfall))}, but residual non-fat movement is still ${weightLabel(residualAbs)}. Recovery and training noise are likely masking part of the fat-loss signal. ${posteriorLine}`,
+      text: `${alignedLine || `The scale is lagging the logged deficit by ${weightLabel(Math.abs(shortfall))}.`} The aligned shortfall is ${weightLabel(shortfall)}, while residual non-fat movement is ${weightLabel(residualAbs)}. Recovery and training noise may be masking part of the fat-loss signal. ${posteriorLine}`,
       confidence,
-      posterior
+      posterior,
+      alignedContext
     };
   }
   return {
     status: 'plateau',
     cls: 'bad',
     title: 'This may be a real plateau signal',
-    text: `The logged deficit implies about ${weightLabel(Math.abs(expectedLoss))} of loss, but the filtered trend only shows ${weightLabel(Math.abs(actualLoss))} and there is not much residual noise left to explain the gap. ${posteriorLine}`,
+    text: `${alignedLine || `The logged deficit implies about ${weightLabel(Math.abs(expectedLoss))} of loss, but the filtered trend only shows ${weightLabel(Math.abs(actualLoss))}.`} There is not much residual noise left to explain the ${weightLabel(shortfall)} shortfall. ${posteriorLine}`,
     confidence,
-    posterior
+    posterior,
+    alignedContext
   };
 }
 

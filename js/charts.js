@@ -888,7 +888,7 @@ function renderHeroStage(current, previous, filteredDays, filteredSleep) {
   document.getElementById('heroSubtitle').textContent = `${weightTrend} ${sleepTrend} ${realityTrend} ${lagTrend}`.trim();
   document.getElementById('heroCalValue').textContent = current.avgCalories != null ? energyLabel(current.avgCalories) : '—';
   document.getElementById('heroCalSub').textContent = energyBalance
-    ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance across the range · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
+    ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} historical maintenance across the range · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
     : 'No intake data in the selected range';
   document.getElementById('heroCalInsights').innerHTML = `
     <div class="hero-insight">
@@ -975,15 +975,22 @@ function renderForecastStrip(filteredDays, filteredSleep) {
   const scaleNoise = scaleNoiseAssessment(filteredDays, filteredSleep);
   const scaleState = empiricalScaleState();
   const scaleStateCurrent = scaleState?.current || null;
+  const scaleStateDisplayOffset = Number.isFinite(scaleStateCurrent?.rollingOffsetAboveCut)
+    ? scaleStateCurrent.rollingOffsetAboveCut
+    : scaleStateCurrent?.offsetAboveCut;
+  const scaleStateDisplayPosition = scaleStatePositionLabel(scaleStateDisplayOffset);
+  const scaleStateRollingCutWeight = Number.isFinite(scaleNoise?.rollingWeight) && Number.isFinite(scaleStateDisplayOffset)
+    ? scaleNoise.rollingWeight - scaleStateDisplayOffset
+    : null;
   const scaleStateGauge = (() => {
-    if (!scaleStateCurrent || !Number.isFinite(scaleStateCurrent.offsetAboveCut)) return null;
+    if (!scaleStateCurrent || !Number.isFinite(scaleStateDisplayOffset)) return null;
     const low = Math.min(-1, scaleStateCurrent.offsetLow ?? scaleStateCurrent.offsetAboveCut - 1);
     const high = Math.max((scaleState.bodyCompGap || 1.3) + 1, scaleStateCurrent.offsetHigh ?? scaleStateCurrent.offsetAboveCut + 1);
     const position = value => clamp01((value - low) / Math.max(high - low, 0.1)) * 100;
     return {
       cut: position(0),
       fed: position(scaleState.bodyCompGap || 1.3),
-      current: position(scaleStateCurrent.offsetAboveCut)
+      current: position(scaleStateDisplayOffset)
     };
   })();
   const weighInDelta = latestWeighInDelta(filteredDays);
@@ -1083,6 +1090,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="runway-status">${statusCopy.label}</div>
           <div class="runway-status-detail">${statusCopy.detail}</div>
           <div class="runway-days">As of ${formatShortDate(runway.currentWeightDate)}: <strong>${runway.daysRemaining}</strong> days to Nov 15 · projected ${projectedFinish} · ${runway.finalBufferDays}-day buffer to Dec 31</div>
+          <div class="trust-row trust-inline"><span class="trust-pill estimated">Model revised Nov 4</span><span class="trust-pill logged">Changes when data or methodology changes</span></div>
         </div>
         <div class="runway-metrics">
           <div class="runway-metric">
@@ -1137,10 +1145,10 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         <div class="forecast-card mobile-secondary">
         <div class="eyebrow">30-Day Deficit Pace</div>
         <div class="value">~${weightLabel(Math.abs(deficitPace.projectedLoss))}</div>
-          <div class="sub">If intake stays near ${energyLabel(avgEffectiveCalories(filteredDays))}, the maintenance gap implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
+          <div class="sub">If intake stays near the recent ${deficitPace.intakeDays}-day average of ${energyLabel(deficitPace.avgIntake)}, the current maintenance gap implies about ${weightLabel(Math.abs(deficitPace.projectedLoss))} of movement in 30 days.</div>
           <div class="trust-row trust-inline"><span class="trust-pill projected">Projected</span><span class="trust-pill estimated">Estimated TDEE</span></div>
           <div class="confidence-pill ${deficitPace.confidence.cls}">${deficitPace.confidence.label}</div>
-          <div class="tiny">${energyBalance ? `${energyBalance.totalDeficit >= 0 ? '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' below' : '~' + energyLabel(Math.abs(energyBalance.totalDeficit)) + ' above'} maintenance in-range · ` : ''}${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(workingTDEEProfile(filteredDays).maintenance)} TDEE</div>
+          <div class="tiny">${formatShortDate(deficitPace.startDate)}–${formatShortDate(deficitPace.endDate)} · ${deficitPace.avgDeficit >= 0 ? 'Deficit' : 'Surplus'} pace: ${energyLabel(Math.abs(deficitPace.avgDeficit))}/day vs ~${energyLabel(deficitPace.maintenance)} current TDEE</div>
         </div>
       `
       : `
@@ -1198,8 +1206,8 @@ function renderForecastStrip(filteredDays, filteredSleep) {
       ? `
         <div class="forecast-card mobile-primary scale-noise-card ${scaleState.usableForBodyComp ? 'medium' : 'low'}" id="scaleStateCard">
           <div class="eyebrow">Scale State</div>
-          <div class="value">${scaleStateCurrent.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetAboveCut, 2)}</div>
-          <div class="sub">${scaleStateCurrent.status === 'below-cut' ? 'Below' : 'Above'} your empirically learned cut-state on the latest weigh-in.${scaleStateCurrent.cutStateEquivalentWeight == null ? '' : ` Cut-state equivalent: ~${weightLabel(scaleStateCurrent.cutStateEquivalentWeight, 1)}.`}</div>
+          <div class="value">${scaleStateDisplayOffset >= 0 ? '+' : ''}${weightLabel(scaleStateDisplayOffset, 2)}</div>
+          <div class="sub">${scaleStateDisplayPosition} your empirically learned cut-state based on the 7-weigh-in average.${scaleStateRollingCutWeight == null ? '' : ` Rolling cut-state equivalent: ~${weightLabel(scaleStateRollingCutWeight, 1)}.`}</div>
           <div class="scale-state-gauge" aria-label="Current scale state from cut to fed">
             <div class="scale-state-track"></div>
             <div class="scale-state-tick cut" style="left:${scaleStateGauge.cut}%"><span>Cut</span></div>
@@ -1210,7 +1218,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
             ${(scaleStateCurrent.drivers || []).map(driver => `<div class="noise-driver"><span>${driver.label}</span><em>${driver.effectLbs >= 0 ? '+' : ''}${weightLabel(driver.effectLbs, 2)} · ${driver.detail}</em></div>`).join('')}
           </div>
           <div class="confidence-pill ${scaleState.usableForBodyComp ? 'medium' : 'low'}">${scaleState.usableForBodyComp ? 'Walk-forward validated' : 'Diagnostic only'}</div>
-          <div class="tiny">${formatShortDate(scaleStateCurrent.date)} · likely ${scaleStateCurrent.offsetLow >= 0 ? '+' : ''}${weightValue(scaleStateCurrent.offsetLow, 1)} to ${scaleStateCurrent.offsetHigh >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetHigh, 1)} · 7-weigh-in state avg ${scaleStateCurrent.rollingOffsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.rollingOffsetAboveCut, 2)}</div>
+          <div class="tiny">${formatShortDate(scaleStateCurrent.date)} latest single-day estimate ${scaleStateCurrent.offsetAboveCut >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetAboveCut, 2)} · likely ${scaleStateCurrent.offsetLow >= 0 ? '+' : ''}${weightValue(scaleStateCurrent.offsetLow, 1)} to ${scaleStateCurrent.offsetHigh >= 0 ? '+' : ''}${weightLabel(scaleStateCurrent.offsetHigh, 1)}</div>
           <div class="tiny">Walk-forward MAE ${weightLabel(scaleState.metrics?.[scaleState.selectedModel]?.mae || 0, 2)} across ${scaleState.validationRows} checks.${scaleNoise ? ` Scale-noise score ${scaleNoise.noiseScore}/100.` : ''}</div>
         </div>
       `
@@ -1358,7 +1366,7 @@ function renderExecutiveSummary() {
   const adjustedNetText = adjustedNetLabel(energyBalance);
   const adjustedNetState = adjustedNetDirection(energyBalance);
   const adjustedNetSub = energyBalance
-    ? `${current.avgAdjustedCalories != null ? energyLabel(Math.round(current.avgAdjustedCalories)) : '—'} adjusted intake vs ~${energyLabel(Math.round(energyBalance.totalMaintenance / Math.max(filteredDays.length, 1)))} maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
+    ? `${current.avgAdjustedCalories != null ? energyLabel(Math.round(current.avgAdjustedCalories)) : '—'} adjusted intake vs ~${energyLabel(energyBalance.maintenance)} historical maintenance · ${energyBalance.weeklyPace >= 0 ? '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week deficit pace' : '~' + energyLabel(Math.abs(energyBalance.weeklyPace)) + '/week surplus pace'}`
     : 'No adjusted intake data';
   const plateau = plateauNoiseAssessment(filteredDays, filteredSleep);
   const lag = getLagMetrics(filteredDays, filteredSleep);
