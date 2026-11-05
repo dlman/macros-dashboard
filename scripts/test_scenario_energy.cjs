@@ -65,13 +65,20 @@ test('total intake at maintenance predicts no tissue change, with or without alc
 test('historical energy balance uses the full-range posterior instead of current maintenance', () => {
   const p = run(`(() => {
     const days = getAnalyticsDays();
-    const balance = energyBalanceSummary(days);
-    return {
-      balance,
-      posterior: window.dashboardData.bayesian.tdeePosterior,
-      dayCount: days.length,
-      intake: days.reduce((sum, day) => sum + effectiveCalories(day), 0)
-    };
+    const latestTimeline = window.dashboardData.bayesian.tdeeTimeline.at(-1);
+    const originalDate = latestTimeline.date;
+    latestTimeline.date = days.at(-1).date;
+    try {
+      const balance = energyBalanceSummary(days);
+      return {
+        balance,
+        posterior: window.dashboardData.bayesian.tdeePosterior,
+        dayCount: days.length,
+        intake: days.reduce((sum, day) => sum + effectiveCalories(day), 0)
+      };
+    } finally {
+      latestTimeline.date = originalDate;
+    }
   })()`);
   assert.equal(p.balance.maintenance, p.posterior.mean);
   near(p.balance.totalMaintenance, p.posterior.mean * p.dayCount);
@@ -82,14 +89,21 @@ test('historical energy balance uses the full-range posterior instead of current
 test('30-day deficit projection uses recent intake and current maintenance', () => {
   const p = run(`(() => {
     const days = getAnalyticsDays();
-    const projection = deficitProjection(days, 30);
-    const recent = recentContiguousBaselineDays(days, 28);
-    return {
-      projection,
-      recentAverage: avgEffectiveCalories(recent),
-      recentCount: recent.length,
-      current: window.dashboardData.bayesian.currentTDEE
-    };
+    const latestTimeline = window.dashboardData.bayesian.tdeeTimeline.at(-1);
+    const originalDate = latestTimeline.date;
+    latestTimeline.date = days.at(-1).date;
+    try {
+      const projection = deficitProjection(days, 30);
+      const recent = recentContiguousBaselineDays(days, 28);
+      return {
+        projection,
+        recentAverage: avgEffectiveCalories(recent),
+        recentCount: recent.length,
+        current: window.dashboardData.bayesian.currentTDEE
+      };
+    } finally {
+      latestTimeline.date = originalDate;
+    }
   })()`);
   assert.equal(p.projection.intakeDays, p.recentCount);
   assert.ok(p.projection.intakeDays > 0 && p.projection.intakeDays <= 28);

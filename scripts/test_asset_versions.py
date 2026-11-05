@@ -7,6 +7,9 @@ from pathlib import Path
 from update_data_asset_version import expected_version, versioned_index
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 class LocalAssetVersionTests(unittest.TestCase):
     def test_all_local_js_and_css_assets_receive_content_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,6 +37,18 @@ class LocalAssetVersionTests(unittest.TestCase):
             source = '<script src="./js/missing.js?v=old"></script>'
             with self.assertRaisesRegex(SystemExit, "does not exist"):
                 versioned_index(source, Path(tmp))
+
+    def test_steps_workflow_refreshes_and_commits_the_data_cache_key(self):
+        workflow = (ROOT / ".github" / "workflows" / "sync-steps.yml").read_text(encoding="utf-8")
+        rebuild = workflow.index("python update_bayes.py js/data.js")
+        refresh = workflow.index("python scripts/update_data_asset_version.py")
+        validate = workflow.index("python scripts/validate_dashboard_build.py")
+
+        self.assertLess(rebuild, refresh)
+        self.assertLess(refresh, validate)
+        self.assertIn("git diff --stat js/data.js index.html", workflow)
+        self.assertIn("git diff --quiet js/data.js index.html", workflow)
+        self.assertIn("git add js/data.js index.html", workflow)
 
 
 if __name__ == "__main__":
