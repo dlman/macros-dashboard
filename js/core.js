@@ -955,6 +955,12 @@ function rollingAdherence(days, window = 7) {
 
 // ── STEP ANALYTICS ──────────────────────────────────────────────────────
 const KCAL_PER_STEP = 0.04; // ~40 kcal per 1,000 steps — mid-range estimate
+const STEP_BAR_COLORS = Object.freeze({
+  belowGoal: 'rgba(100,116,139,0.45)',
+  atGoal: 'rgba(52,211,153,0.65)',
+  urevo: 'rgba(34,211,238,0.82)',
+  urevoBorder: 'rgba(8,145,178,1)'
+});
 
 const stepRecordsByDate = (() => {
   const map = {};
@@ -981,6 +987,21 @@ function getActivityStepForDate(date) {
   const steps = getStepForDate(date);
   if (steps == null) return null;
   return steps + inclineExtraKcalForDate(date) / KCAL_PER_STEP;
+}
+
+function stepBarAppearance(date, steps, goalSteps = 8000) {
+  if (getStepRecordForDate(date)?.inclineSteps > 0) {
+    return {
+      backgroundColor: STEP_BAR_COLORS.urevo,
+      borderColor: STEP_BAR_COLORS.urevoBorder,
+      borderWidth: 1.5
+    };
+  }
+  return {
+    backgroundColor: steps >= goalSteps ? STEP_BAR_COLORS.atGoal : STEP_BAR_COLORS.belowGoal,
+    borderColor: 'transparent',
+    borderWidth: 0
+  };
 }
 
 function stepStats(days, goalSteps = 8000) {

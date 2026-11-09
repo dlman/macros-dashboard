@@ -2618,6 +2618,9 @@ allCharts.adherenceChart = new Chart(document.getElementById('adherenceChart'), 
 // DAILY STEPS CHART
 // =====================================================================
 const initSteps = stepStats(allDays);
+const initStepBarStyles = initSteps
+  ? initSteps.allDates.map((date, index) => stepBarAppearance(date, initSteps.allSteps[index], initSteps.goalSteps))
+  : [];
 allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
   type: 'bar',
   data: {
@@ -2626,11 +2629,19 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
       {
         label: 'Daily Steps',
         data: initSteps ? initSteps.allSteps : [],
-        backgroundColor: initSteps
-          ? initSteps.allSteps.map(s => s >= 8000 ? 'rgba(52,211,153,0.65)' : 'rgba(100,116,139,0.45)')
-          : [],
+        backgroundColor: initStepBarStyles.map(style => style.backgroundColor),
+        borderColor: initStepBarStyles.map(style => style.borderColor),
+        borderWidth: initStepBarStyles.map(style => style.borderWidth),
         borderRadius: 3,
         borderSkipped: false,
+        order: 2
+      },
+      {
+        label: 'UREVO · 12% incline',
+        data: initSteps ? initSteps.allLabels.map(() => null) : [],
+        backgroundColor: STEP_BAR_COLORS.urevo,
+        borderColor: STEP_BAR_COLORS.urevoBorder,
+        borderWidth: 1.5,
         order: 2
       },
       {
@@ -2671,16 +2682,32 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
       tooltip: {
         ...chartDefaults().plugins.tooltip,
         callbacks: {
-          label: ctx => ctx.datasetIndex === 0
-            ? ` ${ctx.parsed.y.toLocaleString()} steps`
-            : ctx.datasetIndex === 1
+          title: ctx => ctx[0]?.chart?.$stepDates?.[ctx[0].dataIndex] || ctx[0]?.label || '',
+          label: ctx => {
+            if (ctx.datasetIndex === 0) {
+              const date = ctx.chart.$stepDates?.[ctx.dataIndex];
+              const record = date ? getStepRecordForDate(date) : null;
+              if (record?.inclineSteps) {
+                const otherSteps = Math.max(0, record.steps - record.inclineSteps);
+                return [
+                  ` Total: ${record.steps.toLocaleString()} steps`,
+                  ` UREVO: ${record.inclineSteps.toLocaleString()} steps at ${record.inclinePct}% incline`,
+                  ` Other: ${otherSteps.toLocaleString()} steps`,
+                  ` Incline add-on: ~${energyLabel(record.inclineExtraKcal)}`
+                ];
+              }
+              return ` ${ctx.parsed.y.toLocaleString()} steps`;
+            }
+            return ctx.datasetIndex === 2
               ? ` 7-day avg: ${ctx.parsed.y?.toLocaleString() ?? '–'}`
               : ` Goal: ${ctx.parsed.y?.toLocaleString() ?? '8,000'} steps`
+          }
         }
       }
     }
   }
 });
+allCharts.stepsChart.$stepDates = initSteps ? initSteps.allDates : [];
 
 // =====================================================================
 // FOOD FREQUENCY CHART

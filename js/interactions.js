@@ -1747,16 +1747,25 @@ function updateStepsChart(days) {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
     chart.data.datasets[0].backgroundColor = [];
+    chart.data.datasets[0].borderColor = [];
+    chart.data.datasets[0].borderWidth = [];
     chart.data.datasets[1].data = [];
+    chart.data.datasets[2].data = [];
+    chart.data.datasets[3].data = [];
+    chart.$stepDates = [];
     chart.update();
     return;
   }
+  const barStyles = stats.allDates.map((date, index) => stepBarAppearance(date, stats.allSteps[index], stats.goalSteps));
   chart.data.labels = stats.allLabels;
   chart.data.datasets[0].data = stats.allSteps;
-  chart.data.datasets[0].backgroundColor = stats.allSteps.map(s =>
-    s >= stats.goalSteps ? 'rgba(52,211,153,0.65)' : 'rgba(100,116,139,0.45)'
-  );
-  chart.data.datasets[1].data = [...Array(6).fill(null), ...stats.rollingAvg];
+  chart.data.datasets[0].backgroundColor = barStyles.map(style => style.backgroundColor);
+  chart.data.datasets[0].borderColor = barStyles.map(style => style.borderColor);
+  chart.data.datasets[0].borderWidth = barStyles.map(style => style.borderWidth);
+  chart.data.datasets[1].data = stats.allLabels.map(() => null);
+  chart.data.datasets[2].data = [...Array(6).fill(null), ...stats.rollingAvg];
+  chart.data.datasets[3].data = stats.allLabels.map(() => stats.goalSteps);
+  chart.$stepDates = stats.allDates;
   chart.update();
   // Update step stat cards
   const el = document.getElementById('stepStatCards');
