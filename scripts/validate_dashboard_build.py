@@ -20,6 +20,7 @@ PY_FILES = [
     ROOT / "scripts" / "test_update_bayes.py",
     ROOT / "scripts" / "test_drink_parser.py",
     ROOT / "scripts" / "test_sync_google_sheets.py",
+    ROOT / "scripts" / "test_sync_steps.py",
     ROOT / "scripts" / "test_sync_whoop.py",
     ROOT / "scripts" / "test_asset_versions.py",
     ROOT / "scripts" / "sync_google_sheets.py",
@@ -95,6 +96,7 @@ def main() -> None:
         run_check(["node", "--check", str(js_file)], f"JS syntax: {js_file.relative_to(ROOT)}")
     run_check([sys.executable, str(ROOT / "scripts" / "test_update_bayes.py")], "Bayesian TDEE segmentation tests")
     run_check([sys.executable, str(ROOT / "scripts" / "test_sync_google_sheets.py")], "Google Sheets rollover and data-loss tests")
+    run_check([sys.executable, str(ROOT / "scripts" / "test_sync_steps.py")], "Apple Health source-overlap tests")
     run_check([sys.executable, str(ROOT / "scripts" / "test_sync_whoop.py")], "WHOOP token persistence retry tests")
     run_check([sys.executable, str(ROOT / "scripts" / "test_asset_versions.py")], "Local asset versioning tests")
     run_check(["node", "--test", str(ROOT / "scripts" / "test_year_rollover.cjs")], "Year rollover browser tests")

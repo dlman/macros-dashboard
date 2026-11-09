@@ -26,6 +26,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from collections import OrderedDict, defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -93,12 +94,91 @@ def _load_payload_entries(payload_json: str) -> list[dict[str, Any]]:
     return [_normalize_entry(entry) for entry in entries]
 
 
-def _load_apple_health_export(path: str, start_date: str | None = None, end_date: str | None = None) -> list[dict[str, Any]]:
+def _health_timestamp(value: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S %z")
+    except ValueError as exc:
+        raise SystemExit(f"Invalid Apple Health timestamp: {value!r}") from exc
+
+
+def _merged_intervals(samples: list[dict[str, Any]]) -> list[tuple[datetime, datetime]]:
+    intervals = sorted((sample["start"], sample["end"]) for sample in samples)
+    merged: list[tuple[datetime, datetime]] = []
+    for start, end in intervals:
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def _uncovered_fraction(sample: dict[str, Any], preferred_intervals: list[tuple[datetime, datetime]]) -> float:
+    start, end = sample["start"], sample["end"]
+    duration = (end - start).total_seconds()
+    if duration <= 0:
+        return 0.0 if any(interval_start <= start <= interval_end for interval_start, interval_end in preferred_intervals) else 1.0
+    overlap = sum(
+        max(0.0, (min(end, interval_end) - max(start, interval_start)).total_seconds())
+        for interval_start, interval_end in preferred_intervals
+    )
+    return max(0.0, min(1.0, 1.0 - overlap / duration))
+
+
+def _source_aware_totals(samples: list[dict[str, Any]], preferred_source: str | None) -> tuple[dict[str, float], float]:
+    sources = {sample["source"] for sample in samples}
+    if len(sources) == 1:
+        totals: defaultdict[str, float] = defaultdict(float)
+        for sample in samples:
+            totals[sample["date"]] += sample["value"]
+        return dict(totals), 0.0
+
+    if not preferred_source:
+        source_list = ", ".join(sorted(sources))
+        raise SystemExit(
+            "Apple Health export contains multiple step sources, which may overlap and double-count. "
+            f"Found: {source_list}. Pass --preferred-source for an interval-aware merge."
+        )
+    if preferred_source not in sources:
+        raise SystemExit(f"Preferred step source {preferred_source!r} was not found. Available: {', '.join(sorted(sources))}")
+    secondary_sources = sources - {preferred_source}
+    if len(secondary_sources) > 1:
+        raise SystemExit(
+            "Interval-aware merging supports one preferred and one secondary step source; "
+            f"found secondary sources: {', '.join(sorted(secondary_sources))}"
+        )
+
+    preferred_by_date: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for sample in samples:
+        if sample["source"] == preferred_source:
+            preferred_by_date[sample["date"]].append(sample)
+
+    preferred_intervals = {
+        date: _merged_intervals(date_samples)
+        for date, date_samples in preferred_by_date.items()
+    }
+    totals: defaultdict[str, float] = defaultdict(float)
+    excluded_overlap = 0.0
+    for sample in samples:
+        if sample["source"] == preferred_source:
+            totals[sample["date"]] += sample["value"]
+            continue
+        fraction = _uncovered_fraction(sample, preferred_intervals.get(sample["date"], []))
+        totals[sample["date"]] += sample["value"] * fraction
+        excluded_overlap += sample["value"] * (1.0 - fraction)
+    return dict(totals), excluded_overlap
+
+
+def _load_apple_health_export(
+    path: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    preferred_source: str | None = None,
+) -> list[dict[str, Any]]:
     export_path = Path(path).expanduser().resolve()
     if not export_path.is_file():
         raise SystemExit(f"Apple Health export not found: {export_path}")
 
-    totals: defaultdict[str, float] = defaultdict(float)
+    samples: list[dict[str, Any]] = []
     sources: set[str] = set()
     for _, element in ET.iterparse(export_path, events=("end",)):
         attrs = element.attrib
@@ -106,22 +186,27 @@ def _load_apple_health_export(path: str, start_date: str | None = None, end_date
             date = parse_date(attrs.get("startDate", "")[:10])
             if date and (not start_date or date >= start_date) and (not end_date or date <= end_date):
                 try:
-                    totals[date] += float(attrs.get("value", "0"))
+                    value = float(attrs.get("value", "0"))
                 except ValueError as exc:
                     raise SystemExit(f"Invalid step value in Apple Health export: {attrs.get('value')!r}") from exc
-                sources.add(attrs.get("sourceName", "unknown"))
+                source = attrs.get("sourceName", "unknown")
+                samples.append({
+                    "date": date,
+                    "source": source,
+                    "start": _health_timestamp(attrs.get("startDate", "")),
+                    "end": _health_timestamp(attrs.get("endDate", "")),
+                    "value": value,
+                })
+                sources.add(source)
         element.clear()
 
-    if not totals:
+    if not samples:
         raise SystemExit(f"No Apple Health step records found in {export_path}")
+    totals, excluded_overlap = _source_aware_totals(samples, preferred_source)
+    source_label = " + ".join(sorted(sources))
     if len(sources) > 1:
-        source_list = ", ".join(sorted(sources))
-        raise SystemExit(
-            "Apple Health export contains multiple step sources, which may overlap and double-count. "
-            f"Found: {source_list}"
-        )
-
-    print(f"Parsed {len(totals)} Apple Health step days from {next(iter(sources))}")
+        source_label += f" ({preferred_source} preferred during overlaps; ~{excluded_overlap:,.0f} secondary steps excluded)"
+    print(f"Parsed {len(totals)} Apple Health step days from {source_label}")
     return [{"date": date, "steps": round(totals[date])} for date in sorted(totals)]
 
 
@@ -137,7 +222,7 @@ def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
             raise SystemExit(f"Invalid Apple Health end date: {args.end_date!r}")
         if start_date and end_date and start_date > end_date:
             raise SystemExit("Apple Health start date must be on or before the end date.")
-        updates.extend(_load_apple_health_export(args.apple_health_export, start_date, end_date))
+        updates.extend(_load_apple_health_export(args.apple_health_export, start_date, end_date, args.preferred_source))
 
     payload_json = (
         args.payload_json
@@ -181,6 +266,7 @@ def main() -> None:
     parser.add_argument("--steps", help="Single steps value to merge for --date")
     parser.add_argument("--payload-json", help="JSON list/object of step rows")
     parser.add_argument("--apple-health-export", help="Path to an Apple Health export.xml file")
+    parser.add_argument("--preferred-source", help="Preferred source during overlapping Apple Health step intervals")
     parser.add_argument("--start-date", help="Optional first date to import from Apple Health")
     parser.add_argument("--end-date", help="Optional last date to import from Apple Health")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
