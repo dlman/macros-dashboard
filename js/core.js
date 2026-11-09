@@ -3764,7 +3764,7 @@ function rollingAverageWeightPace(days = getAnalyticsDays(), lookbackDays = 28, 
   };
 }
 
-function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15.5, deadline = '2026-11-15', finalDeadline = '2026-12-31') {
+function yearEndBodyFatRunway(days = getAnalyticsDays(), targetBfPct = 15.5, deadline = '2026-12-30', finalDeadline = '2026-12-31') {
   const analyticsDays = baselineAnalyticsDays(getAnalyticsDays(days));
   const rollingAnchor = bodyCompWeightAnchor(analyticsDays);
   const latestWeightPoint = latestWeightPointForScenario(analyticsDays);

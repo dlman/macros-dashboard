@@ -1083,14 +1083,16 @@ function renderForecastStrip(filteredDays, filteredSleep) {
         ? 'Need more data'
         : `${runway.actualWeeklyLoss >= 0 ? '−' : '+'}${weightLabel(Math.abs(runway.actualWeeklyLoss), 2)}/wk`;
       const projectedFinish = runway.projectedDate ? formatShortDate(runway.projectedDate) : 'No finish date';
+      const deadlineLabel = formatShortDate(runway.deadline);
+      const finalDeadlineLabel = formatShortDate(runway.finalDeadline);
       runwayEl.className = `year-end-runway ${statusCopy.cls}`;
       runwayEl.innerHTML = `
         <div class="runway-lead">
-          <div class="eyebrow">${runway.targetBfPct}% working deadline · Nov 15</div>
+          <div class="eyebrow">${runway.targetBfPct}% working deadline · ${deadlineLabel}</div>
           <div class="runway-status">${statusCopy.label}</div>
           <div class="runway-status-detail">${statusCopy.detail}</div>
-          <div class="runway-days">As of ${formatShortDate(runway.currentWeightDate)}: <strong>${runway.daysRemaining}</strong> days to Nov 15 · projected ${projectedFinish} · ${runway.finalBufferDays}-day buffer to Dec 31</div>
-          <div class="trust-row trust-inline"><span class="trust-pill estimated">Model revised Nov 4</span><span class="trust-pill logged">Changes when data or methodology changes</span></div>
+          <div class="runway-days">As of ${formatShortDate(runway.currentWeightDate)}: <strong>${runway.daysRemaining}</strong> days to ${deadlineLabel} · projected ${projectedFinish} · ${runway.finalBufferDays}-day buffer to ${finalDeadlineLabel}</div>
+          <div class="trust-row trust-inline"><span class="trust-pill estimated">Model revised Nov 9</span><span class="trust-pill logged">Changes when data or methodology changes</span></div>
         </div>
         <div class="runway-metrics">
           <div class="runway-metric">
@@ -1101,7 +1103,7 @@ function renderForecastStrip(filteredDays, filteredSleep) {
           <div class="runway-metric">
             <span>Required pace</span>
             <strong>−${weightLabel(runway.requiredWeeklyLoss, 2)}/wk</strong>
-            <small>tissue loss through Nov 15</small>
+            <small>tissue loss through ${deadlineLabel}</small>
           </div>
           <div class="runway-metric">
             <span>Actual 28d pace</span>

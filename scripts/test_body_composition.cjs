@@ -118,9 +118,12 @@ test('post-scan targets use the confirmed fed anchor and expose a cut-state equi
   }
 });
 
-test('November 15 runway uses the fed 15.5% goal and latest DXA lean-retention calibration', () => {
+test('December 30 runway uses the fed 15.5% goal and latest DXA lean-retention calibration', () => {
   const result = run(`yearEndBodyFatRunway(getAnalyticsDays(allDays))`);
   assert.equal(result.targetBfPct, 15.5);
+  assert.equal(result.deadline, '2026-12-30');
+  assert.equal(result.finalDeadline, '2026-12-31');
+  assert.equal(result.finalBufferDays, 1);
   assert.equal(result.anchorDate, '2026-09-23');
   assert.equal(result.targetWeight, 149.4);
   assert.equal(result.targetFedWeight, 149.4);
