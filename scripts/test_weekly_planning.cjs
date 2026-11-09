@@ -31,6 +31,14 @@ test('only extra walking above baseline adjusts maintenance', () => {
   assert.equal(plan.totalDeficit, 3620);
 });
 
+test('incline energy adjusts burn without inflating displayed steps', () => {
+  const days = loggedDays.map((day, index) => index === 0 ? { ...day, activitySteps: 10000 } : day);
+  const plan = planWeek({ ...settings, days });
+  assert.equal(plan.rows[0].recordedSteps, 7000);
+  assert.equal(plan.rows[0].activitySteps, 10000);
+  assert.equal(plan.totalDeficit, 3620);
+});
+
 test('invalid steps cannot silently disappear from the completed-days total', () => {
   const days = loggedDays.map((day, index) => ({ ...day, steps: index === 0 ? null : day.steps }));
   const plan = planWeek({ ...settings, days, drafts: { '2026-08-31': { steps: -1 } } });
@@ -93,6 +101,17 @@ test('separates food and alcohol changes and reconciles an explanatory residual'
   assert.ok(Math.abs(result.priorPace + 0.5) < 1e-9);
   assert.ok(Math.abs(result.currentPace + 0.1) < 1e-9);
   assert.ok(Math.abs(result.unexplainedChange) < 1e-9);
+});
+
+test('progress comparison uses incline-adjusted activity while reporting raw steps', () => {
+  const days = comparisonDays().map((day, index) => ({
+    ...day,
+    activitySteps: index < 14 ? day.steps : day.steps + 1000
+  }));
+  const result = progressChanges({ endDate: '2026-09-03', days });
+  assert.equal(result.steps.before, 7000);
+  assert.equal(result.steps.after, 7000);
+  assert.equal(result.steps.impact, 40);
 });
 
 test('pairs matching weekdays and excludes vacation calories from both comparison sides', () => {

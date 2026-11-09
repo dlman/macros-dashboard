@@ -956,14 +956,31 @@ function rollingAdherence(days, window = 7) {
 // ── STEP ANALYTICS ──────────────────────────────────────────────────────
 const KCAL_PER_STEP = 0.04; // ~40 kcal per 1,000 steps — mid-range estimate
 
-const stepsByDate = (() => {
+const stepRecordsByDate = (() => {
   const map = {};
-  if (stepsData) stepsData.forEach(s => { map[s.date] = s.steps; });
+  if (stepsData) stepsData.forEach(s => { map[s.date] = s; });
   return map;
 })();
 
 function getStepForDate(date) {
-  return stepsByDate[date] ?? null;
+  return stepRecordsByDate[date]?.steps ?? null;
+}
+
+function getStepRecordForDate(date) {
+  return stepRecordsByDate[date] ?? null;
+}
+
+function inclineExtraKcalForDate(date) {
+  const value = getStepRecordForDate(date)?.inclineExtraKcal;
+  return Number.isFinite(value) ? value : 0;
+}
+
+// Preserve raw steps for display while expressing incline work in the same units
+// as the Bayesian model's step baseline.
+function getActivityStepForDate(date) {
+  const steps = getStepForDate(date);
+  if (steps == null) return null;
+  return steps + inclineExtraKcalForDate(date) / KCAL_PER_STEP;
 }
 
 function stepStats(days, goalSteps = 8000) {
@@ -998,7 +1015,7 @@ function stepStats(days, goalSteps = 8000) {
 
 // Step NEAT delta relative to a baseline (positive = walked more than avg → burned more)
 function stepNEATDelta(date, avgSteps) {
-  const s = getStepForDate(date);
+  const s = getActivityStepForDate(date);
   if (s == null || avgSteps == null) return 0;
   return (s - avgSteps) * KCAL_PER_STEP;
 }
@@ -1007,7 +1024,7 @@ function stepNEATDelta(date, avgSteps) {
 // Subtracting extra burn when steps > avg reduces noise in TDEE regression
 function stepAdjustedCalories(day, avgSteps) {
   const base = effectiveCalories(day);
-  const s = getStepForDate(day.date);
+  const s = getActivityStepForDate(day.date);
   if (s == null || avgSteps == null) return base;
   return base - (s - avgSteps) * KCAL_PER_STEP;
 }
@@ -1075,9 +1092,9 @@ function stepsCorrelations(days, sleep = sleepData) {
 // Step-adjusted TDEE: returns the base TDEE ± step NEAT for a specific day
 function stepAdjustedTDEE(baseTDEE, date) {
   if (!baseTDEE) return null;
-  const s = getStepForDate(date);
+  const s = getActivityStepForDate(date);
   if (s == null) return baseTDEE;
-  const allStepVals = stepsData.map(d => d.steps);
+  const allStepVals = stepsData.map(d => getActivityStepForDate(d.date)).filter(Number.isFinite);
   const avg = allStepVals.reduce((a, b) => a + b, 0) / allStepVals.length;
   return Math.round(baseTDEE + (s - avg) * KCAL_PER_STEP);
 }

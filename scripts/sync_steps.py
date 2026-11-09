@@ -41,6 +41,13 @@ from sync_google_sheets import (
     render_data_js,
 )
 
+UREVO_DEFAULT_INCLINE_PCT = 12.0
+INCLINE_REFERENCE_WEIGHT_LBS = 150.0
+METERS_PER_MILE = 1609.344
+KILOGRAMS_PER_POUND = 0.45359237
+KCAL_PER_FLAT_STEP = 0.04
+UREVO_DEFAULT_MILES_PER_STEP = 0.000255
+
 
 def parse_existing_vacation_dates(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
@@ -62,6 +69,16 @@ def _parse_steps_value(value: Any) -> int:
     return steps
 
 
+def _parse_nonnegative_float(value: Any, label: str) -> float:
+    try:
+        parsed = float(str(value).strip().replace(",", ""))
+    except ValueError as exc:
+        raise SystemExit(f"Invalid {label}: {value!r}") from exc
+    if parsed < 0:
+        raise SystemExit(f"{label} must be non-negative, got {parsed}.")
+    return parsed
+
+
 def _normalize_entry(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise SystemExit(f"Each step payload entry must be an object, got {type(raw).__name__}.")
@@ -70,7 +87,30 @@ def _normalize_entry(raw: Any) -> dict[str, Any]:
     if not date:
         raise SystemExit(f"Invalid or missing date in step payload: {raw!r}")
     raw_steps = raw.get("steps", raw.get("value", raw.get("count")))
-    return {"date": date, "steps": _parse_steps_value(raw_steps)}
+    steps = _parse_steps_value(raw_steps)
+    row: dict[str, Any] = {"date": date, "steps": steps}
+    raw_incline_steps = raw.get("inclineSteps", raw.get("urevoSteps"))
+    if raw_incline_steps is None and str(raw.get("source", "")).upper() == "UREVO":
+        raw_incline_steps = steps
+    if raw_incline_steps not in (None, ""):
+        incline_steps = _parse_steps_value(raw_incline_steps)
+        if incline_steps > steps:
+            raise SystemExit(f"UREVO incline steps ({incline_steps}) cannot exceed total steps ({steps}) for {date}.")
+        incline_pct = _parse_nonnegative_float(raw.get("inclinePct", UREVO_DEFAULT_INCLINE_PCT), "incline percent")
+        distance_miles = _parse_nonnegative_float(
+            raw.get("inclineDistanceMi", raw.get("urevoDistanceMi", incline_steps * UREVO_DEFAULT_MILES_PER_STEP)),
+            "UREVO incline distance",
+        )
+        explicit_extra = raw.get("inclineExtraKcal")
+        extra_kcal = (_parse_nonnegative_float(explicit_extra, "incline calories") if explicit_extra not in (None, "")
+                      else _incline_extra_kcal(distance_miles, incline_steps, incline_pct, INCLINE_REFERENCE_WEIGHT_LBS))
+        row.update({
+            "inclineSteps": incline_steps,
+            "inclinePct": round(incline_pct, 1),
+            "inclineDistanceMi": round(distance_miles, 3),
+            "inclineExtraKcal": round(extra_kcal),
+        })
+    return row
 
 
 def _load_payload_entries(payload_json: str) -> list[dict[str, Any]]:
@@ -124,13 +164,17 @@ def _uncovered_fraction(sample: dict[str, Any], preferred_intervals: list[tuple[
     return max(0.0, min(1.0, 1.0 - overlap / duration))
 
 
-def _source_aware_totals(samples: list[dict[str, Any]], preferred_source: str | None) -> tuple[dict[str, float], float]:
+def _source_aware_totals(
+    samples: list[dict[str, Any]],
+    preferred_source: str | None,
+) -> tuple[dict[str, float], float, dict[str, float]]:
     sources = {sample["source"] for sample in samples}
     if len(sources) == 1:
         totals: defaultdict[str, float] = defaultdict(float)
         for sample in samples:
             totals[sample["date"]] += sample["value"]
-        return dict(totals), 0.0
+        preferred_totals = dict(totals) if preferred_source in sources else {}
+        return dict(totals), 0.0, preferred_totals
 
     if not preferred_source:
         source_list = ", ".join(sorted(sources))
@@ -157,15 +201,45 @@ def _source_aware_totals(samples: list[dict[str, Any]], preferred_source: str | 
         for date, date_samples in preferred_by_date.items()
     }
     totals: defaultdict[str, float] = defaultdict(float)
+    preferred_totals: defaultdict[str, float] = defaultdict(float)
     excluded_overlap = 0.0
     for sample in samples:
         if sample["source"] == preferred_source:
             totals[sample["date"]] += sample["value"]
+            preferred_totals[sample["date"]] += sample["value"]
             continue
         fraction = _uncovered_fraction(sample, preferred_intervals.get(sample["date"], []))
         totals[sample["date"]] += sample["value"] * fraction
         excluded_overlap += sample["value"] * (1.0 - fraction)
-    return dict(totals), excluded_overlap
+    return dict(totals), excluded_overlap, dict(preferred_totals)
+
+
+def _distance_miles(value: float, unit: str) -> float:
+    normalized = unit.strip().lower()
+    if normalized == "mi":
+        return value
+    if normalized == "km":
+        return value * 0.621371192
+    if normalized == "m":
+        return value / METERS_PER_MILE
+    raise SystemExit(f"Unsupported Apple Health walking-distance unit: {unit!r}")
+
+
+def _incline_extra_kcal(
+    distance_miles: float,
+    incline_steps: float,
+    incline_pct: float,
+    reference_weight_lbs: float,
+) -> float:
+    grade = incline_pct / 100.0
+    if distance_miles > 0:
+        # ACSM walking equation vertical component: 1.8 * speed * grade.
+        distance_meters = distance_miles * METERS_PER_MILE
+        weight_kg = reference_weight_lbs * KILOGRAMS_PER_POUND
+        return 1.8 * distance_meters * grade * weight_kg / 200.0
+    # Apple Shortcuts can omit distance; use the observed UREVO stride as fallback.
+    estimated_distance_miles = incline_steps * UREVO_DEFAULT_MILES_PER_STEP
+    return _incline_extra_kcal(estimated_distance_miles, incline_steps, incline_pct, reference_weight_lbs)
 
 
 def _load_apple_health_export(
@@ -173,16 +247,20 @@ def _load_apple_health_export(
     start_date: str | None = None,
     end_date: str | None = None,
     preferred_source: str | None = None,
+    incline_pct: float | None = None,
+    reference_weight_lbs: float = INCLINE_REFERENCE_WEIGHT_LBS,
 ) -> list[dict[str, Any]]:
     export_path = Path(path).expanduser().resolve()
     if not export_path.is_file():
         raise SystemExit(f"Apple Health export not found: {export_path}")
 
     samples: list[dict[str, Any]] = []
+    preferred_distance_miles: defaultdict[str, float] = defaultdict(float)
     sources: set[str] = set()
     for _, element in ET.iterparse(export_path, events=("end",)):
         attrs = element.attrib
-        if element.tag == "Record" and attrs.get("type") == "HKQuantityTypeIdentifierStepCount":
+        record_type = attrs.get("type")
+        if element.tag == "Record" and record_type == "HKQuantityTypeIdentifierStepCount":
             date = parse_date(attrs.get("startDate", "")[:10])
             if date and (not start_date or date >= start_date) and (not end_date or date <= end_date):
                 try:
@@ -198,16 +276,46 @@ def _load_apple_health_export(
                     "value": value,
                 })
                 sources.add(source)
+        elif (
+            element.tag == "Record"
+            and record_type == "HKQuantityTypeIdentifierDistanceWalkingRunning"
+            and preferred_source
+            and attrs.get("sourceName") == preferred_source
+        ):
+            date = parse_date(attrs.get("startDate", "")[:10])
+            if date and (not start_date or date >= start_date) and (not end_date or date <= end_date):
+                try:
+                    distance = float(attrs.get("value", "0"))
+                except ValueError as exc:
+                    raise SystemExit(f"Invalid walking distance in Apple Health export: {attrs.get('value')!r}") from exc
+                preferred_distance_miles[date] += _distance_miles(distance, attrs.get("unit", ""))
         element.clear()
 
     if not samples:
         raise SystemExit(f"No Apple Health step records found in {export_path}")
-    totals, excluded_overlap = _source_aware_totals(samples, preferred_source)
+    totals, excluded_overlap, preferred_totals = _source_aware_totals(samples, preferred_source)
+    if incline_pct is None and (preferred_source or "").upper() == "UREVO":
+        incline_pct = UREVO_DEFAULT_INCLINE_PCT
     source_label = " + ".join(sorted(sources))
     if len(sources) > 1:
         source_label += f" ({preferred_source} preferred during overlaps; ~{excluded_overlap:,.0f} secondary steps excluded)"
     print(f"Parsed {len(totals)} Apple Health step days from {source_label}")
-    return [{"date": date, "steps": round(totals[date])} for date in sorted(totals)]
+    rows = []
+    for date in sorted(totals):
+        row: dict[str, Any] = {"date": date, "steps": round(totals[date])}
+        incline_steps = preferred_totals.get(date, 0.0)
+        if incline_steps > 0 and incline_pct and incline_pct > 0:
+            distance_miles = preferred_distance_miles.get(date, 0.0)
+            row.update({
+                "inclineSteps": round(incline_steps),
+                "inclinePct": round(incline_pct, 1),
+                "inclineDistanceMi": round(distance_miles, 3),
+                "inclineExtraKcal": round(_incline_extra_kcal(
+                    distance_miles, incline_steps, incline_pct, reference_weight_lbs
+                )),
+            })
+        rows.append(row)
+    return rows
 
 
 def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -222,7 +330,14 @@ def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
             raise SystemExit(f"Invalid Apple Health end date: {args.end_date!r}")
         if start_date and end_date and start_date > end_date:
             raise SystemExit("Apple Health start date must be on or before the end date.")
-        updates.extend(_load_apple_health_export(args.apple_health_export, start_date, end_date, args.preferred_source))
+        updates.extend(_load_apple_health_export(
+            args.apple_health_export,
+            start_date,
+            end_date,
+            args.preferred_source,
+            args.incline_pct,
+            args.incline_reference_weight_lbs,
+        ))
 
     payload_json = (
         args.payload_json
@@ -241,7 +356,17 @@ def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
     if raw_date is not None or raw_steps is not None:
         if raw_date is None or raw_steps is None:
             raise SystemExit("Single-day step sync requires both date and steps.")
-        updates.append(_normalize_entry({"date": raw_date, "steps": raw_steps}))
+        single_entry = {"date": raw_date, "steps": raw_steps}
+        raw_incline_steps = args.incline_steps or os.getenv("APPLE_STEPS_UREVO_VALUE")
+        raw_incline_distance = args.incline_distance_mi or os.getenv("APPLE_STEPS_UREVO_DISTANCE_MI")
+        if raw_incline_steps not in (None, ""):
+            single_entry.update({
+                "inclineSteps": raw_incline_steps,
+                "inclinePct": args.incline_pct if args.incline_pct is not None else UREVO_DEFAULT_INCLINE_PCT,
+            })
+            if raw_incline_distance not in (None, ""):
+                single_entry["inclineDistanceMi"] = raw_incline_distance
+        updates.append(_normalize_entry(single_entry))
 
     if not updates:
         raise SystemExit("No step updates provided. Use --apple-health-export, --date/--steps, or --payload-json.")
@@ -253,9 +378,9 @@ def collect_updates(args: argparse.Namespace) -> list[dict[str, Any]]:
 
 
 def merge_steps(existing_rows: list[dict[str, Any]], updates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {row["date"]: {"date": row["date"], "steps": int(row["steps"])} for row in existing_rows}
+    merged: dict[str, dict[str, Any]] = {row["date"]: dict(row) for row in existing_rows}
     for entry in updates:
-        merged[entry["date"]] = {"date": entry["date"], "steps": int(entry["steps"])}
+        merged[entry["date"]] = {**merged.get(entry["date"], {}), **entry}
     return [merged[date] for date in sorted(merged)]
 
 
@@ -267,6 +392,15 @@ def main() -> None:
     parser.add_argument("--payload-json", help="JSON list/object of step rows")
     parser.add_argument("--apple-health-export", help="Path to an Apple Health export.xml file")
     parser.add_argument("--preferred-source", help="Preferred source during overlapping Apple Health step intervals")
+    parser.add_argument("--incline-pct", type=float, help="Grade assigned to preferred-source steps (UREVO defaults to 12)")
+    parser.add_argument("--incline-steps", help="UREVO steps included within the single-day total")
+    parser.add_argument("--incline-distance-mi", help="UREVO walking distance included within the single-day total")
+    parser.add_argument(
+        "--incline-reference-weight-lbs",
+        type=float,
+        default=INCLINE_REFERENCE_WEIGHT_LBS,
+        help="Body weight used for the ACSM incline-energy estimate",
+    )
     parser.add_argument("--start-date", help="Optional first date to import from Apple Health")
     parser.add_argument("--end-date", help="Optional last date to import from Apple Health")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")

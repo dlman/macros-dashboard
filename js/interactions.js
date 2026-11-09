@@ -1814,11 +1814,15 @@ function renderStepsCorrelations(days) {
     const baseTDEE = workingTDEEProfile(getAnalyticsDays()).maintenance;
     const adjustedTDEE = lastDay ? stepAdjustedTDEE(baseTDEE, lastDay.date) : null;
     const delta = adjustedTDEE != null ? adjustedTDEE - baseTDEE : null;
+    const stepRecord = lastDay ? getStepRecordForDate(lastDay.date) : null;
+    const inclineCopy = stepRecord?.inclineSteps
+      ? `, including ~${energyLabel(stepRecord.inclineExtraKcal)} from ${stepRecord.inclineSteps.toLocaleString()} UREVO steps at ${stepRecord.inclinePct}% incline`
+      : '';
     if (delta != null && Math.abs(delta) > 20) {
       badges.push(`<div class="insight-badge">
         <span class="badge-icon">🔥</span>
         <span><strong>Steps activity term (${lastDay.date.slice(5)}): ${delta > 0 ? '+' : ''}${Math.round(delta)} ${energyUnit()}/day</strong>
-        — based on ${getStepForDate(lastDay.date)?.toLocaleString() ?? '—'} steps that day vs your ${corr.avgSteps.toLocaleString()} average, and already factored into the ~${energyLabel(baseTDEE)} TDEE
+        — based on ${getStepForDate(lastDay.date)?.toLocaleString() ?? '—'} steps that day${inclineCopy}, and already factored into the ~${energyLabel(baseTDEE)} TDEE
         </span>
       </div>`);
     }

@@ -92,9 +92,10 @@ You can trigger the workflow in either mode:
 - Single day:
   - `date`
   - `steps`
+  - optional `urevo_steps` and `urevo_distance_mi`; these are treated as a subset of total steps at 12% incline
 - Backfill payload:
   - `payload_json`
-  - JSON object or array of `{ "date": "YYYY-MM-DD", "steps": 12345 }`
+  - JSON object or array of `{ "date": "YYYY-MM-DD", "steps": 12345, "inclineSteps": 3500, "inclineDistanceMi": 0.95 }`
 
 If both are provided, the payload rows are merged first and the single-day row is merged after that.
 
@@ -102,8 +103,9 @@ If both are provided, the payload rows are merged first and the single-day row i
 
 ```bash
 python3 scripts/sync_steps.py --date 2026-04-21 --steps 8450
+python3 scripts/sync_steps.py --date 2026-11-08 --steps 7620 --incline-steps 3489 --incline-distance-mi 0.932
 python3 scripts/sync_steps.py --payload-json '[{"date":"2026-04-20","steps":7544},{"date":"2026-04-21","steps":8450}]'
-python3 scripts/sync_steps.py --apple-health-export "/path/to/apple_health_export/export.xml" --start-date 2026-01-01
+python3 scripts/sync_steps.py --apple-health-export "/path/to/apple_health_export/export.xml" --preferred-source UREVO --start-date 2026-01-01
 python3 update_bayes.py js/data.js
 ```
 
@@ -130,7 +132,9 @@ Single-day request body:
   "ref": "main",
   "inputs": {
     "date": "2026-04-21",
-    "steps": "8450"
+    "steps": "8450",
+    "urevo_steps": "3500",
+    "urevo_distance_mi": "0.95"
   }
 }
 ```
@@ -152,3 +156,5 @@ The workflow then:
 2. rebuilds Bayesian artifacts
 3. validates the dashboard
 4. commits and pushes if anything changed
+
+UREVO rows imported from Apple Health exports default to 12% incline. The dashboard keeps the raw step count for display and adds the ACSM vertical walking cost to activity and TDEE calculations. For daily Shortcut syncs, sum UREVO-source steps and walking/running distance separately and pass them in the two optional UREVO inputs above.

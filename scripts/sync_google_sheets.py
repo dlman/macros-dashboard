@@ -259,10 +259,21 @@ def parse_existing_sleep_data(path: Path) -> list[dict[str, Any]]:
 
 def parse_existing_steps_data(path: Path) -> list[dict[str, Any]]:
     src = path.read_text(encoding="utf-8")
-    return [
-        {"date": m.group(1), "steps": int(m.group(2))}
-        for m in re.finditer(r'\{date:"(\d{4}-\d{2}-\d{2})",steps:(\d+)\}', src)
-    ]
+    rows = []
+    for match in re.finditer(r'\{date:"(\d{4}-\d{2}-\d{2})",steps:(\d+)(?P<extra>[^}]*)\}', src):
+        row: dict[str, Any] = {"date": match.group(1), "steps": int(match.group(2))}
+        extra = match.group("extra")
+        for key, caster in (
+            ("inclineSteps", int),
+            ("inclinePct", float),
+            ("inclineDistanceMi", float),
+            ("inclineExtraKcal", int),
+        ):
+            value = re.search(rf',{key}:([0-9.]+)', extra)
+            if value:
+                row[key] = caster(value.group(1))
+        rows.append(row)
+    return rows
 
 
 def parse_existing_recovery_data(path: Path) -> list[dict[str, Any]]:

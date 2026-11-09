@@ -20,6 +20,7 @@ function planningDays(endDate) {
       ...day, date,
       drinkCalories: day ? estimateDrinkCalories(day.drinks) : null,
       steps: getStepForDate(date),
+      activitySteps: getActivityStepForDate(date),
       sleepHours: sleepByDate[date]?.hours ?? null,
       excluded: isVacationDate(date) || isInDietBreak(date),
       creatineWater: creatineScaleAdjustmentForDate(date)

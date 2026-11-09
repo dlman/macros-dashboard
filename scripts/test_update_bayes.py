@@ -15,6 +15,7 @@ from update_bayes import (
     creatine_water_adjustment,
     estimate_drink_calories,
     fit_scale_state_model,
+    parse_data_js,
     partially_pooled_current_tdee,
     tdee_backtest,
     tdee_logging_sensitivity,
@@ -24,6 +25,22 @@ from copy import deepcopy
 
 
 class BayesianTdeeSegmentationTests(unittest.TestCase):
+    def test_data_parser_converts_incline_energy_to_activity_equivalent_steps(self):
+        source = '''(() => {
+const data = {};
+const stepsData = [
+  {date:"2026-11-08",steps:2500,inclineSteps:2000,inclinePct:12,inclineDistanceMi:1,inclineExtraKcal:118}
+];
+const vacationDates = [];
+})();
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.js"
+            path.write_text(source, encoding="utf-8")
+            with redirect_stdout(StringIO()):
+                _, steps, _, _ = parse_data_js(path)
+        self.assertEqual(steps["2026-11-08"], 5450)
+
     def test_data_js_update_is_idempotent(self):
         source = "(() => {\nwindow.dashboardData = { data: {}, sleepData: [], stepsData: [] };\n})();\n"
         posterior = {

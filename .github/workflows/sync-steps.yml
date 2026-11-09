@@ -11,6 +11,14 @@ on:
         description: "Single day step count"
         required: false
         type: string
+      urevo_steps:
+        description: "UREVO steps within the single-day total (modeled at 12% incline)"
+        required: false
+        type: string
+      urevo_distance_mi:
+        description: "UREVO walking distance in miles for the single day"
+        required: false
+        type: string
       payload_json:
         description: "Optional JSON payload for backfills; array/object of {date,steps}"
         required: false
@@ -45,6 +53,8 @@ jobs:
         env:
           APPLE_STEPS_DATE: ${{ inputs.date }}
           APPLE_STEPS_VALUE: ${{ inputs.steps }}
+          APPLE_STEPS_UREVO_VALUE: ${{ inputs.urevo_steps }}
+          APPLE_STEPS_UREVO_DISTANCE_MI: ${{ inputs.urevo_distance_mi }}
           APPLE_STEPS_PAYLOAD_JSON: ${{ inputs.payload_json }}
 
       - name: Rebuild Bayesian artifacts

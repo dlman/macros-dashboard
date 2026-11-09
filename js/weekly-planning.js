@@ -34,19 +34,21 @@
       const alcohol = logged ? (day.drinkCalories || 0)
         : alcoholKnown && finite(drinkCount) ? drinksSoFar + drinkCount * drinkRate : null;
       const recordedSteps = past && finite(day?.steps) ? day.steps : null;
+      const recordedActivitySteps = past && finite(day?.activitySteps) ? day.activitySteps : recordedSteps;
       const stepInput = recordedSteps ?? draft.steps ?? null;
       const stepsAssumed = stepInput === null;
       const steps = stepsAssumed ? (modelReady ? Math.max(baselineSteps, stepSoFar) : null) : stepInput;
+      const activitySteps = recordedSteps !== null ? recordedActivitySteps : steps;
       const errors = [];
       if (!finite(food) || food < 0 || food > 10000) errors.push(past ? 'Add missing food estimate' : 'Enter full-day food calories');
       if (isToday && food < foodSoFar) errors.push('Food plan is below already logged food');
       if (!finite(alcohol) || alcohol < 0 || alcohol > 10000) errors.push('Add drink count (0 if none)');
       if (!finite(steps) || steps < stepSoFar || steps < 0 || steps > 100000) errors.push('Enter valid full-day steps');
-      const burn = modelReady && finite(steps) ? maintenance.mean + (steps - baselineSteps) * kcalPerStep : null;
+      const burn = modelReady && finite(activitySteps) ? maintenance.mean + (activitySteps - baselineSteps) * kcalPerStep : null;
       const intake = !errors.length ? food + alcohol : null;
       return {
         date, past, logged, isToday, excluded: !!day?.excluded, food, alcohol, drinkCount, drinkRate,
-        foodSoFar, drinksSoFar, steps, stepInput, recordedSteps, stepsAssumed, errors, intake, burn,
+        foodSoFar, drinksSoFar, steps, activitySteps, stepInput, recordedSteps, stepsAssumed, errors, intake, burn,
         deficit: intake !== null && burn !== null ? burn - intake : null
       };
     });
@@ -106,7 +108,12 @@
     }
     const food = metric(foodPairs, 'calories', foodReady, -1);
     const alcohol = metric(foodPairs, 'drinkCalories', foodReady, -1);
-    const steps = metric(stepPairs, 'steps', stepsReady, kcalPerStep);
+    const steps = metric(stepPairs, 'steps', stepsReady, 0);
+    if (stepsReady) {
+      const beforeActivity = mean(stepPairs.map(pair => finite(pair[0].activitySteps) ? pair[0].activitySteps : pair[0].steps));
+      const afterActivity = mean(stepPairs.map(pair => finite(pair[1].activitySteps) ? pair[1].activitySteps : pair[1].steps));
+      steps.impact = (afterActivity - beforeActivity) * kcalPerStep;
+    }
     const priorPace = periodPace(prior);
     const currentPace = periodPace(current);
     const observedChange = priorPace !== null && currentPace !== null ? currentPace - priorPace : null;

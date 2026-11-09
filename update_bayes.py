@@ -13,6 +13,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from functools import lru_cache
 
+KCAL_PER_STEP = 0.04
+
 
 # ─────────────────────────────────────────────────────────────────
 # 1. Parse data.js
@@ -57,8 +59,13 @@ def parse_data_js(path):
         })
 
     # Steps
-    step_re = re.compile(r'\{date:"(\d{4}-\d{2}-\d{2})",steps:(\d+)\}')
-    steps_map = {m.group(1): int(m.group(2)) for m in step_re.finditer(src)}
+    step_re = re.compile(r'\{date:"(\d{4}-\d{2}-\d{2})",steps:(\d+)(?P<extra>[^}]*)\}')
+    steps_map = {}
+    for match in step_re.finditer(src):
+        raw_steps = int(match.group(2))
+        incline_match = re.search(r',inclineExtraKcal:([0-9.]+)', match.group('extra'))
+        incline_kcal = float(incline_match.group(1)) if incline_match else 0.0
+        steps_map[match.group(1)] = raw_steps + incline_kcal / KCAL_PER_STEP
 
     vacation_match = re.search(r'const vacationDates\s*=\s*\[(.*?)\];', src, re.DOTALL)
     vacation_dates = set(re.findall(r'"(\d{4}-\d{2}-\d{2})"', vacation_match.group(1))) if vacation_match else set()
@@ -498,7 +505,6 @@ def fit_scale_state_model(days, steps_map, excluded_dates, tdee_est):
 
 DIET_BREAK_START  = '2026-02-27'
 DIET_BREAK_END    = '2026-03-07'
-KCAL_PER_STEP     = 0.04
 CREATINE_START_DATE = '2026-07-02'
 CREATINE_FULL_WATER_LBS = 1.8
 CREATINE_RAMP_DAYS = 21
