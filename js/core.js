@@ -989,18 +989,12 @@ function getActivityStepForDate(date) {
   return steps + inclineExtraKcalForDate(date) / KCAL_PER_STEP;
 }
 
-function stepBarAppearance(date, steps, goalSteps = 8000) {
-  if (getStepRecordForDate(date)?.inclineSteps > 0) {
-    return {
-      backgroundColor: STEP_BAR_COLORS.urevo,
-      borderColor: STEP_BAR_COLORS.urevoBorder,
-      borderWidth: 1.5
-    };
-  }
+function stepBarSegments(date, steps, goalSteps = 8000) {
+  const inclineSteps = Math.min(steps, Math.max(0, getStepRecordForDate(date)?.inclineSteps || 0));
   return {
-    backgroundColor: steps >= goalSteps ? STEP_BAR_COLORS.atGoal : STEP_BAR_COLORS.belowGoal,
-    borderColor: 'transparent',
-    borderWidth: 0
+    regularSteps: steps - inclineSteps,
+    urevoSteps: inclineSteps || null,
+    regularColor: steps >= goalSteps ? STEP_BAR_COLORS.atGoal : STEP_BAR_COLORS.belowGoal
   };
 }
 

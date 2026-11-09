@@ -2618,8 +2618,8 @@ allCharts.adherenceChart = new Chart(document.getElementById('adherenceChart'), 
 // DAILY STEPS CHART
 // =====================================================================
 const initSteps = stepStats(allDays);
-const initStepBarStyles = initSteps
-  ? initSteps.allDates.map((date, index) => stepBarAppearance(date, initSteps.allSteps[index], initSteps.goalSteps))
+const initStepSegments = initSteps
+  ? initSteps.allDates.map((date, index) => stepBarSegments(date, initSteps.allSteps[index], initSteps.goalSteps))
   : [];
 allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
   type: 'bar',
@@ -2627,21 +2627,25 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
     labels: initSteps ? initSteps.allLabels : [],
     datasets: [
       {
-        label: 'Daily Steps',
-        data: initSteps ? initSteps.allSteps : [],
-        backgroundColor: initStepBarStyles.map(style => style.backgroundColor),
-        borderColor: initStepBarStyles.map(style => style.borderColor),
-        borderWidth: initStepBarStyles.map(style => style.borderWidth),
-        borderRadius: 3,
+        label: 'Regular walking',
+        data: initStepSegments.map(segment => segment.regularSteps),
+        backgroundColor: initStepSegments.map(segment => segment.regularColor),
+        borderRadius: ctx => Number.isFinite(ctx.chart.data.datasets[1].data[ctx.dataIndex])
+          ? { topLeft: 0, topRight: 0, bottomLeft: 3, bottomRight: 3 }
+          : 3,
         borderSkipped: false,
+        stack: 'steps',
         order: 2
       },
       {
         label: 'UREVO · 12% incline',
-        data: initSteps ? initSteps.allLabels.map(() => null) : [],
+        data: initStepSegments.map(segment => segment.urevoSteps),
         backgroundColor: STEP_BAR_COLORS.urevo,
         borderColor: STEP_BAR_COLORS.urevoBorder,
         borderWidth: 1.5,
+        borderRadius: { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 },
+        borderSkipped: false,
+        stack: 'steps',
         order: 2
       },
       {
@@ -2653,6 +2657,7 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.3,
+        stack: 'rollingAvg',
         order: 1
       },
       {
@@ -2665,6 +2670,7 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
         borderWidth: 1.5,
         pointRadius: 0,
         tension: 0,
+        stack: 'goal',
         order: 0
       }
     ]
@@ -2672,8 +2678,8 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
   options: {
     ...chartDefaults(),
     scales: {
-      x: { ...chartDefaults().scales.x, ticks: { ...TICK(), maxTicksLimit: 12 } },
-      y: { ...chartDefaults().scales.y, min: 0, ticks: { ...TICK(), callback: v => (v / 1000).toFixed(0) + 'k' } }
+      x: { ...chartDefaults().scales.x, stacked: true, ticks: { ...TICK(), maxTicksLimit: 12 } },
+      y: { ...chartDefaults().scales.y, stacked: true, min: 0, ticks: { ...TICK(), callback: v => (v / 1000).toFixed(0) + 'k' } }
     },
     plugins: {
       ...chartDefaults().plugins,
@@ -2687,20 +2693,31 @@ allCharts.stepsChart = new Chart(document.getElementById('stepsChart'), {
             if (ctx.datasetIndex === 0) {
               const date = ctx.chart.$stepDates?.[ctx.dataIndex];
               const record = date ? getStepRecordForDate(date) : null;
-              if (record?.inclineSteps) {
-                const otherSteps = Math.max(0, record.steps - record.inclineSteps);
-                return [
-                  ` Total: ${record.steps.toLocaleString()} steps`,
-                  ` UREVO: ${record.inclineSteps.toLocaleString()} steps at ${record.inclinePct}% incline`,
-                  ` Other: ${otherSteps.toLocaleString()} steps`,
-                  ` Incline add-on: ~${energyLabel(record.inclineExtraKcal)}`
-                ];
-              }
-              return ` ${ctx.parsed.y.toLocaleString()} steps`;
+              return record?.inclineSteps
+                ? [
+                    ` Regular walking: ${(record.steps - record.inclineSteps).toLocaleString()} steps`,
+                    ` UREVO: ${record.inclineSteps.toLocaleString()} steps at ${record.inclinePct}% incline`,
+                    ` Incline add-on: ~${energyLabel(record.inclineExtraKcal)}`
+                  ]
+                : ` Steps: ${ctx.parsed.y.toLocaleString()}`;
+            }
+            if (ctx.datasetIndex === 1) {
+              const date = ctx.chart.$stepDates?.[ctx.dataIndex];
+              const record = date ? getStepRecordForDate(date) : null;
+              return [
+                ` Regular walking: ${Math.max(0, (record?.steps || 0) - (record?.inclineSteps || 0)).toLocaleString()} steps`,
+                ` UREVO: ${ctx.parsed.y.toLocaleString()} steps at ${record?.inclinePct ?? 12}% incline`,
+                ` Incline add-on: ~${energyLabel(record?.inclineExtraKcal || 0)}`
+              ];
             }
             return ctx.datasetIndex === 2
               ? ` 7-day avg: ${ctx.parsed.y?.toLocaleString() ?? '–'}`
               : ` Goal: ${ctx.parsed.y?.toLocaleString() ?? '8,000'} steps`
+          },
+          footer: ctx => {
+            const date = ctx[0]?.chart?.$stepDates?.[ctx[0].dataIndex];
+            const record = date ? getStepRecordForDate(date) : null;
+            return record?.inclineSteps ? `Total: ${record.steps.toLocaleString()} steps` : '';
           }
         }
       }

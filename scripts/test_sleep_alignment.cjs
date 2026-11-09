@@ -85,14 +85,15 @@ test('steps pair with ensuing sleep in both correlation and high/low cohorts', (
   assert.equal(run('stepsCorrelations(stepDays,[]).n_sleep'), 0);
 });
 
-test('UREVO step days receive a distinct chart treatment', () => {
+test('UREVO step days split into segments that reconcile to the raw total', () => {
   const run = fixture();
-  const urevo = run(`stepBarAppearance('2026-11-08', getStepForDate('2026-11-08'))`);
-  const ordinary = run(`stepBarAppearance('2026-11-07', getStepForDate('2026-11-07'))`);
-  assert.match(urevo.backgroundColor, /34,211,238/);
-  assert.equal(urevo.borderWidth, 1.5);
-  assert.doesNotMatch(ordinary.backgroundColor, /34,211,238/);
-  assert.equal(ordinary.borderWidth, 0);
+  const urevo = run(`stepBarSegments('2026-11-08', getStepForDate('2026-11-08'))`);
+  const ordinary = run(`stepBarSegments('2026-11-07', getStepForDate('2026-11-07'))`);
+  assert.equal(urevo.regularSteps, 4131);
+  assert.equal(urevo.urevoSteps, 3489);
+  assert.equal(urevo.regularSteps + urevo.urevoSteps, 7620);
+  assert.equal(ordinary.regularSteps, 5031);
+  assert.equal(ordinary.urevoSteps, null);
 });
 
 test('next-day lifting and step comparisons do not bridge missing calendar days', () => {

@@ -1747,8 +1747,6 @@ function updateStepsChart(days) {
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
     chart.data.datasets[0].backgroundColor = [];
-    chart.data.datasets[0].borderColor = [];
-    chart.data.datasets[0].borderWidth = [];
     chart.data.datasets[1].data = [];
     chart.data.datasets[2].data = [];
     chart.data.datasets[3].data = [];
@@ -1756,13 +1754,11 @@ function updateStepsChart(days) {
     chart.update();
     return;
   }
-  const barStyles = stats.allDates.map((date, index) => stepBarAppearance(date, stats.allSteps[index], stats.goalSteps));
+  const segments = stats.allDates.map((date, index) => stepBarSegments(date, stats.allSteps[index], stats.goalSteps));
   chart.data.labels = stats.allLabels;
-  chart.data.datasets[0].data = stats.allSteps;
-  chart.data.datasets[0].backgroundColor = barStyles.map(style => style.backgroundColor);
-  chart.data.datasets[0].borderColor = barStyles.map(style => style.borderColor);
-  chart.data.datasets[0].borderWidth = barStyles.map(style => style.borderWidth);
-  chart.data.datasets[1].data = stats.allLabels.map(() => null);
+  chart.data.datasets[0].data = segments.map(segment => segment.regularSteps);
+  chart.data.datasets[0].backgroundColor = segments.map(segment => segment.regularColor);
+  chart.data.datasets[1].data = segments.map(segment => segment.urevoSteps);
   chart.data.datasets[2].data = [...Array(6).fill(null), ...stats.rollingAvg];
   chart.data.datasets[3].data = stats.allLabels.map(() => stats.goalSteps);
   chart.$stepDates = stats.allDates;
